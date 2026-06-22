@@ -1,4 +1,4 @@
-﻿from typing import Annotated
+from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from pwdlib import PasswordHash

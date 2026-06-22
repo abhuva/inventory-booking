@@ -6,17 +6,20 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import inventory_booking_api.models  # noqa: F401
+from inventory_booking_api.core.csrf import CsrfProtectionMiddleware
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.inventory.asset_router import asset_router, stock_router
 from inventory_booking_api.inventory.category_router import router as category_router
 from inventory_booking_api.locations.router import router as location_router
 from inventory_booking_api.settings import get_settings
 from inventory_booking_api.users.router import router as auth_router
+from inventory_booking_api.users.user_router import router as user_router
 
 settings = get_settings()
 
 app = FastAPI(title=settings.app_name)
 
+app.add_middleware(CsrfProtectionMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -26,6 +29,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(user_router)
 app.include_router(category_router)
 app.include_router(location_router)
 app.include_router(asset_router)

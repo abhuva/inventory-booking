@@ -1,4 +1,4 @@
-﻿from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +14,8 @@ from inventory_booking_api.users.models import User
 
 ADMIN_EMAIL = "admin@example.org"
 ADMIN_PASSWORD = "correct horse battery staple"
+USER_EMAIL = "user@example.org"
+USER_PASSWORD = "user password 123"
 
 
 @pytest.fixture
@@ -33,14 +35,23 @@ def client() -> Generator[TestClient]:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         async with session_factory() as session:
-            session.add(
-                User(
-                    email=ADMIN_EMAIL,
-                    display_name="Admin",
-                    role=UserRole.ADMIN,
-                    password_hash=hash_password(ADMIN_PASSWORD),
-                    is_active=True,
-                )
+            session.add_all(
+                [
+                    User(
+                        email=ADMIN_EMAIL,
+                        display_name="Admin",
+                        role=UserRole.ADMIN,
+                        password_hash=hash_password(ADMIN_PASSWORD),
+                        is_active=True,
+                    ),
+                    User(
+                        email=USER_EMAIL,
+                        display_name="User",
+                        role=UserRole.USER,
+                        password_hash=hash_password(USER_PASSWORD),
+                        is_active=True,
+                    ),
+                ]
             )
             await session.commit()
 
@@ -61,13 +72,15 @@ def client() -> Generator[TestClient]:
     asyncio.run(drop_schema())
 
 
-def login(client: TestClient) -> None:
-    response = client.post(
-        "/auth/login",
-        json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
-    )
+def login(
+    client: TestClient, email: str = ADMIN_EMAIL, password: str = ADMIN_PASSWORD
+) -> dict[str, str]:
+    response = client.post("/auth/login", json={"email": email, "password": password})
 
     assert response.status_code == 200
+    csrf_token = client.cookies.get("inventory_booking_csrf")
+    assert csrf_token is not None
+    return {"X-CSRF-Token": csrf_token}
 
 
 def test_write_endpoints_require_session(client: TestClient) -> None:
@@ -76,41 +89,77 @@ def test_write_endpoints_require_session(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_login_me_and_logout(client: TestClient) -> None:
-    login_response = client.post(
-        "/auth/login",
-        json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
-    )
+def test_session_mutations_require_csrf_token(client: TestClient) -> None:
+    login(client)
 
-    assert login_response.status_code == 200
-    assert login_response.json()["role"] == "admin"
+    response = client.post("/categories", json={"name": "Juggling"})
+
+    assert response.status_code == 403
+
+
+def test_login_me_and_logout(client: TestClient) -> None:
+    csrf_headers = login(client)
 
     me_response = client.get("/auth/me")
 
     assert me_response.status_code == 200
     assert me_response.json()["email"] == ADMIN_EMAIL
 
-    logout_response = client.post("/auth/logout")
+    logout_response = client.post("/auth/logout", headers=csrf_headers)
 
     assert logout_response.status_code == 204
     assert client.get("/auth/me").status_code == 401
 
 
 def test_invalid_login_is_rejected(client: TestClient) -> None:
-    response = client.post(
-        "/auth/login",
-        json={"email": ADMIN_EMAIL, "password": "wrong"},
-    )
+    response = client.post("/auth/login", json={"email": ADMIN_EMAIL, "password": "wrong"})
 
     assert response.status_code == 401
 
 
+def test_admin_can_manage_users(client: TestClient) -> None:
+    headers = login(client)
+
+    create_response = client.post(
+        "/users",
+        headers=headers,
+        json={
+            "email": "new-user@example.org",
+            "display_name": "New User",
+            "password": "new password 123",
+            "role": "user",
+        },
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["email"] == "new-user@example.org"
+
+    update_response = client.patch(
+        f"/users/{created['id']}",
+        headers=headers,
+        json={"display_name": "Updated User"},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["display_name"] == "Updated User"
+
+
+def test_normal_user_cannot_manage_users(client: TestClient) -> None:
+    headers = login(client, USER_EMAIL, USER_PASSWORD)
+
+    response = client.get("/users", headers=headers)
+
+    assert response.status_code == 403
+
+
 def test_create_and_list_category(client: TestClient) -> None:
-    login(client)
+    headers = login(client)
 
     response = client.post(
         "/categories",
         json={"name": "Juggling", "description": "Balls, clubs, rings"},
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -124,11 +173,12 @@ def test_create_and_list_category(client: TestClient) -> None:
 
 
 def test_create_location(client: TestClient) -> None:
-    login(client)
+    headers = login(client)
 
     response = client.post(
         "/locations",
         json={"name": "Main Storage", "type": "storage"},
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -136,15 +186,17 @@ def test_create_location(client: TestClient) -> None:
 
 
 def test_asset_mode_validation(client: TestClient) -> None:
-    login(client)
+    headers = login(client)
 
     tracked_response = client.post(
         "/assets",
         json={"name": "Aerial Stand 01", "asset_type": "tracked"},
+        headers=headers,
     )
     invalid_stock_response = client.post(
         "/assets",
         json={"name": "Juggling Balls", "asset_type": "stock"},
+        headers=headers,
     )
 
     assert tracked_response.status_code == 200
@@ -153,12 +205,17 @@ def test_asset_mode_validation(client: TestClient) -> None:
 
 
 def test_stock_level_requires_stock_asset(client: TestClient) -> None:
-    login(client)
+    headers = login(client)
 
-    location = client.post("/locations", json={"name": "Main Storage", "type": "storage"}).json()
+    location = client.post(
+        "/locations",
+        json={"name": "Main Storage", "type": "storage"},
+        headers=headers,
+    ).json()
     tracked_asset = client.post(
         "/assets",
         json={"name": "Trampoline", "asset_type": "tracked"},
+        headers=headers,
     ).json()
 
     response = client.post(
@@ -168,18 +225,24 @@ def test_stock_level_requires_stock_asset(client: TestClient) -> None:
             "location_id": location["id"],
             "quantity_total": 4,
         },
+        headers=headers,
     )
 
     assert response.status_code == 400
 
 
 def test_create_stock_level_for_stock_asset(client: TestClient) -> None:
-    login(client)
+    headers = login(client)
 
-    location = client.post("/locations", json={"name": "Main Storage", "type": "storage"}).json()
+    location = client.post(
+        "/locations",
+        json={"name": "Main Storage", "type": "storage"},
+        headers=headers,
+    ).json()
     stock_asset = client.post(
         "/assets",
         json={"name": "Juggling Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
     ).json()
 
     response = client.post(
@@ -189,6 +252,7 @@ def test_create_stock_level_for_stock_asset(client: TestClient) -> None:
             "location_id": location["id"],
             "quantity_total": 12,
         },
+        headers=headers,
     )
 
     assert response.status_code == 200

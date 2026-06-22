@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import os
 
 from sqlalchemy.ext.asyncio import AsyncSession

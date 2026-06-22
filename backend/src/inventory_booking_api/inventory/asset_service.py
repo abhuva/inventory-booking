@@ -1,11 +1,11 @@
-﻿from uuid import UUID
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.audit.enums import AuditAction, ItemEventType
-from inventory_booking_api.audit.models import AuditLog, ItemEvent
+from inventory_booking_api.audit.service import write_audit_log, write_item_event
 from inventory_booking_api.inventory.asset_schemas import (
     AssetCreate,
     AssetUpdate,
@@ -14,6 +14,7 @@ from inventory_booking_api.inventory.asset_schemas import (
 )
 from inventory_booking_api.inventory.enums import AssetType
 from inventory_booking_api.inventory.models import Asset, StockLevel
+from inventory_booking_api.users.models import User
 
 
 async def list_assets(session: AsyncSession) -> list[Asset]:
@@ -25,35 +26,50 @@ async def get_asset(session: AsyncSession, asset_id: UUID) -> Asset | None:
     return await session.get(Asset, asset_id)
 
 
-async def create_asset(session: AsyncSession, payload: AssetCreate) -> Asset:
+async def create_asset(session: AsyncSession, payload: AssetCreate, actor: User) -> Asset:
     asset = Asset(**payload.model_dump())
     session.add(asset)
     await session.flush()
-    session.add(ItemEvent(asset_id=asset.id, event_type=ItemEventType.CREATED))
-    session.add(
-        AuditLog(
-            action=AuditAction.CREATE,
-            entity_type="asset",
-            entity_id=asset.id,
-            summary=f"Created asset {asset.name}",
-        )
+    await write_item_event(
+        session,
+        asset_id=asset.id,
+        event_type=ItemEventType.CREATED,
+        actor=actor,
+    )
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.CREATE,
+        entity_type="asset",
+        entity_id=asset.id,
+        summary=f"Created asset {asset.name}",
     )
     await session.commit()
     await session.refresh(asset)
     return asset
 
 
-async def update_asset(session: AsyncSession, asset: Asset, payload: AssetUpdate) -> Asset:
+async def update_asset(
+    session: AsyncSession,
+    asset: Asset,
+    payload: AssetUpdate,
+    actor: User,
+) -> Asset:
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(asset, field, value)
-    session.add(ItemEvent(asset_id=asset.id, event_type=ItemEventType.UPDATED))
-    session.add(
-        AuditLog(
-            action=AuditAction.UPDATE,
-            entity_type="asset",
-            entity_id=asset.id,
-            summary=f"Updated asset {asset.name}",
-        )
+    await write_item_event(
+        session,
+        asset_id=asset.id,
+        event_type=ItemEventType.UPDATED,
+        actor=actor,
+    )
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.UPDATE,
+        entity_type="asset",
+        entity_id=asset.id,
+        summary=f"Updated asset {asset.name}",
     )
     await session.commit()
     await session.refresh(asset)

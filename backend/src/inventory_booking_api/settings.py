@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://inventory:inventory@127.0.0.1:5432/inventory_booking"
     internal_api_token: str = "local-dev-token"
     session_cookie_name: str = "inventory_booking_session"
+    csrf_cookie_name: str = "inventory_booking_csrf"
     session_cookie_secure: bool = False
     session_max_age_seconds: int = 60 * 60 * 24 * 14
     cors_origins: str = Field(

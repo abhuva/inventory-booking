@@ -1,4 +1,4 @@
-﻿from typing import Annotated
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -25,6 +25,7 @@ from inventory_booking_api.inventory.asset_service import (
     update_asset,
     update_stock_level,
 )
+from inventory_booking_api.users.models import User
 
 asset_router = APIRouter(prefix="/assets", tags=["assets"])
 stock_router = APIRouter(prefix="/stock-levels", tags=["stock-levels"])
@@ -37,12 +38,13 @@ async def list_asset_endpoint(
     return await list_assets(session)
 
 
-@asset_router.post("", response_model=AssetRead, dependencies=[Depends(get_current_user)])
+@asset_router.post("", response_model=AssetRead)
 async def create_asset_endpoint(
     payload: AssetCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> AssetRead:
-    return await create_asset(session, payload)
+    return await create_asset(session, payload, current_user)
 
 
 @asset_router.get("/{asset_id}", response_model=AssetRead)
@@ -59,17 +61,17 @@ async def get_asset_endpoint(
 @asset_router.patch(
     "/{asset_id}",
     response_model=AssetRead,
-    dependencies=[Depends(get_current_user)],
 )
 async def update_asset_endpoint(
     asset_id: UUID,
     payload: AssetUpdate,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> AssetRead:
     asset = await get_asset(session, asset_id)
     if asset is None:
         raise_not_found("Asset")
-    return await update_asset(session, asset, payload)
+    return await update_asset(session, asset, payload, current_user)
 
 
 @stock_router.get("", response_model=list[StockLevelRead])
@@ -116,4 +118,3 @@ async def update_stock_level_endpoint(
     if stock_level is None:
         raise_not_found("Stock level")
     return await update_stock_level(session, stock_level, payload)
-

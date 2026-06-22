@@ -1,4 +1,4 @@
-﻿from typing import Annotated
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -58,4 +58,3 @@ async def update_location_endpoint(
     if location is None:
         raise_not_found("Location")
     return await update_location(session, location, payload)
-

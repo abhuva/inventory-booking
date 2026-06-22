@@ -1,4 +1,4 @@
-﻿"""Add user sessions.
+"""Add user sessions.
 
 Revision ID: 0002_user_sessions
 Revises: 0001_inventory_base

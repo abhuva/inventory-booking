@@ -108,6 +108,13 @@ This repo has a working Docker-backed local stack. Backend health endpoints are 
 
 Read endpoints are open during early local development. Mutating endpoints require an authenticated session cookie from `POST /auth/login`.
 
+Browser/session mutations also require CSRF protection:
+
+```text
+Cookie: inventory_booking_csrf=<token>
+X-CSRF-Token: <same token>
+```
+
 Current endpoints:
 
 - `GET /health`
@@ -115,6 +122,10 @@ Current endpoints:
 - `POST /auth/login`
 - `POST /auth/logout`
 - `GET /auth/me`
+- `GET /users`
+- `POST /users`
+- `GET /users/{user_id}`
+- `PATCH /users/{user_id}`
 - `GET /categories`
 - `POST /categories`
 - `GET /categories/{category_id}`

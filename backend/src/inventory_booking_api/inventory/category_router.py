@@ -1,4 +1,4 @@
-﻿from typing import Annotated
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -62,4 +62,3 @@ async def update_category_endpoint(
     if category is None:
         raise_not_found("Category")
     return await update_category(session, category, payload)
-

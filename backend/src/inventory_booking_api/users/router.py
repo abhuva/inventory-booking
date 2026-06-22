@@ -1,4 +1,5 @@
-﻿from typing import Annotated
+from secrets import token_urlsafe
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +24,7 @@ async def login(
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UserRead:
-    """Authenticate a user and set an HTTP-only session cookie."""
+    """Authenticate a user and set HTTP-only session plus CSRF cookies."""
 
     settings = get_settings()
     user = await get_user_by_email(session, str(payload.email))
@@ -39,11 +40,20 @@ async def login(
         )
 
     _, raw_token = await create_user_session(session, user)
+    csrf_token = token_urlsafe(32)
     response.set_cookie(
         key=settings.session_cookie_name,
         value=raw_token,
         max_age=settings.session_max_age_seconds,
         httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+    )
+    response.set_cookie(
+        key=settings.csrf_cookie_name,
+        value=csrf_token,
+        max_age=settings.session_max_age_seconds,
+        httponly=False,
         secure=settings.session_cookie_secure,
         samesite="lax",
     )
@@ -63,6 +73,7 @@ async def logout(
     if raw_token is not None:
         await revoke_session_token(session, raw_token)
     response.delete_cookie(key=settings.session_cookie_name, samesite="lax")
+    response.delete_cookie(key=settings.csrf_cookie_name, samesite="lax")
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 

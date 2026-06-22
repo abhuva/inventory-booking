@@ -21,6 +21,7 @@ Review every API/database change against these risks:
 
 - [ ] Endpoint requires authentication unless explicitly public.
 - [ ] Authorization rule is documented in router or service tests.
+- [ ] Browser mutation endpoints enforce CSRF protection.
 - [ ] Request schema rejects unexpected fields where needed.
 - [ ] Service validates state transitions server-side.
 - [ ] Mutation writes audit/event records.

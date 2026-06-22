@@ -69,6 +69,9 @@ Dependencies: 1.1.
 - [x] session-cookie login/logout/me endpoints
 - [x] password hashing with Argon2
 - [x] tests for authenticated mutation guard
+- [x] admin-only user management endpoints
+- [x] CSRF double-submit protection for session mutations
+- [x] tests for admin/user role enforcement
 
 ### 1.3 Locations And Categories
 
@@ -105,6 +108,7 @@ Dependencies: 1.1, 1.2, 1.4.
 - [ ] audit writer service
 - [ ] tests that inventory mutations write events/audit records
 - [x] initial event/audit writes for asset create/update
+- [x] actor-aware audit/event writer helpers
 
 ## Phase 2: Booking And Availability Core
 
@@ -228,7 +232,6 @@ Dependencies: stable MVP.
 
 Continue Phase 1 with authorization refinement and audit services:
 
-- inventory mutation event/audit writers
-- add role checks for admin-only mutations
-- user-management endpoints for admins
-- CSRF protection for browser-triggered mutations
+- apply actor-aware audit helpers to category/location/stock mutations
+- add dedicated audit query endpoints for admins
+- add frontend login and inventory management screens
