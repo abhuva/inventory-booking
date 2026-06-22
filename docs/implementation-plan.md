@@ -145,7 +145,7 @@ Dependencies: 2.2.
 - [x] list bookings
 - [x] get booking detail
 - [x] cancel booking
-- [ ] availability preview endpoint
+- [x] availability preview endpoint
 - [ ] security review for all mutation endpoints
 
 ## Phase 3: Operational Workflows
@@ -211,8 +211,8 @@ Dependencies: backend APIs for the target workflow.
 - [ ] asset detail with event history
 - [ ] stock by location view
 - [ ] location list/detail
-- [ ] booking creation form
-- [ ] availability feedback
+- [x] booking creation form
+- [x] availability feedback
 - [ ] checkout screen
 - [ ] return screen
 - [ ] QR scan/assignment screens
@@ -232,9 +232,9 @@ Dependencies: stable MVP.
 
 ## Current Next Slice
 
-Start Phase 2 booking and availability foundation:
+Stabilize booking behavior before checkout:
 
-- add availability preview endpoint for frontend booking forms
 - document admin override rules before implementing overrides
-- add frontend booking creation with conflict feedback
+- run focused security review for booking mutation and availability endpoints
+- add multi-line booking editing only if the first real usage needs it
 - keep checkout/return blocked until booking conflict behavior is stable

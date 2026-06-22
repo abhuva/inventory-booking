@@ -21,6 +21,7 @@ export type LocationType =
   | 'person_home'
   | 'repair'
   | 'unknown';
+export type BookingStatus = 'reserved' | 'cancelled' | 'checked_out' | 'completed';
 
 export type User = {
   id: string;
@@ -74,6 +75,40 @@ export type StockLevel = {
   quantity_checked_out: number;
 };
 
+export type BookingLine = {
+  id: string;
+  booking_id: string;
+  asset_id: string;
+  location_id: string | null;
+  quantity: number | null;
+  notes: string | null;
+};
+
+export type Booking = {
+  id: string;
+  requested_by_user_id: string;
+  title: string;
+  status: BookingStatus;
+  starts_at: string;
+  ends_at: string;
+  notes: string | null;
+  lines?: BookingLine[];
+};
+
+export type AvailabilityLine = {
+  asset_id: string;
+  location_id: string | null;
+  requested_quantity: number | null;
+  available_quantity: number | null;
+  available: boolean;
+  reason: string | null;
+};
+
+export type Availability = {
+  available: boolean;
+  lines: AvailabilityLine[];
+};
+
 export type CategoryCreate = {
   name: string;
   description?: string | null;
@@ -96,6 +131,21 @@ export type StockLevelCreate = {
   asset_id: string;
   location_id: string;
   quantity_total: number;
+};
+
+export type BookingLineCreate = {
+  asset_id: string;
+  location_id?: string | null;
+  quantity?: number | null;
+  notes?: string | null;
+};
+
+export type BookingCreate = {
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  notes?: string | null;
+  lines: BookingLineCreate[];
 };
 
 const csrfCookieName = 'inventory_booking_csrf';

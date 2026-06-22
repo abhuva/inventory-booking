@@ -8,7 +8,12 @@ from inventory_booking_api.audit.enums import AuditAction, ItemEventType
 from inventory_booking_api.audit.service import write_audit_log, write_item_event
 from inventory_booking_api.bookings.enums import BookingStatus
 from inventory_booking_api.bookings.models import Booking, BookingLine
-from inventory_booking_api.bookings.schemas import BookingCreate
+from inventory_booking_api.bookings.schemas import (
+    AvailabilityLineRead,
+    AvailabilityRead,
+    BookingCreate,
+    BookingLineCreate,
+)
 from inventory_booking_api.inventory.enums import AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, StockLevel
 from inventory_booking_api.users.models import User
@@ -106,6 +111,29 @@ async def cancel_booking(session: AsyncSession, booking: Booking, actor: User) -
     await session.commit()
     await session.refresh(booking)
     return booking
+
+
+async def preview_availability(session: AsyncSession, payload: BookingCreate) -> AvailabilityRead:
+    line_results: list[AvailabilityLineRead] = []
+    seen_lines: set[tuple[UUID, UUID | None]] = set()
+    for line in payload.lines:
+        line_key = (line.asset_id, line.location_id)
+        if line_key in seen_lines:
+            line_results.append(
+                build_availability_line(
+                    line,
+                    available=False,
+                    reason="Duplicate booking line for the same asset/location.",
+                )
+            )
+            continue
+        seen_lines.add(line_key)
+        line_results.append(await preview_line_availability(session, payload, line))
+
+    return AvailabilityRead(
+        available=all(line.available for line in line_results),
+        lines=line_results,
+    )
 
 
 async def validate_booking_lines(session: AsyncSession, payload: BookingCreate) -> None:
@@ -240,3 +268,117 @@ async def get_overlapping_stock_quantity(
         )
     )
     return int(result.scalar_one())
+
+
+async def preview_line_availability(
+    session: AsyncSession,
+    payload: BookingCreate,
+    line: BookingLineCreate,
+) -> AvailabilityLineRead:
+    asset = await session.get(Asset, line.asset_id)
+    if asset is None:
+        return build_availability_line(line, available=False, reason="Asset does not exist.")
+    if asset.status != AssetStatus.AVAILABLE:
+        return build_availability_line(
+            line,
+            available=False,
+            reason=f"Asset {asset.name} is not available.",
+        )
+
+    if asset.asset_type == AssetType.TRACKED:
+        return await preview_tracked_line(session, payload, line)
+    return await preview_stock_line(session, payload, line)
+
+
+async def preview_tracked_line(
+    session: AsyncSession,
+    payload: BookingCreate,
+    line: BookingLineCreate,
+) -> AvailabilityLineRead:
+    if line.quantity not in (None, 1):
+        return build_availability_line(
+            line,
+            available=False,
+            available_quantity=1,
+            reason="Tracked booking lines must not request a quantity above 1.",
+        )
+
+    result = await session.execute(
+        select(BookingLine.id)
+        .join(Booking, BookingLine.booking_id == Booking.id)
+        .where(
+            BookingLine.asset_id == line.asset_id,
+            Booking.status.in_(ACTIVE_BOOKING_STATUSES),
+            Booking.starts_at < payload.ends_at,
+            Booking.ends_at > payload.starts_at,
+        )
+        .limit(1)
+    )
+    if result.scalar_one_or_none() is not None:
+        return build_availability_line(
+            line,
+            available=False,
+            available_quantity=0,
+            reason="Tracked asset is already booked for this time range.",
+        )
+    return build_availability_line(line, available=True, available_quantity=1)
+
+
+async def preview_stock_line(
+    session: AsyncSession,
+    payload: BookingCreate,
+    line: BookingLineCreate,
+) -> AvailabilityLineRead:
+    if line.location_id is None:
+        return build_availability_line(
+            line,
+            available=False,
+            reason="Stock booking lines require a location_id.",
+        )
+    if line.quantity is None:
+        return build_availability_line(
+            line,
+            available=False,
+            reason="Stock booking lines require a quantity.",
+        )
+
+    stock_level = await get_stock_level(session, line.asset_id, line.location_id)
+    if stock_level is None:
+        return build_availability_line(
+            line,
+            available=False,
+            reason="No stock level exists for this asset/location.",
+        )
+
+    overlapping_quantity = await get_overlapping_stock_quantity(
+        session,
+        payload,
+        line.asset_id,
+        line.location_id,
+    )
+    available_quantity = stock_level.quantity_total - overlapping_quantity
+    return build_availability_line(
+        line,
+        available=available_quantity >= line.quantity,
+        available_quantity=available_quantity,
+        reason=None
+        if available_quantity >= line.quantity
+        else "Not enough stock is available for this time range.",
+    )
+
+
+def build_availability_line(
+    line: BookingLineCreate,
+    *,
+    available: bool,
+    reason: str | None = None,
+    available_quantity: int | None = None,
+) -> AvailabilityLineRead:
+    return AvailabilityLineRead(
+        asset_id=line.asset_id,
+        location_id=line.location_id,
+        requested_quantity=line.quantity,
+        available_quantity=available_quantity,
+        available=available,
+        reason=reason,
+    )

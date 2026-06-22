@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.bookings.schemas import (
+    AvailabilityRead,
     BookingCreate,
     BookingLineRead,
     BookingRead,
@@ -17,6 +18,7 @@ from inventory_booking_api.bookings.service import (
     get_booking,
     list_booking_lines,
     list_bookings,
+    preview_availability,
 )
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.errors import raise_not_found
@@ -41,6 +43,15 @@ async def create_booking_endpoint(
 ) -> BookingRead:
     booking, lines = await create_booking(session, payload, current_user)
     return build_booking_read(booking, lines)
+
+
+@router.post("/availability", response_model=AvailabilityRead)
+async def preview_availability_endpoint(
+    payload: BookingCreate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(get_current_user)],
+) -> AvailabilityRead:
+    return await preview_availability(session, payload)
 
 
 @router.get("/{booking_id}", response_model=BookingRead)

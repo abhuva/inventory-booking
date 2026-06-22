@@ -147,11 +147,12 @@ Current endpoints:
 - `PATCH /stock-levels/{stock_level_id}`
 - `GET /bookings`
 - `POST /bookings`
+- `POST /bookings/availability`
 - `GET /bookings/{booking_id}`
 - `POST /bookings/{booking_id}/cancel`
 
 ## Next Implementation Steps
 
-1. Add an availability preview endpoint for booking forms.
-2. Add frontend booking creation with conflict feedback.
-3. Build checkout and return workflows after booking conflicts are enforced in the backend.
+1. Document admin override rules before implementing overrides.
+2. Add multi-line booking editing if real usage needs it.
+3. Build checkout and return workflows after booking conflict behavior is stable.

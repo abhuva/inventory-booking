@@ -347,6 +347,33 @@ def test_booking_rejects_overlapping_tracked_asset(client: TestClient) -> None:
     assert second_response.status_code == 409
 
 
+def test_availability_preview_reports_tracked_conflict(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Tightrope Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    booking_payload = {
+        "title": "Existing booking",
+        "starts_at": BOOKING_START.isoformat(),
+        "ends_at": BOOKING_END.isoformat(),
+        "lines": [{"asset_id": tracked_asset["id"]}],
+    }
+    client.post("/bookings", json=booking_payload, headers=headers)
+
+    response = client.post(
+        "/bookings/availability",
+        json={**booking_payload, "title": "Preview only"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["available"] is False
+    assert response.json()["lines"][0]["available"] is False
+    assert "already booked" in response.json()["lines"][0]["reason"]
+
+
 def test_booking_rejects_stock_overbooking(client: TestClient) -> None:
     headers = login(client)
     location = client.post(
@@ -404,6 +431,66 @@ def test_booking_rejects_stock_overbooking(client: TestClient) -> None:
 
     assert first_response.status_code == 200
     assert second_response.status_code == 409
+
+
+def test_availability_preview_reports_stock_quantity(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Prop Room", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Scarves", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 8,
+        },
+        headers=headers,
+    )
+    client.post(
+        "/bookings",
+        json={
+            "title": "Booked scarves",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 5,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    response = client.post(
+        "/bookings/availability",
+        json={
+            "title": "Preview scarves",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 4,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["available"] is False
+    assert response.json()["lines"][0]["available_quantity"] == 3
 
 
 def test_cancelled_booking_releases_tracked_asset(client: TestClient) -> None:

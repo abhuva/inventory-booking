@@ -3,9 +3,12 @@
     ApiError,
     apiGet,
     apiPost,
+    type Availability,
     type Asset,
     type AssetCreate,
     type AssetType,
+    type Booking,
+    type BookingCreate,
     type Category,
     type CategoryCreate,
     type Location,
@@ -32,6 +35,8 @@
   let locations = $state<Location[]>([]);
   let assets = $state<Asset[]>([]);
   let stockLevels = $state<StockLevel[]>([]);
+  let bookings = $state<Booking[]>([]);
+  let availability = $state<Availability | null>(null);
   let email = $state('admin@example.org');
   let password = $state('change-this-password');
   let loading = $state(true);
@@ -49,6 +54,14 @@
     current_location_id: null
   });
   let stockForm = $state<StockLevelCreate>({ asset_id: '', location_id: '', quantity_total: 0 });
+  let bookingForm = $state({
+    title: '',
+    starts_at: '',
+    ends_at: '',
+    asset_id: '',
+    location_id: '',
+    quantity: 1
+  });
 
   const trackedAssets = $derived(assets.filter((asset) => asset.asset_type === 'tracked'));
   const stockAssets = $derived(assets.filter((asset) => asset.asset_type === 'stock'));
@@ -84,11 +97,12 @@
   }
 
   async function loadInventory() {
-    [categories, locations, assets, stockLevels] = await Promise.all([
+    [categories, locations, assets, stockLevels, bookings] = await Promise.all([
       apiGet<Category[]>('/categories'),
       apiGet<Location[]>('/locations'),
       apiGet<Asset[]>('/assets'),
-      apiGet<StockLevel[]>('/stock-levels')
+      apiGet<StockLevel[]>('/stock-levels'),
+      apiGet<Booking[]>('/bookings')
     ]);
   }
 
@@ -154,6 +168,30 @@
     });
   }
 
+  async function previewBooking() {
+    await runAction(async () => {
+      availability = await apiPost<Availability>('/bookings/availability', buildBookingPayload());
+      message = availability.available ? 'Booking is available' : 'Booking has conflicts';
+    });
+  }
+
+  async function createBooking() {
+    await runAction(async () => {
+      const booking = await apiPost<Booking>('/bookings', buildBookingPayload());
+      bookingForm = {
+        title: '',
+        starts_at: '',
+        ends_at: '',
+        asset_id: '',
+        location_id: '',
+        quantity: 1
+      };
+      availability = null;
+      await loadInventory();
+      message = `Booking created: ${booking.title}`;
+    });
+  }
+
   async function runAction(action: () => Promise<void>) {
     busy = true;
     error = '';
@@ -173,6 +211,23 @@
     ) as T;
   }
 
+  function buildBookingPayload(): BookingCreate {
+    const asset = assets.find((entry) => entry.id === bookingForm.asset_id);
+    const isStock = asset?.asset_type === 'stock';
+    return {
+      title: bookingForm.title,
+      starts_at: new Date(bookingForm.starts_at).toISOString(),
+      ends_at: new Date(bookingForm.ends_at).toISOString(),
+      lines: [
+        {
+          asset_id: bookingForm.asset_id,
+          location_id: isStock ? bookingForm.location_id : null,
+          quantity: isStock ? bookingForm.quantity : null
+        }
+      ]
+    };
+  }
+
   function categoryName(id: string | null): string {
     return categories.find((category) => category.id === id)?.name ?? 'No category';
   }
@@ -187,6 +242,21 @@
 
   function stockLocationName(id: string): string {
     return locations.find((location) => location.id === id)?.name ?? 'Unknown location';
+  }
+
+  function assetName(id: string): string {
+    return assets.find((asset) => asset.id === id)?.name ?? 'Unknown asset';
+  }
+
+  function selectedBookingAsset(): Asset | undefined {
+    return assets.find((asset) => asset.id === bookingForm.asset_id);
+  }
+
+  function formatDateTime(value: string): string {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    }).format(new Date(value));
   }
 </script>
 
@@ -257,6 +327,10 @@
       <article>
         <span>{stockLevels.reduce((sum, level) => sum + level.quantity_total, 0)}</span>
         <p>stock units</p>
+      </article>
+      <article>
+        <span>{bookings.length}</span>
+        <p>bookings</p>
       </article>
     </section>
 
@@ -380,10 +454,99 @@
           >
           <button type="submit" disabled={busy}>Set stock level</button>
         </form>
+
+        <form
+          class="panel form-panel wide"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void createBooking();
+          }}
+        >
+          <h2>Booking</h2>
+          <label>Title <input bind:value={bookingForm.title} required /></label>
+          <div class="split-fields">
+            <label>
+              Start
+              <input bind:value={bookingForm.starts_at} type="datetime-local" required />
+            </label>
+            <label>
+              End
+              <input bind:value={bookingForm.ends_at} type="datetime-local" required />
+            </label>
+          </div>
+          <div class="split-fields">
+            <label>
+              Asset
+              <select bind:value={bookingForm.asset_id} required>
+                <option value="">Choose asset</option>
+                {#each assets as asset}
+                  <option value={asset.id}>{asset.name} · {asset.asset_type}</option>
+                {/each}
+              </select>
+            </label>
+            {#if selectedBookingAsset()?.asset_type === 'stock'}
+              <label>
+                Location
+                <select bind:value={bookingForm.location_id} required>
+                  <option value="">Choose location</option>
+                  {#each locations as location}
+                    <option value={location.id}>{location.name}</option>
+                  {/each}
+                </select>
+              </label>
+            {:else}
+              <label>
+                Location
+                <input value="Tracked assets reserve the exact item" disabled />
+              </label>
+            {/if}
+          </div>
+          {#if selectedBookingAsset()?.asset_type === 'stock'}
+            <label>
+              Quantity
+              <input bind:value={bookingForm.quantity} type="number" min="1" required />
+            </label>
+          {/if}
+          {#if availability}
+            <div class:availability-ok={availability.available} class="availability-result">
+              <strong>{availability.available ? 'Available' : 'Conflict'}</strong>
+              {#each availability.lines as line}
+                <span>
+                  {assetName(line.asset_id)}:
+                  {line.available
+                    ? `available${line.available_quantity === null ? '' : ` (${line.available_quantity})`}`
+                    : line.reason}
+                </span>
+              {/each}
+            </div>
+          {/if}
+          <div class="button-row">
+            <button type="button" class="secondary" onclick={previewBooking} disabled={busy}>
+              Preview availability
+            </button>
+            <button type="submit" disabled={busy}>Create booking</button>
+          </div>
+        </form>
       </section>
     {/if}
 
     <section class="data-grid" aria-label="Inventory lists">
+      <article class="panel list-panel">
+        <h2>Bookings</h2>
+        {#each bookings as booking}
+          <div class="row-card">
+            <strong>{booking.title}</strong>
+            <span
+              >{booking.status} · {formatDateTime(booking.starts_at)} to {formatDateTime(
+                booking.ends_at
+              )}</span
+            >
+          </div>
+        {:else}
+          <p class="empty">No bookings yet.</p>
+        {/each}
+      </article>
+
       <article class="panel list-panel">
         <h2>Assets</h2>
         {#each assets as asset}
@@ -591,7 +754,7 @@
   }
 
   .stats-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
   }
 
   .stats-grid article {
@@ -629,6 +792,30 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.85rem;
+  }
+
+  .button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
+  .button-row button {
+    flex: 1 1 12rem;
+  }
+
+  .availability-result {
+    display: grid;
+    gap: 0.25rem;
+    border-radius: 18px;
+    padding: 0.85rem 1rem;
+    color: #6d1f1a;
+    background: #f9d7cf;
+  }
+
+  .availability-ok {
+    color: #254c37;
+    background: #dbeacb;
   }
 
   .data-grid {

@@ -61,3 +61,17 @@ class BookingSummaryRead(BaseModel):
     notes: str | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AvailabilityLineRead(BaseModel):
+    asset_id: UUID
+    location_id: UUID | None
+    requested_quantity: int | None
+    available_quantity: int | None
+    available: bool
+    reason: str | None
+
+
+class AvailabilityRead(BaseModel):
+    available: bool
+    lines: list[AvailabilityLineRead]
