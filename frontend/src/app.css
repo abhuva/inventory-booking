@@ -1,7 +1,7 @@
 ﻿:root {
   font-family: 'Aptos', 'Segoe UI', sans-serif;
-  color: #14211c;
-  background: #eef1e8;
+  color: #1d2520;
+  background: #eef0eb;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -10,9 +10,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background:
-    radial-gradient(circle at top left, rgba(104, 141, 118, 0.35), transparent 28rem),
-    linear-gradient(135deg, #f7f4ea 0%, #e7ece3 52%, #cedbcc 100%);
+  background: #eef0eb;
 }
 
 button,
@@ -28,73 +26,73 @@ select {
 }
 
 .app-shell {
-  width: min(1280px, calc(100% - 2rem));
+  width: min(1440px, calc(100% - 1.25rem));
   margin: 0 auto;
-  padding: clamp(1.5rem, 5vw, 4rem) 0;
+  padding: 0.75rem 0 1.25rem;
 }
 
 .masthead {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
-  gap: clamp(1rem, 4vw, 3rem);
-  align-items: stretch;
-  margin-bottom: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
+  gap: 0.75rem;
+  align-items: start;
+  margin-bottom: 0.5rem;
 }
 
 .eyebrow {
-  margin: 0 0 1rem;
-  color: #61713e;
-  font-size: 0.78rem;
+  margin: 0 0 0.25rem;
+  color: #5e675d;
+  font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 h1 {
-  max-width: 13ch;
+  max-width: none;
   margin: 0;
-  color: #14211c;
-  font-size: clamp(3.4rem, 9vw, 7rem);
-  line-height: 0.86;
-  letter-spacing: -0.075em;
+  color: #1d2520;
+  font-size: clamp(1.6rem, 3.2vw, 2.8rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
 }
 
 h2 {
-  margin: 0 0 1rem;
-  font-size: 1.1rem;
+  margin: 0 0 0.65rem;
+  font-size: 0.98rem;
   letter-spacing: -0.03em;
 }
 
 h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.92rem;
   letter-spacing: -0.02em;
 }
 
 .panel,
 .session-card,
 .stats-grid article {
-  border: 1px solid rgba(20, 33, 28, 0.12);
-  border-radius: 28px;
-  background: rgba(255, 252, 242, 0.82);
-  box-shadow: 0 24px 80px rgba(42, 68, 51, 0.12);
-  backdrop-filter: blur(18px);
+  border: 1px solid #d4d9d1;
+  border-radius: 10px;
+  background: #fbfaf4;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .session-card {
-  padding: 1.25rem;
+  padding: 0.75rem;
 }
 
 .session-card form,
 .form-panel {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.6rem;
 }
 
 .session-label {
-  margin: 0 0 0.35rem;
-  color: #68765d;
-  font-size: 0.8rem;
+  margin: 0 0 0.2rem;
+  color: #5e675d;
+  font-size: 0.68rem;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -105,15 +103,16 @@ h3 {
 }
 
 .session-card span {
-  margin: 0.35rem 0 1rem;
+  margin: 0.2rem 0 0.6rem;
   color: #4f5e52;
+  font-size: 0.85rem;
 }
 
 label {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
   color: #33443a;
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   font-weight: 750;
 }
 
@@ -122,22 +121,22 @@ select,
 textarea {
   width: 100%;
   border: 1px solid rgba(20, 33, 28, 0.18);
-  border-radius: 16px;
-  padding: 0.78rem 0.9rem;
+  border-radius: 7px;
+  padding: 0.48rem 0.6rem;
   color: #14211c;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.82);
 }
 
 textarea {
-  min-height: 5rem;
+  min-height: 3.8rem;
   resize: vertical;
 }
 
 button {
-  min-height: 2.8rem;
+  min-height: 2.15rem;
   border: 0;
-  border-radius: 999px;
-  padding: 0 1.1rem;
+  border-radius: 7px;
+  padding: 0 0.8rem;
   color: #fffaf0;
   background: #254c37;
   font-weight: 800;
@@ -151,13 +150,13 @@ button:disabled {
 
 button.secondary {
   width: 100%;
-  background: #6f7345;
+  background: #5f6647;
 }
 
 .notice {
-  margin: 1rem 0;
-  border-radius: 18px;
-  padding: 0.85rem 1rem;
+  margin: 0.5rem 0;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
   font-weight: 750;
 }
 
@@ -174,27 +173,27 @@ button.secondary {
 .tab-bar {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.65rem;
-  margin-top: 1rem;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
 }
 
 .tab-bar button {
   display: grid;
-  gap: 0.2rem;
-  min-height: 4.7rem;
-  border: 1px solid rgba(20, 33, 28, 0.12);
-  border-radius: 22px;
-  padding: 0.85rem 0.9rem;
+  gap: 0.1rem;
+  min-height: 3rem;
+  border: 1px solid #d4d9d1;
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
   color: #33443a;
-  background: rgba(255, 252, 242, 0.7);
-  box-shadow: 0 16px 44px rgba(42, 68, 51, 0.08);
+  background: #f9f8f1;
+  box-shadow: none;
   text-align: left;
 }
 
 .tab-bar button:hover,
 .active-tab {
-  border-color: rgba(97, 113, 62, 0.58);
-  background: #eaf2d7;
+  border-color: #68765d;
+  background: #e4ebd7;
 }
 
 .tab-bar span {
@@ -203,7 +202,7 @@ button.secondary {
 
 .tab-bar small {
   color: #526358;
-  font-size: 0.72rem;
+  font-size: 0.64rem;
   font-weight: 700;
   line-height: 1.25;
 }
@@ -212,39 +211,40 @@ button.secondary {
 .forms-grid,
 .data-grid {
   display: grid;
-  gap: 1rem;
-  margin-top: 1rem;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
 }
 
 .stats-grid {
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
 }
 
 .stats-grid article {
-  padding: 1.25rem;
+  padding: 0.75rem;
 }
 
 .stats-grid span {
   display: block;
-  font-size: clamp(2rem, 4vw, 3.4rem);
+  font-size: clamp(1.4rem, 2.2vw, 2rem);
   font-weight: 900;
   letter-spacing: -0.07em;
 }
 
 .stats-grid p {
-  margin: 0.25rem 0 0;
+  margin: 0.15rem 0 0;
   color: #526358;
+  font-size: 0.8rem;
   font-weight: 750;
 }
 
 .forms-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .form-panel,
 .list-panel,
 .loading-panel {
-  padding: 1.25rem;
+  padding: 0.75rem;
 }
 
 .wide {
@@ -254,13 +254,13 @@ button.secondary {
 .split-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
+  gap: 0.5rem;
 }
 
 .button-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: 0.4rem;
 }
 
 .button-row button {
@@ -270,8 +270,8 @@ button.secondary {
 .availability-result {
   display: grid;
   gap: 0.25rem;
-  border-radius: 18px;
-  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
   color: #6d1f1a;
   background: #f9d7cf;
 }
@@ -287,55 +287,55 @@ button.secondary {
 
 .detail-panel {
   display: grid;
-  gap: 1rem;
-  margin-top: 1rem;
-  padding: 1.25rem;
+  gap: 0.65rem;
+  margin-top: 0.55rem;
+  padding: 0.75rem;
 }
 
 .detail-header {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.65rem;
   align-items: start;
   justify-content: space-between;
 }
 
 .detail-header h2 {
   margin: 0;
-  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  font-size: clamp(1.2rem, 2.2vw, 1.6rem);
 }
 
 .detail-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.45rem;
 }
 
 .detail-grid div {
   display: grid;
   gap: 0.2rem;
-  border-radius: 18px;
-  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
   background: rgba(37, 76, 55, 0.08);
 }
 
 .detail-grid span,
 .timeline-entry span {
   color: #526358;
-  font-size: 0.85rem;
+  font-size: 0.76rem;
   font-weight: 700;
 }
 
 .timeline {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.45rem;
 }
 
 .timeline-entry {
   display: grid;
-  gap: 0.35rem;
-  border-left: 4px solid #61713e;
-  padding: 0.35rem 0 0.35rem 0.85rem;
+  gap: 0.2rem;
+  border-left: 3px solid #61713e;
+  padding: 0.25rem 0 0.25rem 0.55rem;
 }
 
 .timeline-entry div {
@@ -351,27 +351,27 @@ button.secondary {
 .split-detail {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 0.55rem;
 }
 
 .mini-list {
   display: grid;
   align-content: start;
-  gap: 0.75rem;
-  border-radius: 22px;
-  padding: 1rem;
-  background: rgba(255, 252, 242, 0.62);
+  gap: 0.45rem;
+  border-radius: 9px;
+  padding: 0.65rem;
+  background: #f7f6ee;
 }
 
 .list-panel {
   display: grid;
   align-content: start;
-  gap: 0.75rem;
+  gap: 0.45rem;
 }
 
 .list-header {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
   align-items: start;
   justify-content: space-between;
 }
@@ -383,21 +383,21 @@ button.secondary {
 
 .list-header p {
   color: #526358;
-  font-size: 0.88rem;
+  font-size: 0.76rem;
   font-weight: 700;
 }
 
 .search-field {
-  border-radius: 20px;
-  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
   background: rgba(37, 76, 55, 0.08);
 }
 
 .row-card {
   display: grid;
   gap: 0.25rem;
-  border-radius: 18px;
-  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
   background: rgba(37, 76, 55, 0.08);
 }
 
@@ -408,8 +408,8 @@ button.secondary {
 
 .compact {
   justify-self: start;
-  padding: 0.55rem 0.75rem;
-  font-size: 0.82rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.76rem;
 }
 
 @media (max-width: 960px) {

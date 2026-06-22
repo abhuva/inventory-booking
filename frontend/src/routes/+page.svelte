@@ -695,7 +695,7 @@
   <section class="masthead">
     <div>
       <p class="eyebrow">Circus pedagogy inventory</p>
-      <h1>Inventory that knows the room, the person, and the date.</h1>
+      <h1>Inventory workspace</h1>
     </div>
     <div class="session-card">
       {#if currentUser}
