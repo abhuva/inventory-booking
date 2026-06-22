@@ -20,6 +20,8 @@
     type ReturnRecord,
     type StockLevel,
     type StockLevelCreate,
+    type StockTransfer,
+    type TrackedAssetTransfer,
     type User
   } from '$lib/api';
 
@@ -79,6 +81,19 @@
     checkout_line_id: '',
     quantity: 1,
     condition_in: 'unknown' as const,
+    notes: ''
+  });
+  let trackedTransferForm = $state<TrackedAssetTransfer & { asset_id: string }>({
+    asset_id: '',
+    to_location_id: '',
+    to_holder_user_id: null,
+    notes: ''
+  });
+  let stockTransferForm = $state<StockTransfer>({
+    asset_id: '',
+    from_location_id: '',
+    to_location_id: '',
+    quantity: 1,
     notes: ''
   });
 
@@ -255,6 +270,36 @@
       selectedReturnCheckout = null;
       await loadInventory();
       message = 'Return recorded';
+    });
+  }
+
+  async function transferTrackedAssetAction() {
+    await runAction(async () => {
+      const { asset_id, ...payload } = trackedTransferForm;
+      await apiPost<Asset>(`/assets/${asset_id}/transfer`, emptyStringsToNull(payload));
+      trackedTransferForm = {
+        asset_id: '',
+        to_location_id: '',
+        to_holder_user_id: null,
+        notes: ''
+      };
+      await loadInventory();
+      message = 'Tracked asset transferred';
+    });
+  }
+
+  async function transferStockAction() {
+    await runAction(async () => {
+      await apiPost<StockLevel[]>('/stock-levels/transfer', emptyStringsToNull(stockTransferForm));
+      stockTransferForm = {
+        asset_id: '',
+        from_location_id: '',
+        to_location_id: '',
+        quantity: 1,
+        notes: ''
+      };
+      await loadInventory();
+      message = 'Stock transferred';
     });
   }
 
@@ -711,6 +756,83 @@
           {:else}
             <p class="empty">Load a checkout to choose return lines.</p>
           {/if}
+        </form>
+
+        <form
+          class="panel form-panel"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void transferTrackedAssetAction();
+          }}
+        >
+          <h2>Move tracked item</h2>
+          <label>
+            Asset
+            <select bind:value={trackedTransferForm.asset_id} required>
+              <option value="">Choose tracked asset</option>
+              {#each trackedAssets as asset}
+                <option value={asset.id}>{asset.name}</option>
+              {/each}
+            </select>
+          </label>
+          <label>
+            Destination
+            <select bind:value={trackedTransferForm.to_location_id}>
+              <option value="">No location</option>
+              {#each locations as location}
+                <option value={location.id}>{location.name}</option>
+              {/each}
+            </select>
+          </label>
+          <label>Notes <textarea bind:value={trackedTransferForm.notes}></textarea></label>
+          <button type="submit" disabled={busy}>Move tracked item</button>
+        </form>
+
+        <form
+          class="panel form-panel wide"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void transferStockAction();
+          }}
+        >
+          <h2>Move stock</h2>
+          <div class="split-fields">
+            <label>
+              Stock asset
+              <select bind:value={stockTransferForm.asset_id} required>
+                <option value="">Choose stock</option>
+                {#each stockAssets as asset}
+                  <option value={asset.id}>{asset.name}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              Quantity
+              <input bind:value={stockTransferForm.quantity} type="number" min="1" required />
+            </label>
+          </div>
+          <div class="split-fields">
+            <label>
+              From
+              <select bind:value={stockTransferForm.from_location_id} required>
+                <option value="">Source location</option>
+                {#each locations as location}
+                  <option value={location.id}>{location.name}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              To
+              <select bind:value={stockTransferForm.to_location_id} required>
+                <option value="">Destination location</option>
+                {#each locations as location}
+                  <option value={location.id}>{location.name}</option>
+                {/each}
+              </select>
+            </label>
+          </div>
+          <label>Notes <textarea bind:value={stockTransferForm.notes}></textarea></label>
+          <button type="submit" disabled={busy}>Move stock</button>
         </form>
       </section>
     {/if}

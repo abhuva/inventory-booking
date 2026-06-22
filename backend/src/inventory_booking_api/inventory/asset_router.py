@@ -14,6 +14,8 @@ from inventory_booking_api.inventory.asset_schemas import (
     StockLevelCreate,
     StockLevelRead,
     StockLevelUpdate,
+    StockTransfer,
+    TrackedAssetTransfer,
 )
 from inventory_booking_api.inventory.asset_service import (
     create_asset,
@@ -22,6 +24,8 @@ from inventory_booking_api.inventory.asset_service import (
     get_stock_level,
     list_assets,
     list_stock_levels,
+    transfer_stock,
+    transfer_tracked_asset,
     update_asset,
     update_stock_level,
 )
@@ -74,6 +78,19 @@ async def update_asset_endpoint(
     return await update_asset(session, asset, payload, current_user)
 
 
+@asset_router.post("/{asset_id}/transfer", response_model=AssetRead)
+async def transfer_tracked_asset_endpoint(
+    asset_id: UUID,
+    payload: TrackedAssetTransfer,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AssetRead:
+    asset = await get_asset(session, asset_id)
+    if asset is None:
+        raise_not_found("Asset")
+    return await transfer_tracked_asset(session, asset, payload, current_user)
+
+
 @stock_router.get("", response_model=list[StockLevelRead])
 async def list_stock_level_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -91,6 +108,16 @@ async def create_stock_level_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> StockLevelRead:
     return await create_stock_level(session, payload, current_user)
+
+
+@stock_router.post("/transfer", response_model=list[StockLevelRead])
+async def transfer_stock_endpoint(
+    payload: StockTransfer,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[StockLevelRead]:
+    source, destination = await transfer_stock(session, payload, current_user)
+    return [source, destination]
 
 
 @stock_router.get("/{stock_level_id}", response_model=StockLevelRead)

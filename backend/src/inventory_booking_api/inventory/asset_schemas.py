@@ -92,3 +92,21 @@ class StockLevelRead(BaseModel):
     quantity_checked_out: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TrackedAssetTransfer(BaseModel):
+    to_location_id: UUID | None = None
+    to_holder_user_id: UUID | None = None
+    notes: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class StockTransfer(BaseModel):
+    asset_id: UUID
+    from_location_id: UUID
+    to_location_id: UUID
+    quantity: int = Field(gt=0)
+    notes: str | None = None
+
+    model_config = ConfigDict(extra="forbid")

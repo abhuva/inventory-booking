@@ -141,8 +141,10 @@ Current endpoints:
 - `POST /assets`
 - `GET /assets/{asset_id}`
 - `PATCH /assets/{asset_id}`
+- `POST /assets/{asset_id}/transfer`
 - `GET /stock-levels`
 - `POST /stock-levels`
+- `POST /stock-levels/transfer`
 - `GET /stock-levels/{stock_level_id}`
 - `PATCH /stock-levels/{stock_level_id}`
 - `GET /bookings`
@@ -159,6 +161,6 @@ Current endpoints:
 
 ## Next Implementation Steps
 
-1. Add transfer workflows for tracked assets and stock quantities.
-2. Add maintenance/damaged/lost state transition workflows.
+1. Add maintenance/damaged/lost state transition workflows.
+2. Add QR assignment and scan workflows.
 3. Add multi-line booking editing if real usage needs it.

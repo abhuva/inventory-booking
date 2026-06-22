@@ -839,3 +839,166 @@ def test_stock_return_rejects_over_return(client: TestClient) -> None:
     )
 
     assert response.status_code == 409
+
+
+def test_transfer_tracked_asset_updates_location_and_audit(client: TestClient) -> None:
+    headers = login(client)
+    source_location = client.post(
+        "/locations",
+        json={"name": "Transfer Source", "type": "storage"},
+        headers=headers,
+    ).json()
+    destination_location = client.post(
+        "/locations",
+        json={"name": "Transfer Destination", "type": "room"},
+        headers=headers,
+    ).json()
+    tracked_asset = client.post(
+        "/assets",
+        json={
+            "name": "Transfer Trampoline",
+            "asset_type": "tracked",
+            "current_location_id": source_location["id"],
+        },
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        f"/assets/{tracked_asset['id']}/transfer",
+        json={"to_location_id": destination_location["id"], "notes": "Moved to workshop room"},
+        headers=headers,
+    )
+    audit_response = client.get("/audit/logs", headers=headers)
+    event_response = client.get(
+        "/audit/item-events",
+        params={"asset_id": tracked_asset["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["current_location_id"] == destination_location["id"]
+    assert any(entry["summary"].startswith("Transferred asset") for entry in audit_response.json())
+    assert event_response.json()[0]["event_type"] == "moved"
+
+
+def test_transfer_checked_out_tracked_asset_is_rejected(client: TestClient) -> None:
+    headers = login(client)
+    destination_location = client.post(
+        "/locations",
+        json={"name": "Rejected Transfer Destination", "type": "room"},
+        headers=headers,
+    ).json()
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Checked Out Transfer Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Checked out transfer",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    ).json()
+    client.post("/checkouts", json={"booking_id": booking["id"]}, headers=headers)
+
+    response = client.post(
+        f"/assets/{tracked_asset['id']}/transfer",
+        json={"to_location_id": destination_location["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+
+
+def test_transfer_stock_moves_available_quantity(client: TestClient) -> None:
+    headers = login(client)
+    source_location = client.post(
+        "/locations",
+        json={"name": "Stock Transfer Source", "type": "storage"},
+        headers=headers,
+    ).json()
+    destination_location = client.post(
+        "/locations",
+        json={"name": "Stock Transfer Destination", "type": "room"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Transfer Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": source_location["id"],
+            "quantity_total": 10,
+        },
+        headers=headers,
+    )
+
+    response = client.post(
+        "/stock-levels/transfer",
+        json={
+            "asset_id": stock_asset["id"],
+            "from_location_id": source_location["id"],
+            "to_location_id": destination_location["id"],
+            "quantity": 4,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    quantities = {entry["location_id"]: entry["quantity_total"] for entry in response.json()}
+    assert quantities[source_location["id"]] == 6
+    assert quantities[destination_location["id"]] == 4
+
+
+def test_transfer_stock_rejects_checked_out_quantity(client: TestClient) -> None:
+    headers = login(client)
+    source_location = client.post(
+        "/locations",
+        json={"name": "Checked Stock Source", "type": "storage"},
+        headers=headers,
+    ).json()
+    destination_location = client.post(
+        "/locations",
+        json={"name": "Checked Stock Destination", "type": "room"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Checked Stock Transfer", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    stock_level = client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": source_location["id"],
+            "quantity_total": 5,
+        },
+        headers=headers,
+    ).json()
+    client.patch(
+        f"/stock-levels/{stock_level['id']}",
+        json={"quantity_checked_out": 3},
+        headers=headers,
+    )
+
+    response = client.post(
+        "/stock-levels/transfer",
+        json={
+            "asset_id": stock_asset["id"],
+            "from_location_id": source_location["id"],
+            "to_location_id": destination_location["id"],
+            "quantity": 3,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 409

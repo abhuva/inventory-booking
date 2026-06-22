@@ -209,6 +209,20 @@ export type ReturnCreate = {
   lines: ReturnLineCreate[];
 };
 
+export type TrackedAssetTransfer = {
+  to_location_id?: string | null;
+  to_holder_user_id?: string | null;
+  notes?: string | null;
+};
+
+export type StockTransfer = {
+  asset_id: string;
+  from_location_id: string;
+  to_location_id: string;
+  quantity: number;
+  notes?: string | null;
+};
+
 const csrfCookieName = 'inventory_booking_csrf';
 
 export class ApiError extends Error {

@@ -11,8 +11,10 @@ from inventory_booking_api.inventory.asset_schemas import (
     AssetUpdate,
     StockLevelCreate,
     StockLevelUpdate,
+    StockTransfer,
+    TrackedAssetTransfer,
 )
-from inventory_booking_api.inventory.enums import AssetType
+from inventory_booking_api.inventory.enums import AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, StockLevel
 from inventory_booking_api.users.models import User
 
@@ -159,3 +161,139 @@ async def update_stock_level(
     await session.commit()
     await session.refresh(stock_level)
     return stock_level
+
+
+async def transfer_tracked_asset(
+    session: AsyncSession,
+    asset: Asset,
+    payload: TrackedAssetTransfer,
+    actor: User,
+) -> Asset:
+    if asset.asset_type != AssetType.TRACKED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only tracked assets can use tracked transfer.",
+        )
+    if asset.status in (AssetStatus.CHECKED_OUT, AssetStatus.LOST, AssetStatus.RETIRED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Asset in status {asset.status.value} cannot be transferred.",
+        )
+
+    from_location_id = asset.current_location_id
+    asset.current_location_id = payload.to_location_id
+    asset.current_holder_user_id = payload.to_holder_user_id
+    await write_item_event(
+        session,
+        asset_id=asset.id,
+        event_type=ItemEventType.MOVED,
+        actor=actor,
+        notes=payload.notes,
+        details={
+            "from_location_id": str(from_location_id) if from_location_id else None,
+            "to_location_id": str(payload.to_location_id) if payload.to_location_id else None,
+            "to_holder_user_id": str(payload.to_holder_user_id)
+            if payload.to_holder_user_id
+            else None,
+        },
+    )
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.UPDATE,
+        entity_type="asset",
+        entity_id=asset.id,
+        summary=f"Transferred asset {asset.name}",
+    )
+    await session.commit()
+    await session.refresh(asset)
+    return asset
+
+
+async def transfer_stock(
+    session: AsyncSession,
+    payload: StockTransfer,
+    actor: User,
+) -> tuple[StockLevel, StockLevel]:
+    if payload.from_location_id == payload.to_location_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Source and destination locations must differ.",
+        )
+
+    asset = await session.get(Asset, payload.asset_id)
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Asset does not exist.")
+    if asset.asset_type != AssetType.STOCK:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only stock assets can use stock transfer.",
+        )
+
+    source = await get_stock_level_by_asset_location(
+        session, payload.asset_id, payload.from_location_id
+    )
+    if source is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Source stock level does not exist.",
+        )
+    available_quantity = source.quantity_total - source.quantity_checked_out
+    if available_quantity < payload.quantity:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Not enough available stock to transfer.",
+        )
+
+    destination = await get_stock_level_by_asset_location(
+        session, payload.asset_id, payload.to_location_id
+    )
+    if destination is None:
+        destination = StockLevel(
+            asset_id=payload.asset_id,
+            location_id=payload.to_location_id,
+            quantity_total=0,
+        )
+        session.add(destination)
+        await session.flush()
+
+    source.quantity_total -= payload.quantity
+    destination.quantity_total += payload.quantity
+    await write_item_event(
+        session,
+        asset_id=asset.id,
+        event_type=ItemEventType.MOVED,
+        actor=actor,
+        notes=payload.notes,
+        details={
+            "from_location_id": str(payload.from_location_id),
+            "to_location_id": str(payload.to_location_id),
+            "quantity": payload.quantity,
+        },
+    )
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.UPDATE,
+        entity_type="stock_level",
+        entity_id=source.id,
+        summary=f"Transferred {payload.quantity} {asset.name}",
+    )
+    await session.commit()
+    await session.refresh(source)
+    await session.refresh(destination)
+    return source, destination
+
+
+async def get_stock_level_by_asset_location(
+    session: AsyncSession,
+    asset_id: UUID,
+    location_id: UUID,
+) -> StockLevel | None:
+    result = await session.execute(
+        select(StockLevel).where(
+            StockLevel.asset_id == asset_id,
+            StockLevel.location_id == location_id,
+        )
+    )
+    return result.scalar_one_or_none()
