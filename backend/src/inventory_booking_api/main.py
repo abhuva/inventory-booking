@@ -14,6 +14,7 @@ from inventory_booking_api.core.database import get_session
 from inventory_booking_api.inventory.asset_router import asset_router, stock_router
 from inventory_booking_api.inventory.category_router import router as category_router
 from inventory_booking_api.locations.router import router as location_router
+from inventory_booking_api.qr.router import router as qr_router
 from inventory_booking_api.returns.router import router as return_router
 from inventory_booking_api.settings import get_settings
 from inventory_booking_api.users.router import router as auth_router
@@ -42,6 +43,7 @@ app.include_router(stock_router)
 app.include_router(booking_router)
 app.include_router(checkout_router)
 app.include_router(return_router)
+app.include_router(qr_router)
 
 
 @app.get("/health", tags=["system"])

@@ -150,6 +150,29 @@ export type ReturnRecord = {
   lines?: ReturnLine[];
 };
 
+export type QrCode = {
+  id: string;
+  token: string;
+  asset_id: string | null;
+  label: string | null;
+  notes: string | null;
+};
+
+export type QrResolve = {
+  token: string;
+  assigned: boolean;
+  asset: Pick<
+    Asset,
+    | 'id'
+    | 'name'
+    | 'asset_type'
+    | 'status'
+    | 'condition'
+    | 'current_location_id'
+    | 'current_holder_user_id'
+  > | null;
+};
+
 export type CategoryCreate = {
   name: string;
   description?: string | null;
@@ -235,6 +258,16 @@ export type MaintenanceComplete = {
 export type AssetStateChange = {
   status: AssetStatus;
   condition?: AssetCondition | null;
+  notes?: string | null;
+};
+
+export type QrCodeCreate = {
+  label?: string | null;
+  notes?: string | null;
+};
+
+export type QrAssign = {
+  asset_id: string;
   notes?: string | null;
 };
 

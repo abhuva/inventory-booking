@@ -161,9 +161,13 @@ Current endpoints:
 - `GET /returns`
 - `POST /returns`
 - `GET /returns/{return_id}`
+- `GET /qr-codes`
+- `POST /qr-codes`
+- `GET /qr-codes/{token}/resolve`
+- `POST /qr-codes/{token}/assign`
 
 ## Next Implementation Steps
 
-1. Add QR assignment and scan workflows.
-2. Add admin user/category screens.
+1. Add admin user/category screens.
+2. Add asset/detail history views.
 3. Add multi-line booking editing if real usage needs it.

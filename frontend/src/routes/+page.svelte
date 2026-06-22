@@ -19,6 +19,10 @@
     type LocationType,
     type MaintenanceComplete,
     type MaintenanceStart,
+    type QrAssign,
+    type QrCode,
+    type QrCodeCreate,
+    type QrResolve,
     type ReturnCreate,
     type ReturnRecord,
     type StockLevel,
@@ -47,6 +51,8 @@
   let bookings = $state<Booking[]>([]);
   let checkouts = $state<Checkout[]>([]);
   let returns = $state<ReturnRecord[]>([]);
+  let qrCodes = $state<QrCode[]>([]);
+  let resolvedQr = $state<QrResolve | null>(null);
   let selectedReturnCheckout = $state<Checkout | null>(null);
   let availability = $state<Availability | null>(null);
   let email = $state('admin@example.org');
@@ -106,6 +112,13 @@
     condition: 'unknown',
     notes: ''
   });
+  let qrCreateForm = $state<QrCodeCreate>({ label: '', notes: '' });
+  let qrAssignForm = $state<QrAssign & { token: string }>({
+    token: '',
+    asset_id: '',
+    notes: ''
+  });
+  let qrResolveToken = $state('');
 
   const trackedAssets = $derived(assets.filter((asset) => asset.asset_type === 'tracked'));
   const stockAssets = $derived(assets.filter((asset) => asset.asset_type === 'stock'));
@@ -141,15 +154,17 @@
   }
 
   async function loadInventory() {
-    [categories, locations, assets, stockLevels, bookings, checkouts, returns] = await Promise.all([
-      apiGet<Category[]>('/categories'),
-      apiGet<Location[]>('/locations'),
-      apiGet<Asset[]>('/assets'),
-      apiGet<StockLevel[]>('/stock-levels'),
-      apiGet<Booking[]>('/bookings'),
-      apiGet<Checkout[]>('/checkouts'),
-      apiGet<ReturnRecord[]>('/returns')
-    ]);
+    [categories, locations, assets, stockLevels, bookings, checkouts, returns, qrCodes] =
+      await Promise.all([
+        apiGet<Category[]>('/categories'),
+        apiGet<Location[]>('/locations'),
+        apiGet<Asset[]>('/assets'),
+        apiGet<StockLevel[]>('/stock-levels'),
+        apiGet<Booking[]>('/bookings'),
+        apiGet<Checkout[]>('/checkouts'),
+        apiGet<ReturnRecord[]>('/returns'),
+        currentUser ? apiGet<QrCode[]>('/qr-codes') : Promise.resolve([])
+      ]);
   }
 
   async function login() {
@@ -345,6 +360,33 @@
     });
   }
 
+  async function createQrCode() {
+    await runAction(async () => {
+      const qrCode = await apiPost<QrCode>('/qr-codes', emptyStringsToNull(qrCreateForm));
+      qrCreateForm = { label: '', notes: '' };
+      qrAssignForm.token = qrCode.token;
+      await loadInventory();
+      message = 'QR label created';
+    });
+  }
+
+  async function assignQrCode() {
+    await runAction(async () => {
+      const { token, ...payload } = qrAssignForm;
+      await apiPost<QrCode>(`/qr-codes/${token}/assign`, emptyStringsToNull(payload));
+      qrAssignForm = { token: '', asset_id: '', notes: '' };
+      await loadInventory();
+      message = 'QR label assigned';
+    });
+  }
+
+  async function resolveQrCode() {
+    await runAction(async () => {
+      resolvedQr = await apiGet<QrResolve>(`/qr-codes/${qrResolveToken}/resolve`);
+      message = resolvedQr.assigned ? 'QR label resolved' : 'QR label is unassigned';
+    });
+  }
+
   async function runAction(action: () => Promise<void>) {
     busy = true;
     error = '';
@@ -510,6 +552,10 @@
       <article>
         <span>{returns.length}</span>
         <p>returns</p>
+      </article>
+      <article>
+        <span>{qrCodes.length}</span>
+        <p>QR labels</p>
       </article>
     </section>
 
@@ -930,10 +976,91 @@
           <label>Notes <textarea bind:value={assetStateForm.notes}></textarea></label>
           <button type="submit" disabled={busy}>Update asset state</button>
         </form>
+
+        <form
+          class="panel form-panel"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void createQrCode();
+          }}
+        >
+          <h2>QR label</h2>
+          <label>Label <input bind:value={qrCreateForm.label} placeholder="Label 001" /></label>
+          <label>Notes <textarea bind:value={qrCreateForm.notes}></textarea></label>
+          <button type="submit" disabled={busy}>Create QR label</button>
+        </form>
+
+        <form
+          class="panel form-panel wide"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void assignQrCode();
+          }}
+        >
+          <h2>Assign QR</h2>
+          <div class="split-fields">
+            <label>
+              Token
+              <select bind:value={qrAssignForm.token} required>
+                <option value="">Choose QR label</option>
+                {#each qrCodes as qrCode}
+                  <option value={qrCode.token}>
+                    {qrCode.label ?? qrCode.token.slice(0, 10)} · {qrCode.asset_id
+                      ? assetName(qrCode.asset_id)
+                      : 'unassigned'}
+                  </option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              Tracked asset
+              <select bind:value={qrAssignForm.asset_id} required>
+                <option value="">Choose tracked asset</option>
+                {#each trackedAssets.filter((asset) => asset.status !== 'lost' && asset.status !== 'retired') as asset}
+                  <option value={asset.id}>{asset.name}</option>
+                {/each}
+              </select>
+            </label>
+          </div>
+          <label>Notes <textarea bind:value={qrAssignForm.notes}></textarea></label>
+          <button type="submit" disabled={busy}>Assign QR label</button>
+        </form>
+
+        <form
+          class="panel form-panel"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void resolveQrCode();
+          }}
+        >
+          <h2>Scan / resolve QR</h2>
+          <label>Token <input bind:value={qrResolveToken} required /></label>
+          {#if resolvedQr}
+            <div class:availability-ok={resolvedQr.assigned} class="availability-result">
+              <strong>{resolvedQr.assigned ? resolvedQr.asset?.name : 'Unassigned label'}</strong>
+              {#if resolvedQr.asset}
+                <span>{resolvedQr.asset.status} · {resolvedQr.asset.condition}</span>
+              {/if}
+            </div>
+          {/if}
+          <button type="submit" disabled={busy}>Resolve QR</button>
+        </form>
       </section>
     {/if}
 
     <section class="data-grid" aria-label="Inventory lists">
+      <article class="panel list-panel">
+        <h2>QR labels</h2>
+        {#each qrCodes as qrCode}
+          <div class="row-card">
+            <strong>{qrCode.label ?? qrCode.token.slice(0, 14)}</strong>
+            <span>{qrCode.asset_id ? assetName(qrCode.asset_id) : 'unassigned'}</span>
+          </div>
+        {:else}
+          <p class="empty">No QR labels yet.</p>
+        {/each}
+      </article>
+
       <article class="panel list-panel">
         <h2>Checkouts</h2>
         {#each checkouts as checkout}

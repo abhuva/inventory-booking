@@ -1112,3 +1112,86 @@ def test_asset_state_change_rejects_unsupported_status(client: TestClient) -> No
     )
 
     assert response.status_code == 400
+
+
+def test_qr_create_assign_and_resolve_tracked_asset(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "QR Aerial Stand", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+
+    qr_response = client.post("/qr-codes", json={"label": "Label 001"}, headers=headers)
+    token = qr_response.json()["token"]
+    assign_response = client.post(
+        f"/qr-codes/{token}/assign",
+        json={"asset_id": tracked_asset["id"], "notes": "Applied sticker"},
+        headers=headers,
+    )
+    resolve_response = client.get(f"/qr-codes/{token}/resolve", headers=headers)
+    event_response = client.get(
+        "/audit/item-events",
+        params={"asset_id": tracked_asset["id"]},
+        headers=headers,
+    )
+
+    assert qr_response.status_code == 200
+    assert len(token) >= 24
+    assert assign_response.status_code == 200
+    assert assign_response.json()["asset_id"] == tracked_asset["id"]
+    assert resolve_response.status_code == 200
+    assert resolve_response.json()["assigned"] is True
+    assert resolve_response.json()["asset"]["id"] == tracked_asset["id"]
+    assert event_response.json()[0]["event_type"] == "qr_assigned"
+
+
+def test_qr_assignment_rejects_stock_asset(client: TestClient) -> None:
+    headers = login(client)
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "QR Stock Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    token = client.post("/qr-codes", json={}, headers=headers).json()["token"]
+
+    response = client.post(
+        f"/qr-codes/{token}/assign",
+        json={"asset_id": stock_asset["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+
+
+def test_qr_assignment_rejects_lost_asset(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "QR Lost Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    client.post(
+        f"/assets/{tracked_asset['id']}/state",
+        json={"status": "lost"},
+        headers=headers,
+    )
+    token = client.post("/qr-codes", json={}, headers=headers).json()["token"]
+
+    response = client.post(
+        f"/qr-codes/{token}/assign",
+        json={"asset_id": tracked_asset["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+
+
+def test_qr_endpoints_require_session_and_do_not_enumerate(client: TestClient) -> None:
+    unauthenticated_response = client.post("/qr-codes", json={})
+    headers = login(client)
+    missing_response = client.get("/qr-codes/not-a-real-token/resolve", headers=headers)
+
+    assert unauthenticated_response.status_code == 401
+    assert missing_response.status_code == 404
+    assert missing_response.json()["detail"] == "QR label not found."

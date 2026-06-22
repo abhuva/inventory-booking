@@ -190,13 +190,13 @@ Goal: phone-friendly lookup and assignment.
 
 Dependencies: Phase 1 inventory, Phase 3 movement flows.
 
-- [ ] `qr_codes` model
-- [ ] generate opaque QR tokens
-- [ ] assign QR to tracked asset
-- [ ] resolve assigned QR
-- [ ] handle unassigned/retired/lost QR labels
-- [ ] QR scan frontend route
-- [ ] red-team tests for QR enumeration and unauthorized assignment
+- [x] `qr_codes` model
+- [x] generate opaque QR tokens
+- [x] assign QR to tracked asset
+- [x] resolve assigned QR
+- [x] handle unassigned/retired/lost QR labels
+- [x] QR scan frontend route
+- [x] red-team tests for QR enumeration and unauthorized assignment
 
 ## Phase 5: Frontend MVP
 
@@ -215,7 +215,7 @@ Dependencies: backend APIs for the target workflow.
 - [x] availability feedback
 - [x] checkout screen
 - [x] return screen
-- [ ] QR scan/assignment screens
+- [x] QR scan/assignment screens
 - [ ] admin user/category screens
 
 ## Phase 6: Reliability And Deployment
@@ -234,5 +234,5 @@ Dependencies: stable MVP.
 
 Continue operational workflow:
 
-- add QR assignment and scan workflows
 - add admin user/category screens
+- add asset/detail history views
