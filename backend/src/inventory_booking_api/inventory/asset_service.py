@@ -8,13 +8,15 @@ from inventory_booking_api.audit.enums import AuditAction, ItemEventType
 from inventory_booking_api.audit.service import write_audit_log, write_item_event
 from inventory_booking_api.inventory.asset_schemas import (
     AssetCreate,
+    AssetStateChange,
     AssetUpdate,
+    MaintenanceComplete,
     StockLevelCreate,
     StockLevelUpdate,
     StockTransfer,
     TrackedAssetTransfer,
 )
-from inventory_booking_api.inventory.enums import AssetStatus, AssetType
+from inventory_booking_api.inventory.enums import AssetCondition, AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, StockLevel
 from inventory_booking_api.users.models import User
 
@@ -297,3 +299,147 @@ async def get_stock_level_by_asset_location(
         )
     )
     return result.scalar_one_or_none()
+
+
+async def start_asset_maintenance(
+    session: AsyncSession,
+    asset: Asset,
+    notes: str | None,
+    actor: User,
+) -> Asset:
+    if asset.asset_type != AssetType.TRACKED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only tracked assets can enter maintenance.",
+        )
+    if asset.status in (AssetStatus.CHECKED_OUT, AssetStatus.LOST, AssetStatus.RETIRED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Asset in status {asset.status.value} cannot enter maintenance.",
+        )
+
+    asset.status = AssetStatus.MAINTENANCE
+    await write_item_event(
+        session,
+        asset_id=asset.id,
+        event_type=ItemEventType.MAINTENANCE_STARTED,
+        actor=actor,
+        notes=notes,
+    )
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.UPDATE,
+        entity_type="asset",
+        entity_id=asset.id,
+        summary=f"Started maintenance for {asset.name}",
+    )
+    await session.commit()
+    await session.refresh(asset)
+    return asset
+
+
+async def complete_asset_maintenance(
+    session: AsyncSession,
+    asset: Asset,
+    payload: MaintenanceComplete,
+    actor: User,
+) -> Asset:
+    if asset.status != AssetStatus.MAINTENANCE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only assets in maintenance can complete maintenance.",
+        )
+
+    asset.condition = payload.condition
+    asset.status = (
+        AssetStatus.DAMAGED
+        if payload.condition in (AssetCondition.DAMAGED, AssetCondition.NEEDS_REPAIR)
+        else AssetStatus.AVAILABLE
+    )
+    await write_item_event(
+        session,
+        asset_id=asset.id,
+        event_type=ItemEventType.MAINTENANCE_COMPLETED,
+        actor=actor,
+        notes=payload.notes,
+        details={"condition": payload.condition.value, "status": asset.status.value},
+    )
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.UPDATE,
+        entity_type="asset",
+        entity_id=asset.id,
+        summary=f"Completed maintenance for {asset.name}",
+    )
+    await session.commit()
+    await session.refresh(asset)
+    return asset
+
+
+async def change_asset_state(
+    session: AsyncSession,
+    asset: Asset,
+    payload: AssetStateChange,
+    actor: User,
+) -> Asset:
+    if asset.status == AssetStatus.CHECKED_OUT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Checked-out assets must be returned before state changes.",
+        )
+    if asset.status == AssetStatus.RETIRED and payload.status != AssetStatus.RETIRED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Retired assets cannot be reactivated.",
+        )
+    if payload.status not in (
+        AssetStatus.AVAILABLE,
+        AssetStatus.DAMAGED,
+        AssetStatus.LOST,
+        AssetStatus.RETIRED,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="State change supports available, damaged, lost, or retired.",
+        )
+
+    asset.status = payload.status
+    if payload.condition is not None:
+        asset.condition = payload.condition
+    if payload.status in (AssetStatus.LOST, AssetStatus.RETIRED):
+        asset.current_holder_user_id = None
+    event_type = asset_state_event_type(payload.status)
+    await write_item_event(
+        session,
+        asset_id=asset.id,
+        event_type=event_type,
+        actor=actor,
+        notes=payload.notes,
+        details={
+            "status": payload.status.value,
+            "condition": asset.condition.value,
+        },
+    )
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.UPDATE,
+        entity_type="asset",
+        entity_id=asset.id,
+        summary=f"Changed asset state for {asset.name} to {asset.status.value}",
+    )
+    await session.commit()
+    await session.refresh(asset)
+    return asset
+
+
+def asset_state_event_type(status_value: AssetStatus) -> ItemEventType:
+    if status_value == AssetStatus.DAMAGED:
+        return ItemEventType.DAMAGED
+    if status_value == AssetStatus.LOST:
+        return ItemEventType.LOST
+    if status_value == AssetStatus.RETIRED:
+        return ItemEventType.RETIRED
+    return ItemEventType.FOUND

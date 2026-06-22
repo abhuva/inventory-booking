@@ -223,6 +223,21 @@ export type StockTransfer = {
   notes?: string | null;
 };
 
+export type MaintenanceStart = {
+  notes?: string | null;
+};
+
+export type MaintenanceComplete = {
+  condition?: AssetCondition;
+  notes?: string | null;
+};
+
+export type AssetStateChange = {
+  status: AssetStatus;
+  condition?: AssetCondition | null;
+  notes?: string | null;
+};
+
 const csrfCookieName = 'inventory_booking_csrf';
 
 export class ApiError extends Error {

@@ -180,8 +180,8 @@ Dependencies: 1.4, 1.5.
 
 - [x] transfer tracked asset location/holder
 - [x] transfer stock between locations
-- [ ] maintenance start/complete
-- [ ] mark damaged/lost/retired
+- [x] maintenance start/complete
+- [x] mark damaged/lost/retired
 - [x] tests for invalid state transitions
 
 ## Phase 4: QR Workflows
@@ -234,5 +234,5 @@ Dependencies: stable MVP.
 
 Continue operational workflow:
 
-- add maintenance/damaged/lost state transition workflow
 - add QR assignment and scan workflows
+- add admin user/category screens

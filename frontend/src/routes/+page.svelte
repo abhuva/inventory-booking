@@ -6,6 +6,7 @@
     type Availability,
     type Asset,
     type AssetCreate,
+    type AssetStateChange,
     type AssetType,
     type Booking,
     type BookingCreate,
@@ -16,6 +17,8 @@
     type Location,
     type LocationCreate,
     type LocationType,
+    type MaintenanceComplete,
+    type MaintenanceStart,
     type ReturnCreate,
     type ReturnRecord,
     type StockLevel,
@@ -94,6 +97,13 @@
     from_location_id: '',
     to_location_id: '',
     quantity: 1,
+    notes: ''
+  });
+  let assetStateForm = $state({
+    asset_id: '',
+    action: 'maintenance_start',
+    status: 'damaged',
+    condition: 'unknown',
     notes: ''
   });
 
@@ -300,6 +310,38 @@
       };
       await loadInventory();
       message = 'Stock transferred';
+    });
+  }
+
+  async function changeAssetOperationalState() {
+    await runAction(async () => {
+      const assetId = assetStateForm.asset_id;
+      if (assetStateForm.action === 'maintenance_start') {
+        const payload: MaintenanceStart = { notes: assetStateForm.notes || null };
+        await apiPost<Asset>(`/assets/${assetId}/maintenance/start`, payload);
+      } else if (assetStateForm.action === 'maintenance_complete') {
+        const payload: MaintenanceComplete = {
+          condition: assetStateForm.condition as MaintenanceComplete['condition'],
+          notes: assetStateForm.notes || null
+        };
+        await apiPost<Asset>(`/assets/${assetId}/maintenance/complete`, payload);
+      } else {
+        const payload: AssetStateChange = {
+          status: assetStateForm.status as AssetStateChange['status'],
+          condition: assetStateForm.condition as AssetStateChange['condition'],
+          notes: assetStateForm.notes || null
+        };
+        await apiPost<Asset>(`/assets/${assetId}/state`, payload);
+      }
+      assetStateForm = {
+        asset_id: '',
+        action: 'maintenance_start',
+        status: 'damaged',
+        condition: 'unknown',
+        notes: ''
+      };
+      await loadInventory();
+      message = 'Asset state updated';
     });
   }
 
@@ -833,6 +875,60 @@
           </div>
           <label>Notes <textarea bind:value={stockTransferForm.notes}></textarea></label>
           <button type="submit" disabled={busy}>Move stock</button>
+        </form>
+
+        <form
+          class="panel form-panel wide"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void changeAssetOperationalState();
+          }}
+        >
+          <h2>Asset state</h2>
+          <div class="split-fields">
+            <label>
+              Asset
+              <select bind:value={assetStateForm.asset_id} required>
+                <option value="">Choose tracked asset</option>
+                {#each trackedAssets as asset}
+                  <option value={asset.id}>{asset.name} · {asset.status}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              Action
+              <select bind:value={assetStateForm.action}>
+                <option value="maintenance_start">start maintenance</option>
+                <option value="maintenance_complete">complete maintenance</option>
+                <option value="state_change">mark state</option>
+              </select>
+            </label>
+          </div>
+          {#if assetStateForm.action === 'state_change'}
+            <label>
+              State
+              <select bind:value={assetStateForm.status}>
+                <option value="damaged">damaged</option>
+                <option value="lost">lost</option>
+                <option value="retired">retired</option>
+                <option value="available">available / found</option>
+              </select>
+            </label>
+          {/if}
+          {#if assetStateForm.action !== 'maintenance_start'}
+            <label>
+              Condition
+              <select bind:value={assetStateForm.condition}>
+                <option value="unknown">unknown</option>
+                <option value="good">good</option>
+                <option value="worn">worn</option>
+                <option value="damaged">damaged</option>
+                <option value="needs_repair">needs repair</option>
+              </select>
+            </label>
+          {/if}
+          <label>Notes <textarea bind:value={assetStateForm.notes}></textarea></label>
+          <button type="submit" disabled={busy}>Update asset state</button>
         </form>
       </section>
     {/if}

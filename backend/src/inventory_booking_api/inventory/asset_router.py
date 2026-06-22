@@ -10,7 +10,10 @@ from inventory_booking_api.core.security import get_current_user
 from inventory_booking_api.inventory.asset_schemas import (
     AssetCreate,
     AssetRead,
+    AssetStateChange,
     AssetUpdate,
+    MaintenanceComplete,
+    MaintenanceStart,
     StockLevelCreate,
     StockLevelRead,
     StockLevelUpdate,
@@ -18,12 +21,15 @@ from inventory_booking_api.inventory.asset_schemas import (
     TrackedAssetTransfer,
 )
 from inventory_booking_api.inventory.asset_service import (
+    change_asset_state,
+    complete_asset_maintenance,
     create_asset,
     create_stock_level,
     get_asset,
     get_stock_level,
     list_assets,
     list_stock_levels,
+    start_asset_maintenance,
     transfer_stock,
     transfer_tracked_asset,
     update_asset,
@@ -89,6 +95,45 @@ async def transfer_tracked_asset_endpoint(
     if asset is None:
         raise_not_found("Asset")
     return await transfer_tracked_asset(session, asset, payload, current_user)
+
+
+@asset_router.post("/{asset_id}/maintenance/start", response_model=AssetRead)
+async def start_asset_maintenance_endpoint(
+    asset_id: UUID,
+    payload: MaintenanceStart,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AssetRead:
+    asset = await get_asset(session, asset_id)
+    if asset is None:
+        raise_not_found("Asset")
+    return await start_asset_maintenance(session, asset, payload.notes, current_user)
+
+
+@asset_router.post("/{asset_id}/maintenance/complete", response_model=AssetRead)
+async def complete_asset_maintenance_endpoint(
+    asset_id: UUID,
+    payload: MaintenanceComplete,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AssetRead:
+    asset = await get_asset(session, asset_id)
+    if asset is None:
+        raise_not_found("Asset")
+    return await complete_asset_maintenance(session, asset, payload, current_user)
+
+
+@asset_router.post("/{asset_id}/state", response_model=AssetRead)
+async def change_asset_state_endpoint(
+    asset_id: UUID,
+    payload: AssetStateChange,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AssetRead:
+    asset = await get_asset(session, asset_id)
+    if asset is None:
+        raise_not_found("Asset")
+    return await change_asset_state(session, asset, payload, current_user)
 
 
 @stock_router.get("", response_model=list[StockLevelRead])

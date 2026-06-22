@@ -142,6 +142,9 @@ Current endpoints:
 - `GET /assets/{asset_id}`
 - `PATCH /assets/{asset_id}`
 - `POST /assets/{asset_id}/transfer`
+- `POST /assets/{asset_id}/maintenance/start`
+- `POST /assets/{asset_id}/maintenance/complete`
+- `POST /assets/{asset_id}/state`
 - `GET /stock-levels`
 - `POST /stock-levels`
 - `POST /stock-levels/transfer`
@@ -161,6 +164,6 @@ Current endpoints:
 
 ## Next Implementation Steps
 
-1. Add maintenance/damaged/lost state transition workflows.
-2. Add QR assignment and scan workflows.
+1. Add QR assignment and scan workflows.
+2. Add admin user/category screens.
 3. Add multi-line booking editing if real usage needs it.

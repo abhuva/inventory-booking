@@ -1002,3 +1002,113 @@ def test_transfer_stock_rejects_checked_out_quantity(client: TestClient) -> None
     )
 
     assert response.status_code == 409
+
+
+def test_maintenance_lifecycle_updates_asset_and_events(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Maintenance Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+
+    start_response = client.post(
+        f"/assets/{tracked_asset['id']}/maintenance/start",
+        json={"notes": "Inspect welds"},
+        headers=headers,
+    )
+    complete_response = client.post(
+        f"/assets/{tracked_asset['id']}/maintenance/complete",
+        json={"condition": "good", "notes": "Ready"},
+        headers=headers,
+    )
+    event_response = client.get(
+        "/audit/item-events",
+        params={"asset_id": tracked_asset["id"]},
+        headers=headers,
+    )
+
+    assert start_response.status_code == 200
+    assert start_response.json()["status"] == "maintenance"
+    assert complete_response.status_code == 200
+    assert complete_response.json()["status"] == "available"
+    assert complete_response.json()["condition"] == "good"
+    event_types = [entry["event_type"] for entry in event_response.json()]
+    assert "maintenance_started" in event_types
+    assert "maintenance_completed" in event_types
+
+
+def test_checked_out_asset_cannot_enter_maintenance(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Busy Maintenance Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Busy maintenance",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    ).json()
+    client.post("/checkouts", json={"booking_id": booking["id"]}, headers=headers)
+
+    response = client.post(
+        f"/assets/{tracked_asset['id']}/maintenance/start",
+        json={},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+
+
+def test_asset_state_change_marks_lost_and_retired(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "State Change Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+
+    lost_response = client.post(
+        f"/assets/{tracked_asset['id']}/state",
+        json={"status": "lost", "notes": "Missing after workshop"},
+        headers=headers,
+    )
+    retired_response = client.post(
+        f"/assets/{tracked_asset['id']}/state",
+        json={"status": "retired", "condition": "damaged"},
+        headers=headers,
+    )
+    reactivate_response = client.post(
+        f"/assets/{tracked_asset['id']}/state",
+        json={"status": "available"},
+        headers=headers,
+    )
+
+    assert lost_response.status_code == 200
+    assert lost_response.json()["status"] == "lost"
+    assert retired_response.status_code == 200
+    assert retired_response.json()["status"] == "retired"
+    assert reactivate_response.status_code == 409
+
+
+def test_asset_state_change_rejects_unsupported_status(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Unsupported State Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        f"/assets/{tracked_asset['id']}/state",
+        json={"status": "checked_out"},
+        headers=headers,
+    )
+
+    assert response.status_code == 400

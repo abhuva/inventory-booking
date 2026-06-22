@@ -110,3 +110,24 @@ class StockTransfer(BaseModel):
     notes: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+class MaintenanceStart(BaseModel):
+    notes: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class MaintenanceComplete(BaseModel):
+    condition: AssetCondition = AssetCondition.GOOD
+    notes: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AssetStateChange(BaseModel):
+    status: AssetStatus
+    condition: AssetCondition | None = None
+    notes: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
