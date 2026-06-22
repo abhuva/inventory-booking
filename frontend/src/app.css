@@ -1,0 +1,23 @@
+﻿:root {
+  font-family: 'Aptos', 'Segoe UI', sans-serif;
+  color: #14211c;
+  background: #eef1e8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(104, 141, 118, 0.35), transparent 28rem),
+    linear-gradient(135deg, #f7f4ea 0%, #e7ece3 52%, #cedbcc 100%);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}

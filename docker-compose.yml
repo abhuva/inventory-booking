@@ -1,0 +1,50 @@
+﻿services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: inventory_booking
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: inventory
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory -d inventory_booking"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      APP_NAME: Inventory Booking API
+      APP_ENV: docker
+      DATABASE_URL: postgresql+asyncpg://inventory:inventory@postgres:5432/inventory_booking
+      CORS_ORIGINS: http://127.0.0.1:5173,http://localhost:5173
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/src:/app/src
+    command: ["uv", "run", "uvicorn", "inventory_booking_api.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/static:/app/static
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+volumes:
+  postgres-data:

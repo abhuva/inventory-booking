@@ -1,0 +1,1 @@
+﻿"""Inventory Booking API package."""

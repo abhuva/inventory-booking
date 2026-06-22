@@ -1,0 +1,30 @@
+﻿# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.svelte-kit/
+build/
+.vite/
+npm-debug.log*
+
+# Local data
+postgres-data/
+data/
