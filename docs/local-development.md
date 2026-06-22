@@ -30,6 +30,23 @@ docker compose up --build
 
 Docker is required for PostgreSQL until a separate local PostgreSQL instance is configured.
 
+If Docker Desktop is running but `docker` is not recognized in PowerShell, open a new terminal first.
+If it is still unavailable, use Docker Desktop's bundled CLI directly:
+
+```powershell
+& 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' compose up --build
+```
+
+Useful Docker commands:
+
+```powershell
+docker compose ps
+docker compose logs --tail=120 backend
+docker compose down
+```
+
+Do not use `docker compose down -v` unless you intentionally want to delete the local PostgreSQL data volume.
+
 ## Check Everything
 
 ```powershell

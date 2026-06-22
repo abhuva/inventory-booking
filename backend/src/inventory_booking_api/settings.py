@@ -1,6 +1,6 @@
-﻿from functools import lru_cache
+from functools import lru_cache
 
-from pydantic import AnyHttpUrl, Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,11 +10,9 @@ class Settings(BaseSettings):
     app_name: str = "Inventory Booking API"
     app_env: str = "local"
     database_url: str = "postgresql+asyncpg://inventory:inventory@127.0.0.1:5432/inventory_booking"
-    cors_origins: list[AnyHttpUrl] = Field(
-        default_factory=lambda: [
-            "http://127.0.0.1:5173",
-            "http://localhost:5173",
-        ]
+    cors_origins: str = Field(
+        default="http://127.0.0.1:5173,http://localhost:5173",
+        description="Comma-separated list of allowed browser origins.",
     )
 
     model_config = SettingsConfigDict(
@@ -23,14 +21,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def split_cors_origins(cls, value: str | list[str]) -> list[str]:
-        """Allow comma-separated origins in local environment files."""
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """Return configured CORS origins as a normalized list."""
 
-        if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
-        return value
+        return [
+            origin.strip().rstrip("/")
+            for origin in self.cors_origins.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache
