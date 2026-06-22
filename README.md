@@ -69,6 +69,15 @@ Apply database migrations after the containers are running:
 .\scripts\migrate.ps1
 ```
 
+Seed the first admin account:
+
+```powershell
+$env:ADMIN_EMAIL = "admin@example.org"
+$env:ADMIN_PASSWORD = "change-this-password"
+$env:ADMIN_DISPLAY_NAME = "Admin"
+.\scripts\seed-admin.ps1
+```
+
 Services:
 
 - API: `http://127.0.0.1:8000`
@@ -93,22 +102,19 @@ npm.cmd --prefix .\frontend run lint
 
 ## Current Status
 
-This repo has a working Docker-backed local stack. Backend health endpoints are `GET /health` and `GET /health/database`. The initial PostgreSQL migration creates users, locations, categories, tracked/stock assets, stock levels, item events, and audit logs.
+This repo has a working Docker-backed local stack. Backend health endpoints are `GET /health` and `GET /health/database`. PostgreSQL migrations create users, sessions, locations, categories, tracked/stock assets, stock levels, item events, and audit logs.
 
 ## API
 
-Read endpoints are open during early local development. Mutating endpoints currently require the temporary internal token header:
-
-```text
-X-API-Token: local-dev-token
-```
-
-This is an interim guard until browser session authentication is implemented.
+Read endpoints are open during early local development. Mutating endpoints require an authenticated session cookie from `POST /auth/login`.
 
 Current endpoints:
 
 - `GET /health`
 - `GET /health/database`
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
 - `GET /categories`
 - `POST /categories`
 - `GET /categories/{category_id}`

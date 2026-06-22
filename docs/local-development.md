@@ -36,6 +36,15 @@ After the containers are running, apply migrations:
 .\scripts\migrate.ps1
 ```
 
+Seed the first admin account:
+
+```powershell
+$env:ADMIN_EMAIL = "admin@example.org"
+$env:ADMIN_PASSWORD = "change-this-password"
+$env:ADMIN_DISPLAY_NAME = "Admin"
+.\scripts\seed-admin.ps1
+```
+
 If Docker Desktop is running but `docker` is not recognized in PowerShell, open a new terminal first.
 If it is still unavailable, use Docker Desktop's bundled CLI directly:
 

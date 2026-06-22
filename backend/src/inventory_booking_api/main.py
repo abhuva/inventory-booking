@@ -11,6 +11,7 @@ from inventory_booking_api.inventory.asset_router import asset_router, stock_rou
 from inventory_booking_api.inventory.category_router import router as category_router
 from inventory_booking_api.locations.router import router as location_router
 from inventory_booking_api.settings import get_settings
+from inventory_booking_api.users.router import router as auth_router
 
 settings = get_settings()
 
@@ -24,6 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(category_router)
 app.include_router(location_router)
 app.include_router(asset_router)

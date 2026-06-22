@@ -37,7 +37,7 @@ Status: complete
 - [x] Architecture update for tracked and stock assets
 - [x] ADRs for core decisions
 - [x] Security review workflow
-- [x] Auth direction ADR with temporary write-token guard
+- [x] Auth direction ADR
 
 Dependencies: none.
 
@@ -64,9 +64,11 @@ Dependencies: 1.1.
 - [x] password hash storage fields
 - [x] active/disabled state
 - [x] session/auth architecture decision
-- [ ] initial admin seed strategy
+- [x] initial admin seed strategy
 - [x] temporary internal token authorization helper for mutation endpoints
-- [ ] tests for role checks
+- [x] session-cookie login/logout/me endpoints
+- [x] password hashing with Argon2
+- [x] tests for authenticated mutation guard
 
 ### 1.3 Locations And Categories
 
@@ -78,6 +80,7 @@ Dependencies: 1.1, partial 1.2 for actor/audit later.
 - [x] validation schemas
 - [x] service tests
 - [x] temporary write-token guard on mutation endpoints
+- [x] session-cookie guard on mutation endpoints
 
 ### 1.4 Inventory Assets
 
@@ -223,9 +226,9 @@ Dependencies: stable MVP.
 
 ## Current Next Slice
 
-Continue Phase 1 with real auth/session and admin seed:
+Continue Phase 1 with authorization refinement and audit services:
 
-- initial admin seed strategy
 - inventory mutation event/audit writers
-- replace temporary write-token dependency with session/current-user dependency
 - add role checks for admin-only mutations
+- user-management endpoints for admins
+- CSRF protection for browser-triggered mutations

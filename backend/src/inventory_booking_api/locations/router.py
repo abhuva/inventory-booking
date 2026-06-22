@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.errors import raise_not_found
-from inventory_booking_api.core.security import require_internal_api_token
+from inventory_booking_api.core.security import get_current_user
 from inventory_booking_api.locations.schemas import LocationCreate, LocationRead, LocationUpdate
 from inventory_booking_api.locations.service import (
     create_location,
@@ -25,7 +25,7 @@ async def list_location_endpoint(
     return await list_locations(session)
 
 
-@router.post("", response_model=LocationRead, dependencies=[Depends(require_internal_api_token)])
+@router.post("", response_model=LocationRead, dependencies=[Depends(get_current_user)])
 async def create_location_endpoint(
     payload: LocationCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -47,7 +47,7 @@ async def get_location_endpoint(
 @router.patch(
     "/{location_id}",
     response_model=LocationRead,
-    dependencies=[Depends(require_internal_api_token)],
+    dependencies=[Depends(get_current_user)],
 )
 async def update_location_endpoint(
     location_id: UUID,
@@ -58,3 +58,4 @@ async def update_location_endpoint(
     if location is None:
         raise_not_found("Location")
     return await update_location(session, location, payload)
+

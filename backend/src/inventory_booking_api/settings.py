@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     app_env: str = "local"
     database_url: str = "postgresql+asyncpg://inventory:inventory@127.0.0.1:5432/inventory_booking"
     internal_api_token: str = "local-dev-token"
+    session_cookie_name: str = "inventory_booking_session"
+    session_cookie_secure: bool = False
+    session_max_age_seconds: int = 60 * 60 * 24 * 14
     cors_origins: str = Field(
         default="http://127.0.0.1:5173,http://localhost:5173",
         description="Comma-separated list of allowed browser origins.",

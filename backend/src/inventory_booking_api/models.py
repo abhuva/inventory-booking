@@ -3,6 +3,7 @@ from inventory_booking_api.core.models import Base
 from inventory_booking_api.inventory.models import Asset, Category, StockLevel
 from inventory_booking_api.locations.models import Location
 from inventory_booking_api.users.models import User
+from inventory_booking_api.users.session_models import UserSession
 
 __all__ = [
     "Asset",
@@ -13,4 +14,5 @@ __all__ = [
     "Location",
     "StockLevel",
     "User",
+    "UserSession",
 ]

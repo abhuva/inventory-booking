@@ -6,15 +6,17 @@ Accepted
 
 ## Context
 
-The app is internal and used by a small local team, but mutation endpoints must not be open on the network. Full browser login/session work is its own implementation slice.
+The app is internal and used by a small local team, but mutation endpoints must not be open on the network. Browser users need a simple login flow with revocable sessions.
 
 ## Decision
 
-Use HTTP-only session-cookie authentication as the target browser auth model. Until that slice is implemented, mutating API endpoints require a temporary internal API token through the `X-API-Token` header.
+Use HTTP-only session-cookie authentication as the browser auth model. Store only hashed random session tokens in PostgreSQL. Seed the initial admin account through an explicit local command using `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables.
 
 ## Consequences
 
-- Read endpoints can be exercised during early development.
-- Write endpoints are not accidentally unauthenticated while login is pending.
-- The temporary token dependency is isolated in `core/security.py` so it can be replaced by session/user dependencies later.
-- The token is not sufficient for production deployment; production requires real user login, CSRF protection, session expiry, and role checks.
+- Mutating inventory endpoints require an authenticated session cookie.
+- Sessions can be revoked server-side via logout or future admin tooling.
+- Passwords are hashed with Argon2 through `pwdlib`.
+- `SESSION_COOKIE_SECURE=false` is acceptable for local HTTP development only; production HTTPS must use secure cookies.
+- CSRF protection is still required before production use for browser-triggered mutations.
+- The legacy internal token helper remains only as a bootstrap/internal utility and should not protect normal user workflows.

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.errors import raise_not_found
-from inventory_booking_api.core.security import require_internal_api_token
+from inventory_booking_api.core.security import get_current_user
 from inventory_booking_api.inventory.asset_schemas import (
     AssetCreate,
     AssetRead,
@@ -37,7 +37,7 @@ async def list_asset_endpoint(
     return await list_assets(session)
 
 
-@asset_router.post("", response_model=AssetRead, dependencies=[Depends(require_internal_api_token)])
+@asset_router.post("", response_model=AssetRead, dependencies=[Depends(get_current_user)])
 async def create_asset_endpoint(
     payload: AssetCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -59,7 +59,7 @@ async def get_asset_endpoint(
 @asset_router.patch(
     "/{asset_id}",
     response_model=AssetRead,
-    dependencies=[Depends(require_internal_api_token)],
+    dependencies=[Depends(get_current_user)],
 )
 async def update_asset_endpoint(
     asset_id: UUID,
@@ -82,7 +82,7 @@ async def list_stock_level_endpoint(
 @stock_router.post(
     "",
     response_model=StockLevelRead,
-    dependencies=[Depends(require_internal_api_token)],
+    dependencies=[Depends(get_current_user)],
 )
 async def create_stock_level_endpoint(
     payload: StockLevelCreate,
@@ -105,7 +105,7 @@ async def get_stock_level_endpoint(
 @stock_router.patch(
     "/{stock_level_id}",
     response_model=StockLevelRead,
-    dependencies=[Depends(require_internal_api_token)],
+    dependencies=[Depends(get_current_user)],
 )
 async def update_stock_level_endpoint(
     stock_level_id: UUID,
@@ -116,3 +116,4 @@ async def update_stock_level_endpoint(
     if stock_level is None:
         raise_not_found("Stock level")
     return await update_stock_level(session, stock_level, payload)
+
