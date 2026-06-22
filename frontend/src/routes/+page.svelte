@@ -59,6 +59,7 @@
   let returns = $state<ReturnRecord[]>([]);
   let qrCodes = $state<QrCode[]>([]);
   let users = $state<User[]>([]);
+  let assetSearch = $state('');
   let selectedAssetId = $state('');
   let selectedAssetEvents = $state<ItemEvent[]>([]);
   let selectedLocationId = $state('');
@@ -157,6 +158,7 @@
 
   const trackedAssets = $derived(assets.filter((asset) => asset.asset_type === 'tracked'));
   const stockAssets = $derived(assets.filter((asset) => asset.asset_type === 'stock'));
+  const filteredAssets = $derived(assets.filter((asset) => assetMatchesSearch(asset, assetSearch)));
 
   $effect(() => {
     void bootstrap();
@@ -536,6 +538,30 @@
 
   function assetName(id: string): string {
     return assets.find((asset) => asset.id === id)?.name ?? 'Unknown asset';
+  }
+
+  function assetMatchesSearch(asset: Asset, query: string): boolean {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (!normalizedQuery) {
+      return true;
+    }
+
+    return [
+      asset.name,
+      asset.asset_type,
+      asset.status,
+      asset.condition,
+      asset.asset_tag,
+      asset.serial_number,
+      asset.manufacturer,
+      asset.model,
+      asset.notes,
+      categoryName(asset.category_id),
+      locationName(asset.current_location_id),
+      holderLabel(asset.current_holder_user_id)
+    ]
+      .filter((value): value is string => typeof value === 'string')
+      .some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
   }
 
   function selectedBookingAsset(): Asset | undefined {
@@ -1541,8 +1567,31 @@
       </article>
 
       <article class="panel list-panel">
-        <h2>Assets</h2>
-        {#each assets as asset}
+        <div class="list-header">
+          <div>
+            <h2>Assets</h2>
+            <p>{filteredAssets.length} of {assets.length} shown</p>
+          </div>
+          <button
+            type="button"
+            class="secondary compact"
+            onclick={() => {
+              assetSearch = '';
+            }}
+            disabled={!assetSearch}
+          >
+            Clear
+          </button>
+        </div>
+        <label class="search-field">
+          Search assets
+          <input
+            bind:value={assetSearch}
+            placeholder="name, category, location, status, tag..."
+            type="search"
+          />
+        </label>
+        {#each filteredAssets as asset}
           <div class="row-card">
             <strong>{asset.name}</strong>
             <span
@@ -1560,7 +1609,7 @@
             </button>
           </div>
         {:else}
-          <p class="empty">No assets yet.</p>
+          <p class="empty">{assets.length ? 'No assets match this search.' : 'No assets yet.'}</p>
         {/each}
       </article>
 
@@ -1923,6 +1972,30 @@
     display: grid;
     align-content: start;
     gap: 0.75rem;
+  }
+
+  .list-header {
+    display: flex;
+    gap: 0.75rem;
+    align-items: start;
+    justify-content: space-between;
+  }
+
+  .list-header h2,
+  .list-header p {
+    margin: 0;
+  }
+
+  .list-header p {
+    color: #526358;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+
+  .search-field {
+    border-radius: 20px;
+    padding: 0.85rem 1rem;
+    background: rgba(37, 76, 55, 0.08);
   }
 
   .row-card {
