@@ -1,0 +1,14 @@
+export type WorkspaceTab =
+  | 'dashboard'
+  | 'inventory'
+  | 'locations'
+  | 'bookings'
+  | 'checkout'
+  | 'field'
+  | 'admin';
+
+export type WorkspaceTabDefinition = {
+  id: WorkspaceTab;
+  label: string;
+  description: string;
+};

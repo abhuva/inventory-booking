@@ -37,6 +37,15 @@
     type UserRole,
     type UserUpdate
   } from '$lib/api';
+  import AdminPanel from '$lib/components/workspace/AdminPanel.svelte';
+  import BookingsPanel from '$lib/components/workspace/BookingsPanel.svelte';
+  import CheckoutPanel from '$lib/components/workspace/CheckoutPanel.svelte';
+  import DashboardPanel from '$lib/components/workspace/DashboardPanel.svelte';
+  import FieldQrPanel from '$lib/components/workspace/FieldQrPanel.svelte';
+  import InventoryPanel from '$lib/components/workspace/InventoryPanel.svelte';
+  import LocationsPanel from '$lib/components/workspace/LocationsPanel.svelte';
+  import WorkspaceTabs from '$lib/components/workspace/WorkspaceTabs.svelte';
+  import type { WorkspaceTab, WorkspaceTabDefinition } from '$lib/components/workspace/types';
 
   const locationTypes: LocationType[] = [
     'storage',
@@ -49,16 +58,7 @@
     'unknown'
   ];
 
-  type WorkspaceTab =
-    | 'dashboard'
-    | 'inventory'
-    | 'locations'
-    | 'bookings'
-    | 'checkout'
-    | 'field'
-    | 'admin';
-
-  const workspaceTabs: { id: WorkspaceTab; label: string; description: string }[] = [
+  const workspaceTabs: WorkspaceTabDefinition[] = [
     { id: 'dashboard', label: 'Dashboard', description: 'Counts and workspace overview' },
     { id: 'inventory', label: 'Inventory', description: 'Assets, state, and history' },
     { id: 'locations', label: 'Locations', description: 'Spaces, stock, and movement' },
@@ -734,1429 +734,154 @@
   {#if loading}
     <section class="panel loading-panel">Loading inventory workspace...</section>
   {:else}
-    <nav class="tab-bar" aria-label="Workspace sections">
-      {#each visibleTabs() as tab}
-        <button
-          type="button"
-          class:active-tab={activeTab === tab.id}
-          onclick={() => switchTab(tab.id)}
-        >
-          <span>{tab.label}</span>
-          <small>{tab.description}</small>
-        </button>
-      {/each}
-    </nav>
+    <WorkspaceTabs tabs={visibleTabs()} {activeTab} onSwitch={switchTab} />
 
     {#if activeTab === 'dashboard'}
-      <section class="stats-grid" aria-label="Inventory summary">
-        <article>
-          <span>{trackedAssets.length}</span>
-          <p>tracked assets</p>
-        </article>
-        <article>
-          <span>{stockAssets.length}</span>
-          <p>stock assets</p>
-        </article>
-        <article>
-          <span>{locations.length}</span>
-          <p>locations</p>
-        </article>
-        <article>
-          <span>{stockLevels.reduce((sum, level) => sum + level.quantity_total, 0)}</span>
-          <p>stock units</p>
-        </article>
-        <article>
-          <span>{bookings.length}</span>
-          <p>bookings</p>
-        </article>
-        <article>
-          <span>{checkouts.length}</span>
-          <p>checkouts</p>
-        </article>
-        <article>
-          <span>{returns.length}</span>
-          <p>returns</p>
-        </article>
-        <article>
-          <span>{qrCodes.length}</span>
-          <p>QR labels</p>
-        </article>
-      </section>
+      <DashboardPanel
+        trackedAssetCount={trackedAssets.length}
+        stockAssetCount={stockAssets.length}
+        locationCount={locations.length}
+        stockUnitCount={stockLevels.reduce((sum, level) => sum + level.quantity_total, 0)}
+        bookingCount={bookings.length}
+        checkoutCount={checkouts.length}
+        returnCount={returns.length}
+        qrCodeCount={qrCodes.length}
+      />
     {/if}
 
     {#if currentUser && activeTab !== 'dashboard'}
-      <section class="forms-grid" aria-label="Create inventory data">
-        {#if activeTab === 'admin' && currentUser.role === 'admin'}
-          <form
-            class="panel form-panel"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void createCategory();
-            }}
-          >
-            <h2>Category</h2>
-            <label>Name <input bind:value={categoryForm.name} required /></label>
-            <label>Description <textarea bind:value={categoryForm.description}></textarea></label>
-            <button type="submit" disabled={busy}>Create category</button>
-          </form>
+      {#if activeTab === 'admin' && currentUser.role === 'admin'}
+        <AdminPanel
+          {categories}
+          {users}
+          {busy}
+          bind:categoryForm
+          bind:categoryUpdateForm
+          bind:userCreateForm
+          bind:userUpdateForm
+          createCategory={() => void createCategory()}
+          updateCategory={() => void updateCategory()}
+          createUser={() => void createUser()}
+          updateUser={() => void updateUser()}
+          {selectCategoryForEdit}
+          {selectUserForEdit}
+        />
+      {/if}
 
-          <form
-            class="panel form-panel"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void updateCategory();
-            }}
-          >
-            <h2>Edit category</h2>
-            <label>
-              Category
-              <select
-                value={categoryUpdateForm.category_id}
-                onchange={selectCategoryForEdit}
-                required
-              >
-                <option value="">Choose category</option>
-                {#each categories as category}
-                  <option value={category.id}>{category.name}</option>
-                {/each}
-              </select>
-            </label>
-            <label>Name <input bind:value={categoryUpdateForm.name} required /></label>
-            <label
-              >Description <textarea bind:value={categoryUpdateForm.description}></textarea></label
-            >
-            <button type="submit" disabled={busy}>Update category</button>
-          </form>
+      {#if activeTab === 'locations'}
+        <LocationsPanel
+          {locationTypes}
+          {locations}
+          {stockAssets}
+          {trackedAssets}
+          {stockLevels}
+          {selectedLocationId}
+          {busy}
+          bind:locationForm
+          bind:stockForm
+          bind:trackedTransferForm
+          bind:stockTransferForm
+          createLocation={() => void createLocation()}
+          createStockLevel={() => void createStockLevel()}
+          transferTrackedAssetAction={() => void transferTrackedAssetAction()}
+          transferStockAction={() => void transferStockAction()}
+          selectLocation={(locationId) => {
+            selectedLocationId = locationId;
+          }}
+          closeLocationDetail={() => {
+            selectedLocationId = '';
+          }}
+          {selectedLocation}
+          {stockLevelsAtLocation}
+          {trackedAssetsAtLocation}
+          {totalStockAtLocation}
+          {responsibleLabel}
+          {stockAssetName}
+          {stockLocationName}
+          selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
+        />
+      {/if}
 
-          <form
-            class="panel form-panel"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void createUser();
-            }}
-          >
-            <h2>Create user</h2>
-            <label>Email <input bind:value={userCreateForm.email} type="email" required /></label>
-            <label>Name <input bind:value={userCreateForm.display_name} required /></label>
-            <label>
-              Role
-              <select bind:value={userCreateForm.role}>
-                <option value="user">user</option>
-                <option value="admin">admin</option>
-              </select>
-            </label>
-            <label
-              >Password <input
-                bind:value={userCreateForm.password}
-                type="password"
-                required
-              /></label
-            >
-            <label class="checkbox-label">
-              <input bind:checked={userCreateForm.is_active} type="checkbox" />
-              Active
-            </label>
-            <button type="submit" disabled={busy}>Create user</button>
-          </form>
+      {#if activeTab === 'bookings'}
+        <BookingsPanel
+          {assets}
+          {locations}
+          {bookings}
+          {availability}
+          {busy}
+          bind:bookingForm
+          {selectedBookingAsset}
+          {assetName}
+          createBooking={() => void createBooking()}
+          previewBooking={() => void previewBooking()}
+          {formatDateTime}
+        />
+      {/if}
 
-          <form
-            class="panel form-panel"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void updateUser();
-            }}
-          >
-            <h2>Edit user</h2>
-            <label>
-              User
-              <select value={userUpdateForm.user_id} onchange={selectUserForEdit} required>
-                <option value="">Choose user</option>
-                {#each users as user}
-                  <option value={user.id}>{user.display_name} · {user.email}</option>
-                {/each}
-              </select>
-            </label>
-            <label>Name <input bind:value={userUpdateForm.display_name} required /></label>
-            <label>
-              Role
-              <select bind:value={userUpdateForm.role}>
-                <option value="user">user</option>
-                <option value="admin">admin</option>
-              </select>
-            </label>
-            <label
-              >New password <input bind:value={userUpdateForm.password} type="password" /></label
-            >
-            <label class="checkbox-label">
-              <input bind:checked={userUpdateForm.is_active} type="checkbox" />
-              Active
-            </label>
-            <button type="submit" disabled={busy}>Update user</button>
-          </form>
-        {/if}
+      {#if activeTab === 'checkout'}
+        <CheckoutPanel
+          {bookings}
+          {checkouts}
+          {returns}
+          {busy}
+          bind:checkoutForm
+          bind:returnForm
+          {selectedReturnCheckout}
+          createCheckout={() => void createCheckout()}
+          createReturn={() => void createReturn()}
+          loadCheckoutForReturn={() => void loadCheckoutForReturn()}
+          {selectedReturnLine}
+          {checkoutLabel}
+          {returnLineLabel}
+          {bookingTitle}
+        />
+      {/if}
 
-        {#if activeTab === 'locations'}
-          <form
-            class="panel form-panel"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void createLocation();
-            }}
-          >
-            <h2>Location</h2>
-            <label>Name <input bind:value={locationForm.name} required /></label>
-            <label>
-              Type
-              <select bind:value={locationForm.type}>
-                {#each locationTypes as type}
-                  <option value={type}>{type.replaceAll('_', ' ')}</option>
-                {/each}
-              </select>
-            </label>
-            <button type="submit" disabled={busy}>Create location</button>
-          </form>
-        {/if}
+      {#if activeTab === 'field'}
+        <FieldQrPanel
+          {qrCodes}
+          {trackedAssets}
+          {resolvedQr}
+          {busy}
+          bind:qrCreateForm
+          bind:qrAssignForm
+          bind:qrResolveToken
+          createQrCode={() => void createQrCode()}
+          assignQrCode={() => void assignQrCode()}
+          resolveQrCode={() => void resolveQrCode()}
+          {assetName}
+        />
+      {/if}
 
-        {#if activeTab === 'inventory'}
-          <form
-            class="panel form-panel wide"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void createAsset();
-            }}
-          >
-            <h2>Asset</h2>
-            <div class="split-fields">
-              <label>Name <input bind:value={assetForm.name} required /></label>
-              <label>
-                Mode
-                <select bind:value={assetForm.asset_type}>
-                  <option value="tracked">tracked exact item</option>
-                  <option value="stock">stock quantity</option>
-                </select>
-              </label>
-            </div>
-            <div class="split-fields">
-              <label>
-                Category
-                <select bind:value={assetForm.category_id}>
-                  <option value={null}>No category</option>
-                  {#each categories as category}
-                    <option value={category.id}>{category.name}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                Current location
-                <select bind:value={assetForm.current_location_id}>
-                  <option value={null}>No location</option>
-                  {#each locations as location}
-                    <option value={location.id}>{location.name}</option>
-                  {/each}
-                </select>
-              </label>
-            </div>
-            {#if assetForm.asset_type === 'stock'}
-              <label
-                >Unit name <input
-                  bind:value={assetForm.unit_name}
-                  placeholder="piece, set, box"
-                  required
-                /></label
-              >
-            {/if}
-            <button type="submit" disabled={busy}>Create asset</button>
-          </form>
-        {/if}
-
-        {#if activeTab === 'locations'}
-          <form
-            class="panel form-panel"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void createStockLevel();
-            }}
-          >
-            <h2>Stock level</h2>
-            <label>
-              Stock asset
-              <select bind:value={stockForm.asset_id} required>
-                <option value="">Choose stock</option>
-                {#each stockAssets as asset}
-                  <option value={asset.id}>{asset.name}</option>
-                {/each}
-              </select>
-            </label>
-            <label>
-              Location
-              <select bind:value={stockForm.location_id} required>
-                <option value="">Choose location</option>
-                {#each locations as location}
-                  <option value={location.id}>{location.name}</option>
-                {/each}
-              </select>
-            </label>
-            <label
-              >Total quantity <input
-                bind:value={stockForm.quantity_total}
-                type="number"
-                min="0"
-              /></label
-            >
-            <button type="submit" disabled={busy}>Set stock level</button>
-          </form>
-        {/if}
-
-        {#if activeTab === 'bookings'}
-          <form
-            class="panel form-panel wide"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void createBooking();
-            }}
-          >
-            <h2>Booking</h2>
-            <label>Title <input bind:value={bookingForm.title} required /></label>
-            <div class="split-fields">
-              <label>
-                Start
-                <input bind:value={bookingForm.starts_at} type="datetime-local" required />
-              </label>
-              <label>
-                End
-                <input bind:value={bookingForm.ends_at} type="datetime-local" required />
-              </label>
-            </div>
-            <div class="split-fields">
-              <label>
-                Asset
-                <select bind:value={bookingForm.asset_id} required>
-                  <option value="">Choose asset</option>
-                  {#each assets as asset}
-                    <option value={asset.id}>{asset.name} · {asset.asset_type}</option>
-                  {/each}
-                </select>
-              </label>
-              {#if selectedBookingAsset()?.asset_type === 'stock'}
-                <label>
-                  Location
-                  <select bind:value={bookingForm.location_id} required>
-                    <option value="">Choose location</option>
-                    {#each locations as location}
-                      <option value={location.id}>{location.name}</option>
-                    {/each}
-                  </select>
-                </label>
-              {:else}
-                <label>
-                  Location
-                  <input value="Tracked assets reserve the exact item" disabled />
-                </label>
-              {/if}
-            </div>
-            {#if selectedBookingAsset()?.asset_type === 'stock'}
-              <label>
-                Quantity
-                <input bind:value={bookingForm.quantity} type="number" min="1" required />
-              </label>
-            {/if}
-            {#if availability}
-              <div class:availability-ok={availability.available} class="availability-result">
-                <strong>{availability.available ? 'Available' : 'Conflict'}</strong>
-                {#each availability.lines as line}
-                  <span>
-                    {assetName(line.asset_id)}:
-                    {line.available
-                      ? `available${line.available_quantity === null ? '' : ` (${line.available_quantity})`}`
-                      : line.reason}
-                  </span>
-                {/each}
-              </div>
-            {/if}
-            <div class="button-row">
-              <button type="button" class="secondary" onclick={previewBooking} disabled={busy}>
-                Preview availability
-              </button>
-              <button type="submit" disabled={busy}>Create booking</button>
-            </div>
-          </form>
-        {/if}
-
-        {#if activeTab === 'checkout'}
-          <form
-            class="panel form-panel"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void createCheckout();
-            }}
-          >
-            <h2>Checkout</h2>
-            <label>
-              Reserved booking
-              <select bind:value={checkoutForm.booking_id} required>
-                <option value="">Choose booking</option>
-                {#each bookings.filter((booking) => booking.status === 'reserved') as booking}
-                  <option value={booking.id}>{booking.title}</option>
-                {/each}
-              </select>
-            </label>
-            <label>
-              Condition out
-              <select bind:value={checkoutForm.condition_out}>
-                <option value="unknown">unknown</option>
-                <option value="good">good</option>
-                <option value="worn">worn</option>
-                <option value="damaged">damaged</option>
-                <option value="needs_repair">needs repair</option>
-              </select>
-            </label>
-            <label>Notes <textarea bind:value={checkoutForm.notes}></textarea></label>
-            <button type="submit" disabled={busy}>Create checkout</button>
-          </form>
-
-          <form
-            class="panel form-panel wide"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void createReturn();
-            }}
-          >
-            <h2>Return</h2>
-            <div class="split-fields">
-              <label>
-                Checkout
-                <select bind:value={returnForm.checkout_id} required>
-                  <option value="">Choose checkout</option>
-                  {#each checkouts.filter((checkout) => checkout.status !== 'returned') as checkout}
-                    <option value={checkout.id}>{checkoutLabel(checkout)}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                Lines
-                <button
-                  type="button"
-                  class="secondary"
-                  onclick={loadCheckoutForReturn}
-                  disabled={busy || !returnForm.checkout_id}
-                >
-                  Load lines
-                </button>
-              </label>
-            </div>
-            {#if selectedReturnCheckout?.lines?.length}
-              <label>
-                Checkout line
-                <select bind:value={returnForm.checkout_line_id} required>
-                  {#each selectedReturnCheckout.lines as line}
-                    <option value={line.id}>{returnLineLabel(line)}</option>
-                  {/each}
-                </select>
-              </label>
-              {#if selectedReturnLine()?.quantity !== null}
-                <label>
-                  Quantity
-                  <input bind:value={returnForm.quantity} type="number" min="1" required />
-                </label>
-              {/if}
-              <label>
-                Condition in
-                <select bind:value={returnForm.condition_in}>
-                  <option value="unknown">unknown</option>
-                  <option value="good">good</option>
-                  <option value="worn">worn</option>
-                  <option value="damaged">damaged</option>
-                  <option value="needs_repair">needs repair</option>
-                </select>
-              </label>
-              <label>Notes <textarea bind:value={returnForm.notes}></textarea></label>
-              <button type="submit" disabled={busy}>Record return</button>
-            {:else}
-              <p class="empty">Load a checkout to choose return lines.</p>
-            {/if}
-          </form>
-        {/if}
-
-        {#if activeTab === 'locations'}
-          <form
-            class="panel form-panel"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void transferTrackedAssetAction();
-            }}
-          >
-            <h2>Move tracked item</h2>
-            <label>
-              Asset
-              <select bind:value={trackedTransferForm.asset_id} required>
-                <option value="">Choose tracked asset</option>
-                {#each trackedAssets as asset}
-                  <option value={asset.id}>{asset.name}</option>
-                {/each}
-              </select>
-            </label>
-            <label>
-              Destination
-              <select bind:value={trackedTransferForm.to_location_id}>
-                <option value="">No location</option>
-                {#each locations as location}
-                  <option value={location.id}>{location.name}</option>
-                {/each}
-              </select>
-            </label>
-            <label>Notes <textarea bind:value={trackedTransferForm.notes}></textarea></label>
-            <button type="submit" disabled={busy}>Move tracked item</button>
-          </form>
-
-          <form
-            class="panel form-panel wide"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void transferStockAction();
-            }}
-          >
-            <h2>Move stock</h2>
-            <div class="split-fields">
-              <label>
-                Stock asset
-                <select bind:value={stockTransferForm.asset_id} required>
-                  <option value="">Choose stock</option>
-                  {#each stockAssets as asset}
-                    <option value={asset.id}>{asset.name}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                Quantity
-                <input bind:value={stockTransferForm.quantity} type="number" min="1" required />
-              </label>
-            </div>
-            <div class="split-fields">
-              <label>
-                From
-                <select bind:value={stockTransferForm.from_location_id} required>
-                  <option value="">Source location</option>
-                  {#each locations as location}
-                    <option value={location.id}>{location.name}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                To
-                <select bind:value={stockTransferForm.to_location_id} required>
-                  <option value="">Destination location</option>
-                  {#each locations as location}
-                    <option value={location.id}>{location.name}</option>
-                  {/each}
-                </select>
-              </label>
-            </div>
-            <label>Notes <textarea bind:value={stockTransferForm.notes}></textarea></label>
-            <button type="submit" disabled={busy}>Move stock</button>
-          </form>
-        {/if}
-
-        {#if activeTab === 'inventory'}
-          <form
-            class="panel form-panel wide"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void changeAssetOperationalState();
-            }}
-          >
-            <h2>Asset state</h2>
-            <div class="split-fields">
-              <label>
-                Asset
-                <select bind:value={assetStateForm.asset_id} required>
-                  <option value="">Choose tracked asset</option>
-                  {#each trackedAssets as asset}
-                    <option value={asset.id}>{asset.name} · {asset.status}</option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                Action
-                <select bind:value={assetStateForm.action}>
-                  <option value="maintenance_start">start maintenance</option>
-                  <option value="maintenance_complete">complete maintenance</option>
-                  <option value="state_change">mark state</option>
-                </select>
-              </label>
-            </div>
-            {#if assetStateForm.action === 'state_change'}
-              <label>
-                State
-                <select bind:value={assetStateForm.status}>
-                  <option value="damaged">damaged</option>
-                  <option value="lost">lost</option>
-                  <option value="retired">retired</option>
-                  <option value="available">available / found</option>
-                </select>
-              </label>
-            {/if}
-            {#if assetStateForm.action !== 'maintenance_start'}
-              <label>
-                Condition
-                <select bind:value={assetStateForm.condition}>
-                  <option value="unknown">unknown</option>
-                  <option value="good">good</option>
-                  <option value="worn">worn</option>
-                  <option value="damaged">damaged</option>
-                  <option value="needs_repair">needs repair</option>
-                </select>
-              </label>
-            {/if}
-            <label>Notes <textarea bind:value={assetStateForm.notes}></textarea></label>
-            <button type="submit" disabled={busy}>Update asset state</button>
-          </form>
-        {/if}
-
-        {#if activeTab === 'field'}
-          <form
-            class="panel form-panel"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void createQrCode();
-            }}
-          >
-            <h2>QR label</h2>
-            <label>Label <input bind:value={qrCreateForm.label} placeholder="Label 001" /></label>
-            <label>Notes <textarea bind:value={qrCreateForm.notes}></textarea></label>
-            <button type="submit" disabled={busy}>Create QR label</button>
-          </form>
-
-          <form
-            class="panel form-panel wide"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void assignQrCode();
-            }}
-          >
-            <h2>Assign QR</h2>
-            <div class="split-fields">
-              <label>
-                Token
-                <select bind:value={qrAssignForm.token} required>
-                  <option value="">Choose QR label</option>
-                  {#each qrCodes as qrCode}
-                    <option value={qrCode.token}>
-                      {qrCode.label ?? qrCode.token.slice(0, 10)} · {qrCode.asset_id
-                        ? assetName(qrCode.asset_id)
-                        : 'unassigned'}
-                    </option>
-                  {/each}
-                </select>
-              </label>
-              <label>
-                Tracked asset
-                <select bind:value={qrAssignForm.asset_id} required>
-                  <option value="">Choose tracked asset</option>
-                  {#each trackedAssets.filter((asset) => asset.status !== 'lost' && asset.status !== 'retired') as asset}
-                    <option value={asset.id}>{asset.name}</option>
-                  {/each}
-                </select>
-              </label>
-            </div>
-            <label>Notes <textarea bind:value={qrAssignForm.notes}></textarea></label>
-            <button type="submit" disabled={busy}>Assign QR label</button>
-          </form>
-
-          <form
-            class="panel form-panel"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void resolveQrCode();
-            }}
-          >
-            <h2>Scan / resolve QR</h2>
-            <label>Token <input bind:value={qrResolveToken} required /></label>
-            {#if resolvedQr}
-              <div class:availability-ok={resolvedQr.assigned} class="availability-result">
-                <strong>{resolvedQr.assigned ? resolvedQr.asset?.name : 'Unassigned label'}</strong>
-                {#if resolvedQr.asset}
-                  <span>{resolvedQr.asset.status} · {resolvedQr.asset.condition}</span>
-                {/if}
-              </div>
-            {/if}
-            <button type="submit" disabled={busy}>Resolve QR</button>
-          </form>
-        {/if}
-      </section>
-    {/if}
-
-    {#if activeTab === 'inventory' && selectedAsset()}
-      <section class="panel detail-panel" aria-label="Selected asset detail">
-        <div class="detail-header">
-          <div>
-            <p class="eyebrow">Asset detail</p>
-            <h2>{selectedAsset()?.name}</h2>
-          </div>
-          <button
-            type="button"
-            class="secondary"
-            onclick={() => {
-              selectedAssetId = '';
-              selectedAssetEvents = [];
-            }}
-          >
-            Close detail
-          </button>
-        </div>
-
-        <div class="detail-grid">
-          <div>
-            <span>Mode</span>
-            <strong>{selectedAsset()?.asset_type}</strong>
-          </div>
-          <div>
-            <span>Status</span>
-            <strong>{selectedAsset()?.status}</strong>
-          </div>
-          <div>
-            <span>Condition</span>
-            <strong>{selectedAsset()?.condition}</strong>
-          </div>
-          <div>
-            <span>Category</span>
-            <strong>{categoryName(selectedAsset()?.category_id ?? null)}</strong>
-          </div>
-          <div>
-            <span>Current location</span>
-            <strong>{locationName(selectedAsset()?.current_location_id ?? null)}</strong>
-          </div>
-          <div>
-            <span>Holder</span>
-            <strong>{holderLabel(selectedAsset()?.current_holder_user_id ?? null)}</strong>
-          </div>
-          {#if selectedAsset()?.asset_type === 'stock'}
-            <div>
-              <span>Unit</span>
-              <strong>{selectedAsset()?.unit_name ?? 'unit'}</strong>
-            </div>
-            <div>
-              <span>Total stock</span>
-              <strong
-                >{stockLevels
-                  .filter((level) => level.asset_id === selectedAssetId)
-                  .reduce((sum, level) => sum + level.quantity_total, 0)}</strong
-              >
-            </div>
-          {/if}
-        </div>
-
-        <div class="timeline">
-          <h3>History</h3>
-          {#each selectedAssetEvents as event}
-            <article class="timeline-entry">
-              <div>
-                <strong>{event.event_type.replaceAll('_', ' ')}</strong>
-                <span>{formatDateTime(event.created_at)} · {userLabel(event.actor_user_id)}</span>
-              </div>
-              <p>
-                {#if event.from_location_id || event.to_location_id}
-                  {locationName(event.from_location_id)} → {locationName(event.to_location_id)}
-                {:else}
-                  {event.notes ?? 'No notes'}
-                {/if}
-              </p>
-            </article>
-          {:else}
-            <p class="empty">
-              {currentUser ? 'No history recorded for this asset yet.' : 'Login to load history.'}
-            </p>
-          {/each}
-        </div>
-      </section>
-    {/if}
-
-    {#if activeTab === 'locations' && selectedLocation()}
-      <section class="panel detail-panel" aria-label="Selected location detail">
-        <div class="detail-header">
-          <div>
-            <p class="eyebrow">Location detail</p>
-            <h2>{selectedLocation()?.name}</h2>
-          </div>
-          <button
-            type="button"
-            class="secondary"
-            onclick={() => {
-              selectedLocationId = '';
-            }}
-          >
-            Close detail
-          </button>
-        </div>
-
-        <div class="detail-grid">
-          <div>
-            <span>Type</span>
-            <strong>{selectedLocation()?.type.replaceAll('_', ' ')}</strong>
-          </div>
-          <div>
-            <span>Tracked items</span>
-            <strong>{trackedAssetsAtLocation(selectedLocationId).length}</strong>
-          </div>
-          <div>
-            <span>Stock lines</span>
-            <strong>{stockLevelsAtLocation(selectedLocationId).length}</strong>
-          </div>
-          <div>
-            <span>Total stock units</span>
-            <strong>{totalStockAtLocation(selectedLocationId)}</strong>
-          </div>
-          <div>
-            <span>Responsible</span>
-            <strong>{responsibleLabel(selectedLocation()?.responsible_user_id ?? null)}</strong>
-          </div>
-          <div>
-            <span>State</span>
-            <strong>{selectedLocation()?.is_active ? 'active' : 'inactive'}</strong>
-          </div>
-        </div>
-
-        <div class="split-detail">
-          <article class="mini-list">
-            <h3>Stock at this location</h3>
-            {#each stockLevelsAtLocation(selectedLocationId) as level}
-              <div class="row-card">
-                <strong>{stockAssetName(level.asset_id)}</strong>
-                <span>
-                  {level.quantity_total} total · {level.quantity_reserved} reserved · {level.quantity_checked_out}
-                  checked out
-                </span>
-              </div>
-            {:else}
-              <p class="empty">No stock is stored here.</p>
-            {/each}
-          </article>
-
-          <article class="mini-list">
-            <h3>Tracked items here</h3>
-            {#each trackedAssetsAtLocation(selectedLocationId) as asset}
-              <div class="row-card">
-                <strong>{asset.name}</strong>
-                <span>{asset.status} · {asset.condition}</span>
-                <button
-                  type="button"
-                  class="secondary compact"
-                  onclick={() => selectAssetDetail(asset.id)}
-                  disabled={busy}
-                >
-                  View asset
-                </button>
-              </div>
-            {:else}
-              <p class="empty">No tracked items are currently here.</p>
-            {/each}
-          </article>
-        </div>
-      </section>
-    {/if}
-
-    {#if activeTab !== 'dashboard'}
-      <section class="data-grid" aria-label="Inventory lists">
-        {#if activeTab === 'admin' && currentUser?.role === 'admin'}
-          <article class="panel list-panel">
-            <h2>Users</h2>
-            {#each users as user}
-              <div class="row-card">
-                <strong>{user.display_name}</strong>
-                <span>{user.email} · {user.role} · {user.is_active ? 'active' : 'disabled'}</span>
-              </div>
-            {:else}
-              <p class="empty">No users visible.</p>
-            {/each}
-          </article>
-        {/if}
-
-        {#if activeTab === 'field'}
-          <article class="panel list-panel">
-            <h2>QR labels</h2>
-            {#each qrCodes as qrCode}
-              <div class="row-card">
-                <strong>{qrCode.label ?? qrCode.token.slice(0, 14)}</strong>
-                <span>{qrCode.asset_id ? assetName(qrCode.asset_id) : 'unassigned'}</span>
-              </div>
-            {:else}
-              <p class="empty">No QR labels yet.</p>
-            {/each}
-          </article>
-        {/if}
-
-        {#if activeTab === 'checkout'}
-          <article class="panel list-panel">
-            <h2>Checkouts</h2>
-            {#each checkouts as checkout}
-              <div class="row-card">
-                <strong>{bookingTitle(checkout.booking_id)}</strong>
-                <span>{checkout.status}</span>
-              </div>
-            {:else}
-              <p class="empty">No checkouts yet.</p>
-            {/each}
-          </article>
-
-          <article class="panel list-panel">
-            <h2>Returns</h2>
-            {#each returns as returnRecord}
-              <div class="row-card">
-                <strong
-                  >{bookingTitle(
-                    checkouts.find((checkout) => checkout.id === returnRecord.checkout_id)
-                      ?.booking_id ?? ''
-                  )}</strong
-                >
-                <span>{returnRecord.notes ?? 'Return recorded'}</span>
-              </div>
-            {:else}
-              <p class="empty">No returns yet.</p>
-            {/each}
-          </article>
-        {/if}
-
-        {#if activeTab === 'bookings'}
-          <article class="panel list-panel">
-            <h2>Bookings</h2>
-            {#each bookings as booking}
-              <div class="row-card">
-                <strong>{booking.title}</strong>
-                <span
-                  >{booking.status} · {formatDateTime(booking.starts_at)} to {formatDateTime(
-                    booking.ends_at
-                  )}</span
-                >
-              </div>
-            {:else}
-              <p class="empty">No bookings yet.</p>
-            {/each}
-          </article>
-        {/if}
-
-        {#if activeTab === 'inventory'}
-          <article class="panel list-panel">
-            <div class="list-header">
-              <div>
-                <h2>Assets</h2>
-                <p>{filteredAssets.length} of {assets.length} shown</p>
-              </div>
-              <button
-                type="button"
-                class="secondary compact"
-                onclick={() => {
-                  assetSearch = '';
-                }}
-                disabled={!assetSearch}
-              >
-                Clear
-              </button>
-            </div>
-            <label class="search-field">
-              Search assets
-              <input
-                bind:value={assetSearch}
-                placeholder="name, category, location, status, tag..."
-                type="search"
-              />
-            </label>
-            {#each filteredAssets as asset}
-              <div class="row-card">
-                <strong>{asset.name}</strong>
-                <span
-                  >{asset.asset_type} · {categoryName(asset.category_id)} · {locationName(
-                    asset.current_location_id
-                  )}</span
-                >
-                <button
-                  type="button"
-                  class="secondary compact"
-                  onclick={() => selectAssetDetail(asset.id)}
-                  disabled={busy}
-                >
-                  View detail
-                </button>
-              </div>
-            {:else}
-              <p class="empty">
-                {assets.length ? 'No assets match this search.' : 'No assets yet.'}
-              </p>
-            {/each}
-          </article>
-        {/if}
-
-        {#if activeTab === 'locations'}
-          <article class="panel list-panel">
-            <h2>Stock levels</h2>
-            {#each stockLevels as level}
-              <div class="row-card">
-                <strong>{stockAssetName(level.asset_id)}</strong>
-                <span>{stockLocationName(level.location_id)} · {level.quantity_total} total</span>
-              </div>
-            {:else}
-              <p class="empty">No stock levels yet.</p>
-            {/each}
-          </article>
-
-          <article class="panel list-panel">
-            <h2>Locations</h2>
-            {#each locations as location}
-              <div class="row-card">
-                <strong>{location.name}</strong>
-                <span
-                  >{location.type.replaceAll('_', ' ')} · {trackedAssetsAtLocation(location.id)
-                    .length}
-                  tracked · {totalStockAtLocation(location.id)} stock units</span
-                >
-                <button
-                  type="button"
-                  class="secondary compact"
-                  onclick={() => {
-                    selectedLocationId = location.id;
-                  }}
-                >
-                  View detail
-                </button>
-              </div>
-            {:else}
-              <p class="empty">No locations yet.</p>
-            {/each}
-          </article>
-        {/if}
-
-        {#if activeTab === 'admin' && currentUser?.role === 'admin'}
-          <article class="panel list-panel">
-            <h2>Categories</h2>
-            {#each categories as category}
-              <div class="row-card">
-                <strong>{category.name}</strong>
-                <span>{category.description ?? 'No description'}</span>
-              </div>
-            {:else}
-              <p class="empty">No categories yet.</p>
-            {/each}
-          </article>
-        {/if}
-      </section>
+      {#if activeTab === 'inventory'}
+        <InventoryPanel
+          {assets}
+          {categories}
+          {locations}
+          {trackedAssets}
+          {stockLevels}
+          {filteredAssets}
+          {selectedAssetEvents}
+          {selectedAssetId}
+          {busy}
+          bind:assetForm
+          bind:assetStateForm
+          bind:assetSearch
+          createAsset={() => void createAsset()}
+          changeAssetOperationalState={() => void changeAssetOperationalState()}
+          selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
+          closeAssetDetail={() => {
+            selectedAssetId = '';
+            selectedAssetEvents = [];
+          }}
+          {selectedAsset}
+          {categoryName}
+          {locationName}
+          {holderLabel}
+          {userLabel}
+          {formatDateTime}
+        />
+      {/if}
     {/if}
   {/if}
 </main>
-
-<style>
-  :global(*) {
-    box-sizing: border-box;
-  }
-
-  .app-shell {
-    width: min(1280px, calc(100% - 2rem));
-    margin: 0 auto;
-    padding: clamp(1.5rem, 5vw, 4rem) 0;
-  }
-
-  .masthead {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
-    gap: clamp(1rem, 4vw, 3rem);
-    align-items: stretch;
-    margin-bottom: 1rem;
-  }
-
-  .eyebrow {
-    margin: 0 0 1rem;
-    color: #61713e;
-    font-size: 0.78rem;
-    font-weight: 800;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    max-width: 13ch;
-    margin: 0;
-    color: #14211c;
-    font-size: clamp(3.4rem, 9vw, 7rem);
-    line-height: 0.86;
-    letter-spacing: -0.075em;
-  }
-
-  h2 {
-    margin: 0 0 1rem;
-    font-size: 1.1rem;
-    letter-spacing: -0.03em;
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 1rem;
-    letter-spacing: -0.02em;
-  }
-
-  .panel,
-  .session-card,
-  .stats-grid article {
-    border: 1px solid rgba(20, 33, 28, 0.12);
-    border-radius: 28px;
-    background: rgba(255, 252, 242, 0.82);
-    box-shadow: 0 24px 80px rgba(42, 68, 51, 0.12);
-    backdrop-filter: blur(18px);
-  }
-
-  .session-card {
-    padding: 1.25rem;
-  }
-
-  .session-card form,
-  .form-panel {
-    display: grid;
-    gap: 0.85rem;
-  }
-
-  .session-label {
-    margin: 0 0 0.35rem;
-    color: #68765d;
-    font-size: 0.8rem;
-    font-weight: 800;
-    text-transform: uppercase;
-  }
-
-  .session-card strong,
-  .session-card span {
-    display: block;
-  }
-
-  .session-card span {
-    margin: 0.35rem 0 1rem;
-    color: #4f5e52;
-  }
-
-  label {
-    display: grid;
-    gap: 0.35rem;
-    color: #33443a;
-    font-size: 0.88rem;
-    font-weight: 750;
-  }
-
-  input,
-  select,
-  textarea {
-    width: 100%;
-    border: 1px solid rgba(20, 33, 28, 0.18);
-    border-radius: 16px;
-    padding: 0.78rem 0.9rem;
-    color: #14211c;
-    background: rgba(255, 255, 255, 0.72);
-  }
-
-  textarea {
-    min-height: 5rem;
-    resize: vertical;
-  }
-
-  button {
-    min-height: 2.8rem;
-    border: 0;
-    border-radius: 999px;
-    padding: 0 1.1rem;
-    color: #fffaf0;
-    background: #254c37;
-    font-weight: 800;
-    cursor: pointer;
-  }
-
-  button:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-
-  button.secondary {
-    width: 100%;
-    background: #6f7345;
-  }
-
-  .notice {
-    margin: 1rem 0;
-    border-radius: 18px;
-    padding: 0.85rem 1rem;
-    font-weight: 750;
-  }
-
-  .error {
-    color: #6d1f1a;
-    background: #f9d7cf;
-  }
-
-  .success {
-    color: #254c37;
-    background: #dbeacb;
-  }
-
-  .tab-bar {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 0.65rem;
-    margin-top: 1rem;
-  }
-
-  .tab-bar button {
-    display: grid;
-    gap: 0.2rem;
-    min-height: 4.7rem;
-    border: 1px solid rgba(20, 33, 28, 0.12);
-    border-radius: 22px;
-    padding: 0.85rem 0.9rem;
-    color: #33443a;
-    background: rgba(255, 252, 242, 0.7);
-    box-shadow: 0 16px 44px rgba(42, 68, 51, 0.08);
-    text-align: left;
-  }
-
-  .tab-bar button:hover,
-  .active-tab {
-    border-color: rgba(97, 113, 62, 0.58);
-    background: #eaf2d7;
-  }
-
-  .tab-bar span {
-    font-weight: 900;
-  }
-
-  .tab-bar small {
-    color: #526358;
-    font-size: 0.72rem;
-    font-weight: 700;
-    line-height: 1.25;
-  }
-
-  .stats-grid,
-  .forms-grid,
-  .data-grid {
-    display: grid;
-    gap: 1rem;
-    margin-top: 1rem;
-  }
-
-  .stats-grid {
-    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  }
-
-  .stats-grid article {
-    padding: 1.25rem;
-  }
-
-  .stats-grid span {
-    display: block;
-    font-size: clamp(2rem, 4vw, 3.4rem);
-    font-weight: 900;
-    letter-spacing: -0.07em;
-  }
-
-  .stats-grid p {
-    margin: 0.25rem 0 0;
-    color: #526358;
-    font-weight: 750;
-  }
-
-  .forms-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .form-panel,
-  .list-panel,
-  .loading-panel {
-    padding: 1.25rem;
-  }
-
-  .wide {
-    grid-column: span 2;
-  }
-
-  .split-fields {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.85rem;
-  }
-
-  .button-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.65rem;
-  }
-
-  .button-row button {
-    flex: 1 1 12rem;
-  }
-
-  .availability-result {
-    display: grid;
-    gap: 0.25rem;
-    border-radius: 18px;
-    padding: 0.85rem 1rem;
-    color: #6d1f1a;
-    background: #f9d7cf;
-  }
-
-  .availability-ok {
-    color: #254c37;
-    background: #dbeacb;
-  }
-
-  .data-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .detail-panel {
-    display: grid;
-    gap: 1rem;
-    margin-top: 1rem;
-    padding: 1.25rem;
-  }
-
-  .detail-header {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: start;
-    justify-content: space-between;
-  }
-
-  .detail-header h2 {
-    margin: 0;
-    font-size: clamp(1.6rem, 4vw, 2.6rem);
-  }
-
-  .detail-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-    gap: 0.75rem;
-  }
-
-  .detail-grid div {
-    display: grid;
-    gap: 0.2rem;
-    border-radius: 18px;
-    padding: 0.85rem 1rem;
-    background: rgba(37, 76, 55, 0.08);
-  }
-
-  .detail-grid span,
-  .timeline-entry span {
-    color: #526358;
-    font-size: 0.85rem;
-    font-weight: 700;
-  }
-
-  .timeline {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .timeline-entry {
-    display: grid;
-    gap: 0.35rem;
-    border-left: 4px solid #61713e;
-    padding: 0.35rem 0 0.35rem 0.85rem;
-  }
-
-  .timeline-entry div {
-    display: grid;
-    gap: 0.15rem;
-  }
-
-  .timeline-entry p {
-    margin: 0;
-    color: #33443a;
-  }
-
-  .split-detail {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-  }
-
-  .mini-list {
-    display: grid;
-    align-content: start;
-    gap: 0.75rem;
-    border-radius: 22px;
-    padding: 1rem;
-    background: rgba(255, 252, 242, 0.62);
-  }
-
-  .list-panel {
-    display: grid;
-    align-content: start;
-    gap: 0.75rem;
-  }
-
-  .list-header {
-    display: flex;
-    gap: 0.75rem;
-    align-items: start;
-    justify-content: space-between;
-  }
-
-  .list-header h2,
-  .list-header p {
-    margin: 0;
-  }
-
-  .list-header p {
-    color: #526358;
-    font-size: 0.88rem;
-    font-weight: 700;
-  }
-
-  .search-field {
-    border-radius: 20px;
-    padding: 0.85rem 1rem;
-    background: rgba(37, 76, 55, 0.08);
-  }
-
-  .row-card {
-    display: grid;
-    gap: 0.25rem;
-    border-radius: 18px;
-    padding: 0.85rem 1rem;
-    background: rgba(37, 76, 55, 0.08);
-  }
-
-  .row-card span,
-  .empty {
-    color: #526358;
-  }
-
-  .compact {
-    justify-self: start;
-    padding: 0.55rem 0.75rem;
-    font-size: 0.82rem;
-  }
-
-  @media (max-width: 960px) {
-    .masthead,
-    .forms-grid,
-    .data-grid,
-    .split-detail {
-      grid-template-columns: 1fr;
-    }
-
-    .tab-bar {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .stats-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .wide {
-      grid-column: auto;
-    }
-  }
-
-  @media (max-width: 560px) {
-    .stats-grid,
-    .split-fields,
-    .tab-bar {
-      grid-template-columns: 1fr;
-    }
-  }
-</style>

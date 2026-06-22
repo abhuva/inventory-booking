@@ -12,6 +12,7 @@ Internal inventory and equipment booking system for small teams managing physica
 
 - `backend/`: FastAPI application, tests, migrations later.
 - `frontend/`: SvelteKit application.
+- `frontend/src/lib/components/workspace/`: desktop workspace tab components.
 - `docs/`: project notes, workflow docs, and task tracking.
 - `docker-compose.yml`: local service topology for PostgreSQL, API, and web app.
 - `inventory-booking-tool-proposal.md`: original product and architecture proposal.

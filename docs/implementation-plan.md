@@ -218,7 +218,7 @@ Dependencies: backend APIs for the target workflow.
 - [x] QR scan/assignment screens
 - [x] admin user/category screens
 - [x] desktop-first tabbed workspace grouping
-- [ ] extract tab panels into frontend components
+- [x] extract tab panels into frontend components
 
 ## Phase 6: Reliability And Deployment
 
@@ -236,6 +236,5 @@ Dependencies: stable MVP.
 
 Continue operational workflow:
 
-- extract tab panels into frontend components
 - add multi-line booking editing if real usage needs it
 - add deployment hardening runbook
