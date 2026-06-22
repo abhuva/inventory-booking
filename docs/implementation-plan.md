@@ -133,8 +133,8 @@ Dependencies: 2.1.
 - [x] tracked asset overlap logic
 - [x] stock quantity overlap logic
 - [x] unavailable status handling
-- [ ] admin override path design
-- [ ] transaction boundary for booking creation
+- [x] admin override path design
+- [ ] database-level concurrency hardening for booking creation
 - [x] red-team tests for conflict bypass attempts
 
 ### 2.3 Booking API
@@ -146,7 +146,7 @@ Dependencies: 2.2.
 - [x] get booking detail
 - [x] cancel booking
 - [x] availability preview endpoint
-- [ ] security review for all mutation endpoints
+- [x] security review for all mutation endpoints
 
 ## Phase 3: Operational Workflows
 
@@ -234,7 +234,6 @@ Dependencies: stable MVP.
 
 Stabilize booking behavior before checkout:
 
-- document admin override rules before implementing overrides
-- run focused security review for booking mutation and availability endpoints
+- decide whether local MVP needs database-level booking concurrency hardening before checkout
 - add multi-line booking editing only if the first real usage needs it
 - keep checkout/return blocked until booking conflict behavior is stable

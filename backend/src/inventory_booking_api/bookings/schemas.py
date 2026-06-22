@@ -12,6 +12,8 @@ class BookingLineCreate(BaseModel):
     quantity: int | None = Field(default=None, gt=0)
     notes: str | None = None
 
+    model_config = ConfigDict(extra="forbid")
+
 
 class BookingCreate(BaseModel):
     title: str = Field(min_length=1, max_length=180)
@@ -19,6 +21,8 @@ class BookingCreate(BaseModel):
     ends_at: datetime
     notes: str | None = None
     lines: list[BookingLineCreate] = Field(min_length=1)
+
+    model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def validate_time_range(self) -> "BookingCreate":

@@ -51,3 +51,24 @@ Planned additions:
 - Python dependency audit
 - Semgrep or Bandit for security-oriented static checks
 - API abuse tests for auth, permissions, booking conflicts, stock underflow, and admin overrides
+
+## Booking Endpoint Review (2026-06-22)
+
+Reviewed endpoints:
+
+- `POST /bookings`
+- `POST /bookings/availability`
+- `POST /bookings/{booking_id}/cancel`
+
+Controls in place:
+
+- Session authentication required for all booking mutations and availability previews.
+- CSRF middleware covers browser-triggered booking mutations.
+- Booking create schemas reject unexpected fields, including protected status/requester injection.
+- Server-side validation rejects invalid ranges, duplicate lines, tracked conflicts, stock overbooking, stock-without-location, and unavailable assets.
+- Booking create/cancel writes audit records; booking create writes item events.
+- Admin conflict overrides are intentionally not implemented; ADR 007 requires explicit audited override design before adding them.
+
+Residual risk:
+
+- Concurrent booking creation is still enforced at service level, not by a database exclusion constraint or serializable transaction. This is acceptable for the local MVP but should be revisited before any larger multi-user deployment or external network exposure.

@@ -316,6 +316,60 @@ def test_booking_rejects_invalid_time_range(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_booking_mutations_require_session(client: TestClient) -> None:
+    response = client.post(
+        "/bookings",
+        json={
+            "title": "Unauthenticated booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": "00000000-0000-0000-0000-000000000000"}],
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_booking_mutations_require_csrf_token(client: TestClient) -> None:
+    login(client)
+
+    response = client.post(
+        "/bookings/availability",
+        json={
+            "title": "Missing CSRF",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": "00000000-0000-0000-0000-000000000000"}],
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_booking_create_rejects_protected_field_injection(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Injected Booking Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        "/bookings",
+        json={
+            "title": "Injected booking",
+            "status": "completed",
+            "requested_by_user_id": "00000000-0000-0000-0000-000000000000",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"], "created_at": BOOKING_START.isoformat()}],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+
 def test_booking_rejects_overlapping_tracked_asset(client: TestClient) -> None:
     headers = login(client)
     tracked_asset = client.post(
@@ -345,6 +399,12 @@ def test_booking_rejects_overlapping_tracked_asset(client: TestClient) -> None:
     assert first_response.status_code == 200
     assert first_response.json()["lines"][0]["asset_id"] == tracked_asset["id"]
     assert second_response.status_code == 409
+
+    audit_response = client.get("/audit/logs", headers=headers)
+
+    assert audit_response.status_code == 200
+    assert audit_response.json()[0]["entity_type"] == "booking"
+    assert audit_response.json()[0]["action"] == "create"
 
 
 def test_availability_preview_reports_tracked_conflict(client: TestClient) -> None:
@@ -518,3 +578,10 @@ def test_cancelled_booking_releases_tracked_asset(client: TestClient) -> None:
     assert cancel_response.status_code == 200
     assert cancel_response.json()["status"] == "cancelled"
     assert new_response.status_code == 200
+
+    audit_response = client.get("/audit/logs", headers=headers)
+
+    assert audit_response.status_code == 200
+    assert any(
+        entry["summary"].startswith("Cancelled booking") for entry in audit_response.json()
+    )
