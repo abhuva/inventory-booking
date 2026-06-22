@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_name: str = "Inventory Booking API"
     app_env: str = "local"
     database_url: str = "postgresql+asyncpg://inventory:inventory@127.0.0.1:5432/inventory_booking"
+    internal_api_token: str = "local-dev-token"
     cors_origins: str = Field(
         default="http://127.0.0.1:5173,http://localhost:5173",
         description="Comma-separated list of allowed browser origins.",

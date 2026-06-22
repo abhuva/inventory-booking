@@ -29,3 +29,12 @@ def test_stock_level_asset_location_uniqueness_is_registered() -> None:
     constraint_names = {constraint.name for constraint in stock_level_table.constraints}
 
     assert "uq_stock_levels_asset_location" in constraint_names
+
+
+def test_main_import_registers_all_foreign_key_targets() -> None:
+    import inventory_booking_api.main  # noqa: F401
+
+    assets_table = Base.metadata.tables["assets"]
+
+    for foreign_key in assets_table.foreign_keys:
+        assert foreign_key.column.table.name in Base.metadata.tables

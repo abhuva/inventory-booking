@@ -1,0 +1,97 @@
+﻿from uuid import UUID
+
+from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from inventory_booking_api.audit.enums import AuditAction, ItemEventType
+from inventory_booking_api.audit.models import AuditLog, ItemEvent
+from inventory_booking_api.inventory.asset_schemas import (
+    AssetCreate,
+    AssetUpdate,
+    StockLevelCreate,
+    StockLevelUpdate,
+)
+from inventory_booking_api.inventory.enums import AssetType
+from inventory_booking_api.inventory.models import Asset, StockLevel
+
+
+async def list_assets(session: AsyncSession) -> list[Asset]:
+    result = await session.execute(select(Asset).order_by(Asset.name))
+    return list(result.scalars().all())
+
+
+async def get_asset(session: AsyncSession, asset_id: UUID) -> Asset | None:
+    return await session.get(Asset, asset_id)
+
+
+async def create_asset(session: AsyncSession, payload: AssetCreate) -> Asset:
+    asset = Asset(**payload.model_dump())
+    session.add(asset)
+    await session.flush()
+    session.add(ItemEvent(asset_id=asset.id, event_type=ItemEventType.CREATED))
+    session.add(
+        AuditLog(
+            action=AuditAction.CREATE,
+            entity_type="asset",
+            entity_id=asset.id,
+            summary=f"Created asset {asset.name}",
+        )
+    )
+    await session.commit()
+    await session.refresh(asset)
+    return asset
+
+
+async def update_asset(session: AsyncSession, asset: Asset, payload: AssetUpdate) -> Asset:
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(asset, field, value)
+    session.add(ItemEvent(asset_id=asset.id, event_type=ItemEventType.UPDATED))
+    session.add(
+        AuditLog(
+            action=AuditAction.UPDATE,
+            entity_type="asset",
+            entity_id=asset.id,
+            summary=f"Updated asset {asset.name}",
+        )
+    )
+    await session.commit()
+    await session.refresh(asset)
+    return asset
+
+
+async def list_stock_levels(session: AsyncSession) -> list[StockLevel]:
+    result = await session.execute(select(StockLevel).order_by(StockLevel.location_id))
+    return list(result.scalars().all())
+
+
+async def get_stock_level(session: AsyncSession, stock_level_id: UUID) -> StockLevel | None:
+    return await session.get(StockLevel, stock_level_id)
+
+
+async def create_stock_level(session: AsyncSession, payload: StockLevelCreate) -> StockLevel:
+    asset = await session.get(Asset, payload.asset_id)
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Asset does not exist.")
+    if asset.asset_type != AssetType.STOCK:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Stock levels can only be created for stock assets.",
+        )
+    stock_level = StockLevel(**payload.model_dump())
+    session.add(stock_level)
+    await session.commit()
+    await session.refresh(stock_level)
+    return stock_level
+
+
+async def update_stock_level(
+    session: AsyncSession,
+    stock_level: StockLevel,
+    payload: StockLevelUpdate,
+) -> StockLevel:
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(stock_level, field, value)
+    await session.commit()
+    await session.refresh(stock_level)
+    return stock_level

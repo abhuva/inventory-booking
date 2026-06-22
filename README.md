@@ -95,6 +95,37 @@ npm.cmd --prefix .\frontend run lint
 
 This repo has a working Docker-backed local stack. Backend health endpoints are `GET /health` and `GET /health/database`. The initial PostgreSQL migration creates users, locations, categories, tracked/stock assets, stock levels, item events, and audit logs.
 
+## API
+
+Read endpoints are open during early local development. Mutating endpoints currently require the temporary internal token header:
+
+```text
+X-API-Token: local-dev-token
+```
+
+This is an interim guard until browser session authentication is implemented.
+
+Current endpoints:
+
+- `GET /health`
+- `GET /health/database`
+- `GET /categories`
+- `POST /categories`
+- `GET /categories/{category_id}`
+- `PATCH /categories/{category_id}`
+- `GET /locations`
+- `POST /locations`
+- `GET /locations/{location_id}`
+- `PATCH /locations/{location_id}`
+- `GET /assets`
+- `POST /assets`
+- `GET /assets/{asset_id}`
+- `PATCH /assets/{asset_id}`
+- `GET /stock-levels`
+- `POST /stock-levels`
+- `GET /stock-levels/{stock_level_id}`
+- `PATCH /stock-levels/{stock_level_id}`
+
 ## Next Implementation Steps
 
 1. Add auth/session flow and initial admin seed.

@@ -37,6 +37,7 @@ Status: complete
 - [x] Architecture update for tracked and stock assets
 - [x] ADRs for core decisions
 - [x] Security review workflow
+- [x] Auth direction ADR with temporary write-token guard
 
 Dependencies: none.
 
@@ -62,9 +63,9 @@ Dependencies: 1.1.
 - [x] `users` model with `admin` and `user` roles
 - [x] password hash storage fields
 - [x] active/disabled state
-- [ ] session/auth architecture decision
+- [x] session/auth architecture decision
 - [ ] initial admin seed strategy
-- [ ] authorization helper functions
+- [x] temporary internal token authorization helper for mutation endpoints
 - [ ] tests for role checks
 
 ### 1.3 Locations And Categories
@@ -73,10 +74,10 @@ Dependencies: 1.1, partial 1.2 for actor/audit later.
 
 - [x] `locations` model with location types
 - [x] `categories` model
-- [ ] create/list/get/update APIs
-- [ ] validation schemas
-- [ ] service tests
-- [ ] security review for mutation endpoints
+- [x] create/list/get/update APIs
+- [x] validation schemas
+- [x] service tests
+- [x] temporary write-token guard on mutation endpoints
 
 ### 1.4 Inventory Assets
 
@@ -87,9 +88,9 @@ Dependencies: 1.1, 1.3.
 - [x] stock asset fields: unit name
 - [x] `stock_levels` model per asset/location
 - [ ] constraints preventing stock levels on tracked-only usage where practical
-- [ ] create/list/get/update APIs
-- [ ] event creation for asset mutations
-- [ ] tests for tracked vs stock validation
+- [x] create/list/get/update APIs
+- [x] event creation for asset mutations
+- [x] tests for tracked vs stock validation
 
 ### 1.5 Audit And Events
 
@@ -100,6 +101,7 @@ Dependencies: 1.1, 1.2, 1.4.
 - [ ] event writer service
 - [ ] audit writer service
 - [ ] tests that inventory mutations write events/audit records
+- [x] initial event/audit writes for asset create/update
 
 ## Phase 2: Booking And Availability Core
 
@@ -221,9 +223,9 @@ Dependencies: stable MVP.
 
 ## Current Next Slice
 
-Continue Phase 1 with auth/session design and CRUD APIs:
+Continue Phase 1 with real auth/session and admin seed:
 
-- session/auth architecture decision
 - initial admin seed strategy
-- locations/categories/assets schemas, services, and routers
 - inventory mutation event/audit writers
+- replace temporary write-token dependency with session/current-user dependency
+- add role checks for admin-only mutations
