@@ -22,6 +22,7 @@ export type LocationType =
   | 'repair'
   | 'unknown';
 export type BookingStatus = 'reserved' | 'cancelled' | 'checked_out' | 'completed';
+export type CheckoutStatus = 'checked_out' | 'partially_returned' | 'returned';
 
 export type User = {
   id: string;
@@ -109,6 +110,46 @@ export type Availability = {
   lines: AvailabilityLine[];
 };
 
+export type CheckoutLine = {
+  id: string;
+  checkout_id: string;
+  asset_id: string;
+  location_id: string | null;
+  quantity: number | null;
+  quantity_returned: number;
+  condition_out: AssetCondition;
+  notes: string | null;
+};
+
+export type Checkout = {
+  id: string;
+  booking_id: string;
+  checked_out_by_user_id: string;
+  checked_out_to_user_id: string | null;
+  status: CheckoutStatus;
+  notes: string | null;
+  lines?: CheckoutLine[];
+};
+
+export type ReturnLine = {
+  id: string;
+  return_id: string;
+  checkout_line_id: string;
+  asset_id: string;
+  location_id: string | null;
+  quantity: number | null;
+  condition_in: AssetCondition;
+  notes: string | null;
+};
+
+export type ReturnRecord = {
+  id: string;
+  checkout_id: string;
+  returned_by_user_id: string;
+  notes: string | null;
+  lines?: ReturnLine[];
+};
+
 export type CategoryCreate = {
   name: string;
   description?: string | null;
@@ -146,6 +187,26 @@ export type BookingCreate = {
   ends_at: string;
   notes?: string | null;
   lines: BookingLineCreate[];
+};
+
+export type CheckoutCreate = {
+  booking_id: string;
+  checked_out_to_user_id?: string | null;
+  condition_out?: AssetCondition;
+  notes?: string | null;
+};
+
+export type ReturnLineCreate = {
+  checkout_line_id: string;
+  quantity?: number | null;
+  condition_in?: AssetCondition;
+  notes?: string | null;
+};
+
+export type ReturnCreate = {
+  checkout_id: string;
+  notes?: string | null;
+  lines: ReturnLineCreate[];
 };
 
 const csrfCookieName = 'inventory_booking_csrf';

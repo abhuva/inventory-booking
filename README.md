@@ -159,6 +159,6 @@ Current endpoints:
 
 ## Next Implementation Steps
 
-1. Add checkout and return UI on top of the backend workflows.
-2. Add transfer and maintenance workflows.
+1. Add transfer workflows for tracked assets and stock quantities.
+2. Add maintenance/damaged/lost state transition workflows.
 3. Add multi-line booking editing if real usage needs it.

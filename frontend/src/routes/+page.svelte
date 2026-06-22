@@ -11,9 +11,13 @@
     type BookingCreate,
     type Category,
     type CategoryCreate,
+    type Checkout,
+    type CheckoutCreate,
     type Location,
     type LocationCreate,
     type LocationType,
+    type ReturnCreate,
+    type ReturnRecord,
     type StockLevel,
     type StockLevelCreate,
     type User
@@ -36,6 +40,9 @@
   let assets = $state<Asset[]>([]);
   let stockLevels = $state<StockLevel[]>([]);
   let bookings = $state<Booking[]>([]);
+  let checkouts = $state<Checkout[]>([]);
+  let returns = $state<ReturnRecord[]>([]);
+  let selectedReturnCheckout = $state<Checkout | null>(null);
   let availability = $state<Availability | null>(null);
   let email = $state('admin@example.org');
   let password = $state('change-this-password');
@@ -61,6 +68,18 @@
     asset_id: '',
     location_id: '',
     quantity: 1
+  });
+  let checkoutForm = $state<CheckoutCreate>({
+    booking_id: '',
+    condition_out: 'unknown',
+    notes: ''
+  });
+  let returnForm = $state({
+    checkout_id: '',
+    checkout_line_id: '',
+    quantity: 1,
+    condition_in: 'unknown' as const,
+    notes: ''
   });
 
   const trackedAssets = $derived(assets.filter((asset) => asset.asset_type === 'tracked'));
@@ -97,12 +116,14 @@
   }
 
   async function loadInventory() {
-    [categories, locations, assets, stockLevels, bookings] = await Promise.all([
+    [categories, locations, assets, stockLevels, bookings, checkouts, returns] = await Promise.all([
       apiGet<Category[]>('/categories'),
       apiGet<Location[]>('/locations'),
       apiGet<Asset[]>('/assets'),
       apiGet<StockLevel[]>('/stock-levels'),
-      apiGet<Booking[]>('/bookings')
+      apiGet<Booking[]>('/bookings'),
+      apiGet<Checkout[]>('/checkouts'),
+      apiGet<ReturnRecord[]>('/returns')
     ]);
   }
 
@@ -192,6 +213,51 @@
     });
   }
 
+  async function createCheckout() {
+    await runAction(async () => {
+      const checkout = await apiPost<Checkout>('/checkouts', emptyStringsToNull(checkoutForm));
+      checkoutForm = { booking_id: '', condition_out: 'unknown', notes: '' };
+      await loadInventory();
+      message = `Checkout created for booking ${bookingTitle(checkout.booking_id)}`;
+    });
+  }
+
+  async function loadCheckoutForReturn() {
+    await runAction(async () => {
+      selectedReturnCheckout = await apiGet<Checkout>(`/checkouts/${returnForm.checkout_id}`);
+      returnForm.checkout_line_id = selectedReturnCheckout.lines?.[0]?.id ?? '';
+      message = 'Checkout lines loaded';
+    });
+  }
+
+  async function createReturn() {
+    await runAction(async () => {
+      const payload: ReturnCreate = {
+        checkout_id: returnForm.checkout_id,
+        notes: returnForm.notes || null,
+        lines: [
+          {
+            checkout_line_id: returnForm.checkout_line_id,
+            quantity: selectedReturnLine()?.quantity === null ? null : returnForm.quantity,
+            condition_in: returnForm.condition_in,
+            notes: returnForm.notes || null
+          }
+        ]
+      };
+      await apiPost<ReturnRecord>('/returns', payload);
+      returnForm = {
+        checkout_id: '',
+        checkout_line_id: '',
+        quantity: 1,
+        condition_in: 'unknown',
+        notes: ''
+      };
+      selectedReturnCheckout = null;
+      await loadInventory();
+      message = 'Return recorded';
+    });
+  }
+
   async function runAction(action: () => Promise<void>) {
     busy = true;
     error = '';
@@ -250,6 +316,24 @@
 
   function selectedBookingAsset(): Asset | undefined {
     return assets.find((asset) => asset.id === bookingForm.asset_id);
+  }
+
+  function selectedReturnLine() {
+    return selectedReturnCheckout?.lines?.find((line) => line.id === returnForm.checkout_line_id);
+  }
+
+  function bookingTitle(id: string): string {
+    return bookings.find((booking) => booking.id === id)?.title ?? 'Unknown booking';
+  }
+
+  function checkoutLabel(checkout: Checkout): string {
+    return `${bookingTitle(checkout.booking_id)} · ${checkout.status}`;
+  }
+
+  function returnLineLabel(line: NonNullable<Checkout['lines']>[number]): string {
+    const quantityText = line.quantity === null ? 'tracked item' : `${line.quantity} total`;
+    const returnedText = line.quantity_returned > 0 ? `, ${line.quantity_returned} returned` : '';
+    return `${assetName(line.asset_id)} · ${quantityText}${returnedText}`;
   }
 
   function formatDateTime(value: string): string {
@@ -331,6 +415,14 @@
       <article>
         <span>{bookings.length}</span>
         <p>bookings</p>
+      </article>
+      <article>
+        <span>{checkouts.length}</span>
+        <p>checkouts</p>
+      </article>
+      <article>
+        <span>{returns.length}</span>
+        <p>returns</p>
       </article>
     </section>
 
@@ -527,10 +619,132 @@
             <button type="submit" disabled={busy}>Create booking</button>
           </div>
         </form>
+
+        <form
+          class="panel form-panel"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void createCheckout();
+          }}
+        >
+          <h2>Checkout</h2>
+          <label>
+            Reserved booking
+            <select bind:value={checkoutForm.booking_id} required>
+              <option value="">Choose booking</option>
+              {#each bookings.filter((booking) => booking.status === 'reserved') as booking}
+                <option value={booking.id}>{booking.title}</option>
+              {/each}
+            </select>
+          </label>
+          <label>
+            Condition out
+            <select bind:value={checkoutForm.condition_out}>
+              <option value="unknown">unknown</option>
+              <option value="good">good</option>
+              <option value="worn">worn</option>
+              <option value="damaged">damaged</option>
+              <option value="needs_repair">needs repair</option>
+            </select>
+          </label>
+          <label>Notes <textarea bind:value={checkoutForm.notes}></textarea></label>
+          <button type="submit" disabled={busy}>Create checkout</button>
+        </form>
+
+        <form
+          class="panel form-panel wide"
+          onsubmit={(event) => {
+            event.preventDefault();
+            void createReturn();
+          }}
+        >
+          <h2>Return</h2>
+          <div class="split-fields">
+            <label>
+              Checkout
+              <select bind:value={returnForm.checkout_id} required>
+                <option value="">Choose checkout</option>
+                {#each checkouts.filter((checkout) => checkout.status !== 'returned') as checkout}
+                  <option value={checkout.id}>{checkoutLabel(checkout)}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              Lines
+              <button
+                type="button"
+                class="secondary"
+                onclick={loadCheckoutForReturn}
+                disabled={busy || !returnForm.checkout_id}
+              >
+                Load lines
+              </button>
+            </label>
+          </div>
+          {#if selectedReturnCheckout?.lines?.length}
+            <label>
+              Checkout line
+              <select bind:value={returnForm.checkout_line_id} required>
+                {#each selectedReturnCheckout.lines as line}
+                  <option value={line.id}>{returnLineLabel(line)}</option>
+                {/each}
+              </select>
+            </label>
+            {#if selectedReturnLine()?.quantity !== null}
+              <label>
+                Quantity
+                <input bind:value={returnForm.quantity} type="number" min="1" required />
+              </label>
+            {/if}
+            <label>
+              Condition in
+              <select bind:value={returnForm.condition_in}>
+                <option value="unknown">unknown</option>
+                <option value="good">good</option>
+                <option value="worn">worn</option>
+                <option value="damaged">damaged</option>
+                <option value="needs_repair">needs repair</option>
+              </select>
+            </label>
+            <label>Notes <textarea bind:value={returnForm.notes}></textarea></label>
+            <button type="submit" disabled={busy}>Record return</button>
+          {:else}
+            <p class="empty">Load a checkout to choose return lines.</p>
+          {/if}
+        </form>
       </section>
     {/if}
 
     <section class="data-grid" aria-label="Inventory lists">
+      <article class="panel list-panel">
+        <h2>Checkouts</h2>
+        {#each checkouts as checkout}
+          <div class="row-card">
+            <strong>{bookingTitle(checkout.booking_id)}</strong>
+            <span>{checkout.status}</span>
+          </div>
+        {:else}
+          <p class="empty">No checkouts yet.</p>
+        {/each}
+      </article>
+
+      <article class="panel list-panel">
+        <h2>Returns</h2>
+        {#each returns as returnRecord}
+          <div class="row-card">
+            <strong
+              >{bookingTitle(
+                checkouts.find((checkout) => checkout.id === returnRecord.checkout_id)
+                  ?.booking_id ?? ''
+              )}</strong
+            >
+            <span>{returnRecord.notes ?? 'Return recorded'}</span>
+          </div>
+        {:else}
+          <p class="empty">No returns yet.</p>
+        {/each}
+      </article>
+
       <article class="panel list-panel">
         <h2>Bookings</h2>
         {#each bookings as booking}

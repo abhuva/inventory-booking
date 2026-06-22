@@ -213,8 +213,8 @@ Dependencies: backend APIs for the target workflow.
 - [ ] location list/detail
 - [x] booking creation form
 - [x] availability feedback
-- [ ] checkout screen
-- [ ] return screen
+- [x] checkout screen
+- [x] return screen
 - [ ] QR scan/assignment screens
 - [ ] admin user/category screens
 
@@ -234,6 +234,6 @@ Dependencies: stable MVP.
 
 Continue operational workflow:
 
-- add checkout/return UI on top of backend workflows
 - add transfer tracked asset location/holder workflow
 - add transfer stock between locations workflow
+- add maintenance/damaged/lost state transition workflow
