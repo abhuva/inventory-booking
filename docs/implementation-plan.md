@@ -120,31 +120,31 @@ Goal: reliable reservation logic before checkout/return UI.
 
 Dependencies: Phase 1.
 
-- [ ] `bookings` model
-- [ ] `booking_lines` model supporting tracked assets and stock quantities
-- [ ] booking statuses
-- [ ] date range validation
-- [ ] tests for invalid ranges and invalid lines
+- [x] `bookings` model
+- [x] `booking_lines` model supporting tracked assets and stock quantities
+- [x] booking statuses
+- [x] date range validation
+- [x] tests for invalid ranges and invalid lines
 
 ### 2.2 Availability Service
 
 Dependencies: 2.1.
 
-- [ ] tracked asset overlap logic
-- [ ] stock quantity overlap logic
-- [ ] unavailable status handling
+- [x] tracked asset overlap logic
+- [x] stock quantity overlap logic
+- [x] unavailable status handling
 - [ ] admin override path design
 - [ ] transaction boundary for booking creation
-- [ ] red-team tests for conflict bypass attempts
+- [x] red-team tests for conflict bypass attempts
 
 ### 2.3 Booking API
 
 Dependencies: 2.2.
 
-- [ ] create booking
-- [ ] list bookings
-- [ ] get booking detail
-- [ ] cancel booking
+- [x] create booking
+- [x] list bookings
+- [x] get booking detail
+- [x] cancel booking
 - [ ] availability preview endpoint
 - [ ] security review for all mutation endpoints
 
@@ -234,7 +234,7 @@ Dependencies: stable MVP.
 
 Start Phase 2 booking and availability foundation:
 
-- add `bookings` and `booking_lines` models/migration
-- implement date-range and line validation
-- build overlap-based availability checks for tracked assets and stock quantities
-- add conflict-bypass/red-team tests before frontend booking UI
+- add availability preview endpoint for frontend booking forms
+- document admin override rules before implementing overrides
+- add frontend booking creation with conflict feedback
+- keep checkout/return blocked until booking conflict behavior is stable

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import inventory_booking_api.models  # noqa: F401
 from inventory_booking_api.audit.router import router as audit_router
+from inventory_booking_api.bookings.router import router as booking_router
 from inventory_booking_api.core.csrf import CsrfProtectionMiddleware
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.inventory.asset_router import asset_router, stock_router
@@ -36,6 +37,7 @@ app.include_router(category_router)
 app.include_router(location_router)
 app.include_router(asset_router)
 app.include_router(stock_router)
+app.include_router(booking_router)
 
 
 @app.get("/health", tags=["system"])

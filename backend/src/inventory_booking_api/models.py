@@ -1,4 +1,5 @@
 from inventory_booking_api.audit.models import AuditLog, ItemEvent
+from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.core.models import Base
 from inventory_booking_api.inventory.models import Asset, Category, StockLevel
 from inventory_booking_api.locations.models import Location
@@ -9,6 +10,8 @@ __all__ = [
     "Asset",
     "AuditLog",
     "Base",
+    "Booking",
+    "BookingLine",
     "Category",
     "ItemEvent",
     "Location",

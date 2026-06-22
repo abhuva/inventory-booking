@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator, Generator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +17,8 @@ ADMIN_EMAIL = "admin@example.org"
 ADMIN_PASSWORD = "correct horse battery staple"
 USER_EMAIL = "user@example.org"
 USER_PASSWORD = "user password 123"
+BOOKING_START = datetime(2026, 7, 13, 9, 0, tzinfo=UTC)
+BOOKING_END = BOOKING_START + timedelta(days=3)
 
 
 @pytest.fixture
@@ -289,3 +292,142 @@ def test_create_stock_level_for_stock_asset(client: TestClient) -> None:
     assert event_response.status_code == 200
     assert event_response.json()[0]["asset_id"] == stock_asset["id"]
     assert event_response.json()[0]["event_type"] == "updated"
+
+
+def test_booking_rejects_invalid_time_range(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "German Wheel", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        "/bookings",
+        json={
+            "title": "Workshop",
+            "starts_at": BOOKING_END.isoformat(),
+            "ends_at": BOOKING_START.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+
+
+def test_booking_rejects_overlapping_tracked_asset(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Aerial Stand", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    booking_payload = {
+        "title": "Project week",
+        "starts_at": BOOKING_START.isoformat(),
+        "ends_at": BOOKING_END.isoformat(),
+        "lines": [{"asset_id": tracked_asset["id"]}],
+    }
+
+    first_response = client.post("/bookings", json=booking_payload, headers=headers)
+    second_response = client.post(
+        "/bookings",
+        json={
+            **booking_payload,
+            "title": "Conflicting project",
+            "starts_at": (BOOKING_START + timedelta(days=1)).isoformat(),
+            "ends_at": (BOOKING_END + timedelta(days=1)).isoformat(),
+        },
+        headers=headers,
+    )
+
+    assert first_response.status_code == 200
+    assert first_response.json()["lines"][0]["asset_id"] == tracked_asset["id"]
+    assert second_response.status_code == 409
+
+
+def test_booking_rejects_stock_overbooking(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Main Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Flower Sticks", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 5,
+        },
+        headers=headers,
+    )
+
+    first_response = client.post(
+        "/bookings",
+        json={
+            "title": "Group A",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 3,
+                }
+            ],
+        },
+        headers=headers,
+    )
+    second_response = client.post(
+        "/bookings",
+        json={
+            "title": "Group B",
+            "starts_at": (BOOKING_START + timedelta(hours=1)).isoformat(),
+            "ends_at": (BOOKING_END - timedelta(hours=1)).isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 3,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 409
+
+
+def test_cancelled_booking_releases_tracked_asset(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Trampoline", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    booking_payload = {
+        "title": "Camp",
+        "starts_at": BOOKING_START.isoformat(),
+        "ends_at": BOOKING_END.isoformat(),
+        "lines": [{"asset_id": tracked_asset["id"]}],
+    }
+    booking = client.post("/bookings", json=booking_payload, headers=headers).json()
+
+    cancel_response = client.post(f"/bookings/{booking['id']}/cancel", headers=headers)
+    new_response = client.post(
+        "/bookings",
+        json={**booking_payload, "title": "Replacement camp"},
+        headers=headers,
+    )
+
+    assert cancel_response.status_code == 200
+    assert cancel_response.json()["status"] == "cancelled"
+    assert new_response.status_code == 200
