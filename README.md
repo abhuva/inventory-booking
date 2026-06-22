@@ -56,6 +56,7 @@ npm.cmd --prefix .\frontend run dev
 ```
 
 The frontend defaults to `http://127.0.0.1:5173` and expects the API at `http://127.0.0.1:8000`.
+Use `127.0.0.1` consistently instead of mixing it with `localhost`; the browser-readable CSRF cookie is host-scoped.
 
 ## Run Full Stack With Docker
 
