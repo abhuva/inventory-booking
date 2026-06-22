@@ -150,9 +150,12 @@ Current endpoints:
 - `POST /bookings/availability`
 - `GET /bookings/{booking_id}`
 - `POST /bookings/{booking_id}/cancel`
+- `GET /checkouts`
+- `POST /checkouts`
+- `GET /checkouts/{checkout_id}`
 
 ## Next Implementation Steps
 
-1. Document admin override rules before implementing overrides.
-2. Add multi-line booking editing if real usage needs it.
-3. Build checkout and return workflows after booking conflict behavior is stable.
+1. Build return workflows on top of checkout lines.
+2. Add checkout UI once return behavior is defined.
+3. Add multi-line booking editing if real usage needs it.

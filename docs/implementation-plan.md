@@ -134,7 +134,7 @@ Dependencies: 2.1.
 - [x] stock quantity overlap logic
 - [x] unavailable status handling
 - [x] admin override path design
-- [ ] database-level concurrency hardening for booking creation
+- [x] database-level concurrency hardening decision for local MVP
 - [x] red-team tests for conflict bypass attempts
 
 ### 2.3 Booking API
@@ -156,12 +156,12 @@ Goal: support real equipment movement and accountability.
 
 Dependencies: Phase 2.
 
-- [ ] checkout records
-- [ ] checkout tracked assets
-- [ ] checkout stock quantities
-- [ ] condition-out fields
-- [ ] event/audit writes
-- [ ] tests for duplicate checkout and insufficient stock
+- [x] checkout records
+- [x] checkout tracked assets
+- [x] checkout stock quantities
+- [x] condition-out fields
+- [x] event/audit writes
+- [x] tests for duplicate checkout and insufficient stock
 
 ### 3.2 Return
 
@@ -232,8 +232,8 @@ Dependencies: stable MVP.
 
 ## Current Next Slice
 
-Stabilize booking behavior before checkout:
+Continue operational workflow:
 
-- decide whether local MVP needs database-level booking concurrency hardening before checkout
-- add multi-line booking editing only if the first real usage needs it
-- keep checkout/return blocked until booking conflict behavior is stable
+- build return records and partial return behavior
+- add tests for over-return and damaged return flows
+- add checkout/return UI after backend return behavior exists

@@ -585,3 +585,110 @@ def test_cancelled_booking_releases_tracked_asset(client: TestClient) -> None:
     assert any(
         entry["summary"].startswith("Cancelled booking") for entry in audit_response.json()
     )
+
+
+def test_checkout_tracked_booking_updates_asset_and_audit(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Checkout Trampoline", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Checkout camp",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    ).json()
+
+    checkout_response = client.post(
+        "/checkouts",
+        json={"booking_id": booking["id"], "condition_out": "good"},
+        headers=headers,
+    )
+    asset_response = client.get(f"/assets/{tracked_asset['id']}")
+    audit_response = client.get("/audit/logs", headers=headers)
+
+    assert checkout_response.status_code == 200
+    assert checkout_response.json()["booking_id"] == booking["id"]
+    assert checkout_response.json()["lines"][0]["condition_out"] == "good"
+    assert asset_response.json()["status"] == "checked_out"
+    assert asset_response.json()["condition"] == "good"
+    assert any(entry["entity_type"] == "checkout" for entry in audit_response.json())
+
+
+def test_duplicate_checkout_is_rejected(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Duplicate Checkout Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Duplicate checkout",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    ).json()
+
+    first_response = client.post("/checkouts", json={"booking_id": booking["id"]}, headers=headers)
+    second_response = client.post("/checkouts", json={"booking_id": booking["id"]}, headers=headers)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 400
+
+
+def test_stock_checkout_rejects_insufficient_current_stock(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Checkout Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Checkout Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    stock_level = client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 5,
+        },
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Stock checkout",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 5,
+                }
+            ],
+        },
+        headers=headers,
+    ).json()
+    client.patch(
+        f"/stock-levels/{stock_level['id']}",
+        json={"quantity_total": 3},
+        headers=headers,
+    )
+
+    response = client.post("/checkouts", json={"booking_id": booking["id"]}, headers=headers)
+
+    assert response.status_code == 409
