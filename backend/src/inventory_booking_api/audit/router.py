@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from inventory_booking_api.audit.schemas import AuditLogRead, ItemEventRead
 from inventory_booking_api.audit.service import list_audit_logs, list_item_events
 from inventory_booking_api.core.database import get_session
-from inventory_booking_api.core.security import require_admin
+from inventory_booking_api.core.security import get_current_user, require_admin
 from inventory_booking_api.users.models import User
 
 router = APIRouter(prefix="/audit", tags=["audit"])
@@ -25,7 +25,7 @@ async def list_audit_log_endpoint(
 @router.get("/item-events", response_model=list[ItemEventRead])
 async def list_item_event_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
-    _: Annotated[User, Depends(require_admin)],
+    _: Annotated[User, Depends(get_current_user)],
     asset_id: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[ItemEventRead]:

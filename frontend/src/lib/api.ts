@@ -166,6 +166,18 @@ export type ReturnRecord = {
   lines?: ReturnLine[];
 };
 
+export type ItemEvent = {
+  id: string;
+  created_at: string;
+  asset_id: string;
+  event_type: string;
+  actor_user_id: string | null;
+  from_location_id: string | null;
+  to_location_id: string | null;
+  notes: string | null;
+  details: Record<string, unknown> | null;
+};
+
 export type QrCode = {
   id: string;
   token: string;

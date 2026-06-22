@@ -16,6 +16,7 @@
     type CategoryUpdate,
     type Checkout,
     type CheckoutCreate,
+    type ItemEvent,
     type Location,
     type LocationCreate,
     type LocationType,
@@ -58,6 +59,8 @@
   let returns = $state<ReturnRecord[]>([]);
   let qrCodes = $state<QrCode[]>([]);
   let users = $state<User[]>([]);
+  let selectedAssetId = $state('');
+  let selectedAssetEvents = $state<ItemEvent[]>([]);
   let resolvedQr = $state<QrResolve | null>(null);
   let selectedReturnCheckout = $state<Checkout | null>(null);
   let availability = $state<Availability | null>(null);
@@ -213,6 +216,8 @@
       currentUser = null;
       qrCodes = [];
       users = [];
+      selectedAssetId = '';
+      selectedAssetEvents = [];
       message = 'Logged out';
     });
   }
@@ -463,6 +468,18 @@
     });
   }
 
+  async function selectAssetDetail(assetId: string) {
+    await runAction(async () => {
+      selectedAssetId = assetId;
+      selectedAssetEvents = currentUser
+        ? await apiGet<ItemEvent[]>(
+            `/audit/item-events?asset_id=${encodeURIComponent(assetId)}&limit=50`
+          )
+        : [];
+      message = 'Asset detail loaded';
+    });
+  }
+
   async function runAction(action: () => Promise<void>) {
     busy = true;
     error = '';
@@ -523,6 +540,10 @@
     return assets.find((asset) => asset.id === bookingForm.asset_id);
   }
 
+  function selectedAsset(): Asset | undefined {
+    return assets.find((asset) => asset.id === selectedAssetId);
+  }
+
   function selectedReturnLine() {
     return selectedReturnCheckout?.lines?.find((line) => line.id === returnForm.checkout_line_id);
   }
@@ -555,6 +576,20 @@
 
   function checkoutLabel(checkout: Checkout): string {
     return `${bookingTitle(checkout.booking_id)} · ${checkout.status}`;
+  }
+
+  function userLabel(id: string | null): string {
+    if (id === null) {
+      return 'system';
+    }
+    if (currentUser?.id === id) {
+      return currentUser.display_name;
+    }
+    return users.find((user) => user.id === id)?.display_name ?? 'user';
+  }
+
+  function holderLabel(id: string | null): string {
+    return id === null ? 'No holder' : userLabel(id);
   }
 
   function returnLineLabel(line: NonNullable<Checkout['lines']>[number]): string {
@@ -1242,6 +1277,91 @@
       </section>
     {/if}
 
+    {#if selectedAsset()}
+      <section class="panel detail-panel" aria-label="Selected asset detail">
+        <div class="detail-header">
+          <div>
+            <p class="eyebrow">Asset detail</p>
+            <h2>{selectedAsset()?.name}</h2>
+          </div>
+          <button
+            type="button"
+            class="secondary"
+            onclick={() => {
+              selectedAssetId = '';
+              selectedAssetEvents = [];
+            }}
+          >
+            Close detail
+          </button>
+        </div>
+
+        <div class="detail-grid">
+          <div>
+            <span>Mode</span>
+            <strong>{selectedAsset()?.asset_type}</strong>
+          </div>
+          <div>
+            <span>Status</span>
+            <strong>{selectedAsset()?.status}</strong>
+          </div>
+          <div>
+            <span>Condition</span>
+            <strong>{selectedAsset()?.condition}</strong>
+          </div>
+          <div>
+            <span>Category</span>
+            <strong>{categoryName(selectedAsset()?.category_id ?? null)}</strong>
+          </div>
+          <div>
+            <span>Current location</span>
+            <strong>{locationName(selectedAsset()?.current_location_id ?? null)}</strong>
+          </div>
+          <div>
+            <span>Holder</span>
+            <strong>{holderLabel(selectedAsset()?.current_holder_user_id ?? null)}</strong>
+          </div>
+          {#if selectedAsset()?.asset_type === 'stock'}
+            <div>
+              <span>Unit</span>
+              <strong>{selectedAsset()?.unit_name ?? 'unit'}</strong>
+            </div>
+            <div>
+              <span>Total stock</span>
+              <strong
+                >{stockLevels
+                  .filter((level) => level.asset_id === selectedAssetId)
+                  .reduce((sum, level) => sum + level.quantity_total, 0)}</strong
+              >
+            </div>
+          {/if}
+        </div>
+
+        <div class="timeline">
+          <h3>History</h3>
+          {#each selectedAssetEvents as event}
+            <article class="timeline-entry">
+              <div>
+                <strong>{event.event_type.replaceAll('_', ' ')}</strong>
+                <span>{formatDateTime(event.created_at)} · {userLabel(event.actor_user_id)}</span>
+              </div>
+              <p>
+                {#if event.from_location_id || event.to_location_id}
+                  {locationName(event.from_location_id)} → {locationName(event.to_location_id)}
+                {:else}
+                  {event.notes ?? 'No notes'}
+                {/if}
+              </p>
+            </article>
+          {:else}
+            <p class="empty">
+              {currentUser ? 'No history recorded for this asset yet.' : 'Login to load history.'}
+            </p>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
     <section class="data-grid" aria-label="Inventory lists">
       {#if currentUser?.role === 'admin'}
         <article class="panel list-panel">
@@ -1324,6 +1444,14 @@
                 asset.current_location_id
               )}</span
             >
+            <button
+              type="button"
+              class="secondary compact"
+              onclick={() => selectAssetDetail(asset.id)}
+              disabled={busy}
+            >
+              View detail
+            </button>
           </div>
         {:else}
           <p class="empty">No assets yet.</p>
@@ -1410,6 +1538,12 @@
     margin: 0 0 1rem;
     font-size: 1.1rem;
     letter-spacing: -0.03em;
+  }
+
+  h3 {
+    margin: 0;
+    font-size: 1rem;
+    letter-spacing: -0.02em;
   }
 
   .panel,
@@ -1589,6 +1723,69 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .detail-panel {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding: 1.25rem;
+  }
+
+  .detail-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: start;
+    justify-content: space-between;
+  }
+
+  .detail-header h2 {
+    margin: 0;
+    font-size: clamp(1.6rem, 4vw, 2.6rem);
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 0.75rem;
+  }
+
+  .detail-grid div {
+    display: grid;
+    gap: 0.2rem;
+    border-radius: 18px;
+    padding: 0.85rem 1rem;
+    background: rgba(37, 76, 55, 0.08);
+  }
+
+  .detail-grid span,
+  .timeline-entry span {
+    color: #526358;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .timeline {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .timeline-entry {
+    display: grid;
+    gap: 0.35rem;
+    border-left: 4px solid #61713e;
+    padding: 0.35rem 0 0.35rem 0.85rem;
+  }
+
+  .timeline-entry div {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  .timeline-entry p {
+    margin: 0;
+    color: #33443a;
+  }
+
   .list-panel {
     display: grid;
     align-content: start;
@@ -1606,6 +1803,12 @@
   .row-card span,
   .empty {
     color: #526358;
+  }
+
+  .compact {
+    justify-self: start;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.82rem;
   }
 
   @media (max-width: 960px) {

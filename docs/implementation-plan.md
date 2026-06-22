@@ -204,11 +204,11 @@ Goal: usable internal workflow over the backend.
 
 Dependencies: backend APIs for the target workflow.
 
-- [ ] app shell and navigation
-- [ ] login screen
-- [ ] dashboard
+- [x] app shell and navigation
+- [x] login screen
+- [x] dashboard
 - [ ] asset list/search
-- [ ] asset detail with event history
+- [x] asset detail with event history
 - [ ] stock by location view
 - [ ] location list/detail
 - [x] booking creation form
@@ -234,5 +234,5 @@ Dependencies: stable MVP.
 
 Continue operational workflow:
 
-- add asset/detail history views
 - add stock/location detail views
+- add asset search

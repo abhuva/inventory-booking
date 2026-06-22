@@ -294,6 +294,28 @@ def test_create_stock_level_for_stock_asset(client: TestClient) -> None:
     assert event_response.json()[0]["event_type"] == "updated"
 
 
+def test_user_can_read_item_events_but_not_audit_logs(client: TestClient) -> None:
+    admin_headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "User Visible History Rig", "asset_type": "tracked"},
+        headers=admin_headers,
+    ).json()
+    client.cookies.clear()
+    user_headers = login(client, email=USER_EMAIL, password=USER_PASSWORD)
+
+    event_response = client.get(
+        "/audit/item-events",
+        params={"asset_id": tracked_asset["id"]},
+        headers=user_headers,
+    )
+    audit_response = client.get("/audit/logs", headers=user_headers)
+
+    assert event_response.status_code == 200
+    assert event_response.json()[0]["asset_id"] == tracked_asset["id"]
+    assert audit_response.status_code == 403
+
+
 def test_booking_rejects_invalid_time_range(client: TestClient) -> None:
     headers = login(client)
     tracked_asset = client.post(
