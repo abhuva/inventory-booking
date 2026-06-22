@@ -168,6 +168,6 @@ Current endpoints:
 
 ## Next Implementation Steps
 
-1. Add admin user/category screens.
-2. Add asset/detail history views.
+1. Add asset/detail history views.
+2. Add stock/location detail views.
 3. Add multi-line booking editing if real usage needs it.

@@ -32,6 +32,22 @@ export type User = {
   is_active: boolean;
 };
 
+export type UserCreate = {
+  email: string;
+  display_name: string;
+  password: string;
+  role: UserRole;
+  is_active: boolean;
+};
+
+export type UserUpdate = {
+  email?: string | null;
+  display_name?: string | null;
+  password?: string | null;
+  role?: UserRole | null;
+  is_active?: boolean | null;
+};
+
 export type Category = {
   id: string;
   name: string;
@@ -175,6 +191,11 @@ export type QrResolve = {
 
 export type CategoryCreate = {
   name: string;
+  description?: string | null;
+};
+
+export type CategoryUpdate = {
+  name?: string | null;
   description?: string | null;
 };
 

@@ -2,6 +2,7 @@
   import {
     ApiError,
     apiGet,
+    apiPatch,
     apiPost,
     type Availability,
     type Asset,
@@ -12,6 +13,7 @@
     type BookingCreate,
     type Category,
     type CategoryCreate,
+    type CategoryUpdate,
     type Checkout,
     type CheckoutCreate,
     type Location,
@@ -29,7 +31,10 @@
     type StockLevelCreate,
     type StockTransfer,
     type TrackedAssetTransfer,
-    type User
+    type User,
+    type UserCreate,
+    type UserRole,
+    type UserUpdate
   } from '$lib/api';
 
   const locationTypes: LocationType[] = [
@@ -52,6 +57,7 @@
   let checkouts = $state<Checkout[]>([]);
   let returns = $state<ReturnRecord[]>([]);
   let qrCodes = $state<QrCode[]>([]);
+  let users = $state<User[]>([]);
   let resolvedQr = $state<QrResolve | null>(null);
   let selectedReturnCheckout = $state<Checkout | null>(null);
   let availability = $state<Availability | null>(null);
@@ -63,6 +69,31 @@
   let error = $state('');
 
   let categoryForm = $state<CategoryCreate>({ name: '', description: '' });
+  let categoryUpdateForm = $state<CategoryUpdate & { category_id: string }>({
+    category_id: '',
+    name: '',
+    description: ''
+  });
+  let userCreateForm = $state<UserCreate>({
+    email: '',
+    display_name: '',
+    password: '',
+    role: 'user',
+    is_active: true
+  });
+  let userUpdateForm = $state<{
+    user_id: string;
+    display_name: string;
+    role: UserRole;
+    is_active: boolean;
+    password: string;
+  }>({
+    user_id: '',
+    display_name: '',
+    role: 'user',
+    is_active: true,
+    password: ''
+  });
   let locationForm = $state<LocationCreate>({ name: '', type: 'storage' });
   let assetForm = $state<AssetCreate>({
     name: '',
@@ -154,7 +185,7 @@
   }
 
   async function loadInventory() {
-    [categories, locations, assets, stockLevels, bookings, checkouts, returns, qrCodes] =
+    [categories, locations, assets, stockLevels, bookings, checkouts, returns, qrCodes, users] =
       await Promise.all([
         apiGet<Category[]>('/categories'),
         apiGet<Location[]>('/locations'),
@@ -163,7 +194,8 @@
         apiGet<Booking[]>('/bookings'),
         apiGet<Checkout[]>('/checkouts'),
         apiGet<ReturnRecord[]>('/returns'),
-        currentUser ? apiGet<QrCode[]>('/qr-codes') : Promise.resolve([])
+        currentUser ? apiGet<QrCode[]>('/qr-codes') : Promise.resolve([]),
+        currentUser?.role === 'admin' ? apiGet<User[]>('/users') : Promise.resolve([])
       ]);
   }
 
@@ -179,6 +211,8 @@
     await runAction(async () => {
       await apiPost<void>('/auth/logout');
       currentUser = null;
+      qrCodes = [];
+      users = [];
       message = 'Logged out';
     });
   }
@@ -189,6 +223,48 @@
       categoryForm = { name: '', description: '' };
       await loadInventory();
       message = 'Category created';
+    });
+  }
+
+  async function updateCategory() {
+    await runAction(async () => {
+      const { category_id: categoryId, ...payload } = categoryUpdateForm;
+      await apiPatch<Category>(`/categories/${categoryId}`, emptyStringsToNull(payload));
+      categoryUpdateForm = { category_id: '', name: '', description: '' };
+      await loadInventory();
+      message = 'Category updated';
+    });
+  }
+
+  async function createUser() {
+    await runAction(async () => {
+      await apiPost<User>('/users', userCreateForm);
+      userCreateForm = {
+        email: '',
+        display_name: '',
+        password: '',
+        role: 'user',
+        is_active: true
+      };
+      await loadInventory();
+      message = 'User created';
+    });
+  }
+
+  async function updateUser() {
+    await runAction(async () => {
+      const payload: UserUpdate = {
+        display_name: userUpdateForm.display_name,
+        role: userUpdateForm.role,
+        is_active: userUpdateForm.is_active
+      };
+      if (userUpdateForm.password) {
+        payload.password = userUpdateForm.password;
+      }
+      await apiPatch<User>(`/users/${userUpdateForm.user_id}`, payload);
+      userUpdateForm.password = '';
+      await loadInventory();
+      message = 'User updated';
     });
   }
 
@@ -451,6 +527,28 @@
     return selectedReturnCheckout?.lines?.find((line) => line.id === returnForm.checkout_line_id);
   }
 
+  function selectCategoryForEdit(event: Event) {
+    const categoryId = (event.currentTarget as HTMLSelectElement).value;
+    const category = categories.find((entry) => entry.id === categoryId);
+    categoryUpdateForm = {
+      category_id: categoryId,
+      name: category?.name ?? '',
+      description: category?.description ?? ''
+    };
+  }
+
+  function selectUserForEdit(event: Event) {
+    const userId = (event.currentTarget as HTMLSelectElement).value;
+    const user = users.find((entry) => entry.id === userId);
+    userUpdateForm = {
+      user_id: userId,
+      display_name: user?.display_name ?? '',
+      role: user?.role ?? 'user',
+      is_active: user?.is_active ?? true,
+      password: ''
+    };
+  }
+
   function bookingTitle(id: string): string {
     return bookings.find((booking) => booking.id === id)?.title ?? 'Unknown booking';
   }
@@ -573,6 +671,102 @@
           <label>Description <textarea bind:value={categoryForm.description}></textarea></label>
           <button type="submit" disabled={busy}>Create category</button>
         </form>
+
+        {#if currentUser.role === 'admin'}
+          <form
+            class="panel form-panel"
+            onsubmit={(event) => {
+              event.preventDefault();
+              void updateCategory();
+            }}
+          >
+            <h2>Edit category</h2>
+            <label>
+              Category
+              <select
+                value={categoryUpdateForm.category_id}
+                onchange={selectCategoryForEdit}
+                required
+              >
+                <option value="">Choose category</option>
+                {#each categories as category}
+                  <option value={category.id}>{category.name}</option>
+                {/each}
+              </select>
+            </label>
+            <label>Name <input bind:value={categoryUpdateForm.name} required /></label>
+            <label
+              >Description <textarea bind:value={categoryUpdateForm.description}></textarea></label
+            >
+            <button type="submit" disabled={busy}>Update category</button>
+          </form>
+
+          <form
+            class="panel form-panel"
+            onsubmit={(event) => {
+              event.preventDefault();
+              void createUser();
+            }}
+          >
+            <h2>Create user</h2>
+            <label>Email <input bind:value={userCreateForm.email} type="email" required /></label>
+            <label>Name <input bind:value={userCreateForm.display_name} required /></label>
+            <label>
+              Role
+              <select bind:value={userCreateForm.role}>
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
+            </label>
+            <label
+              >Password <input
+                bind:value={userCreateForm.password}
+                type="password"
+                required
+              /></label
+            >
+            <label class="checkbox-label">
+              <input bind:checked={userCreateForm.is_active} type="checkbox" />
+              Active
+            </label>
+            <button type="submit" disabled={busy}>Create user</button>
+          </form>
+
+          <form
+            class="panel form-panel"
+            onsubmit={(event) => {
+              event.preventDefault();
+              void updateUser();
+            }}
+          >
+            <h2>Edit user</h2>
+            <label>
+              User
+              <select value={userUpdateForm.user_id} onchange={selectUserForEdit} required>
+                <option value="">Choose user</option>
+                {#each users as user}
+                  <option value={user.id}>{user.display_name} · {user.email}</option>
+                {/each}
+              </select>
+            </label>
+            <label>Name <input bind:value={userUpdateForm.display_name} required /></label>
+            <label>
+              Role
+              <select bind:value={userUpdateForm.role}>
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
+            </label>
+            <label
+              >New password <input bind:value={userUpdateForm.password} type="password" /></label
+            >
+            <label class="checkbox-label">
+              <input bind:checked={userUpdateForm.is_active} type="checkbox" />
+              Active
+            </label>
+            <button type="submit" disabled={busy}>Update user</button>
+          </form>
+        {/if}
 
         <form
           class="panel form-panel"
@@ -1049,6 +1243,20 @@
     {/if}
 
     <section class="data-grid" aria-label="Inventory lists">
+      {#if currentUser?.role === 'admin'}
+        <article class="panel list-panel">
+          <h2>Users</h2>
+          {#each users as user}
+            <div class="row-card">
+              <strong>{user.display_name}</strong>
+              <span>{user.email} · {user.role} · {user.is_active ? 'active' : 'disabled'}</span>
+            </div>
+          {:else}
+            <p class="empty">No users visible.</p>
+          {/each}
+        </article>
+      {/if}
+
       <article class="panel list-panel">
         <h2>QR labels</h2>
         {#each qrCodes as qrCode}

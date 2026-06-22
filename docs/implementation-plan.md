@@ -216,7 +216,7 @@ Dependencies: backend APIs for the target workflow.
 - [x] checkout screen
 - [x] return screen
 - [x] QR scan/assignment screens
-- [ ] admin user/category screens
+- [x] admin user/category screens
 
 ## Phase 6: Reliability And Deployment
 
@@ -234,5 +234,5 @@ Dependencies: stable MVP.
 
 Continue operational workflow:
 
-- add admin user/category screens
 - add asset/detail history views
+- add stock/location detail views
