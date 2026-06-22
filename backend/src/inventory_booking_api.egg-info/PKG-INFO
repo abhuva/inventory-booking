@@ -1,8 +1,0 @@
-Metadata-Version: 2.4
-Name: inventory-booking-api
-Version: 0.1.0
-Summary: FastAPI backend for the inventory booking system.
-Requires-Python: >=3.13
-Requires-Dist: fastapi>=0.115.0
-Requires-Dist: pydantic-settings>=2.6.0
-Requires-Dist: uvicorn[standard]>=0.32.0

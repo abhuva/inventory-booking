@@ -28,3 +28,6 @@ npm-debug.log*
 # Local data
 postgres-data/
 data/
+
+# Python packaging metadata
+*.egg-info/
