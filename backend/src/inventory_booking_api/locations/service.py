@@ -3,8 +3,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from inventory_booking_api.audit.enums import AuditAction
+from inventory_booking_api.audit.service import write_audit_log
 from inventory_booking_api.locations.models import Location
 from inventory_booking_api.locations.schemas import LocationCreate, LocationUpdate
+from inventory_booking_api.users.models import User
 
 
 async def list_locations(session: AsyncSession) -> list[Location]:
@@ -16,9 +19,18 @@ async def get_location(session: AsyncSession, location_id: UUID) -> Location | N
     return await session.get(Location, location_id)
 
 
-async def create_location(session: AsyncSession, payload: LocationCreate) -> Location:
+async def create_location(session: AsyncSession, payload: LocationCreate, actor: User) -> Location:
     location = Location(**payload.model_dump())
     session.add(location)
+    await session.flush()
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.CREATE,
+        entity_type="location",
+        entity_id=location.id,
+        summary=f"Created location {location.name}",
+    )
     await session.commit()
     await session.refresh(location)
     return location
@@ -28,9 +40,18 @@ async def update_location(
     session: AsyncSession,
     location: Location,
     payload: LocationUpdate,
+    actor: User,
 ) -> Location:
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(location, field, value)
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.UPDATE,
+        entity_type="location",
+        entity_id=location.id,
+        summary=f"Updated location {location.name}",
+    )
     await session.commit()
     await session.refresh(location)
     return location

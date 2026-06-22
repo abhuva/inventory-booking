@@ -104,11 +104,13 @@ Dependencies: 1.1, 1.2, 1.4.
 
 - [x] `item_events` model
 - [x] `audit_logs` model
-- [ ] event writer service
-- [ ] audit writer service
-- [ ] tests that inventory mutations write events/audit records
+- [x] event writer service
+- [x] audit writer service
+- [x] tests that inventory mutations write events/audit records
 - [x] initial event/audit writes for asset create/update
 - [x] actor-aware audit/event writer helpers
+- [x] actor-aware audit writes for category/location/stock mutations
+- [x] admin-only audit query endpoints
 
 ## Phase 2: Booking And Availability Core
 
@@ -230,8 +232,9 @@ Dependencies: stable MVP.
 
 ## Current Next Slice
 
-Continue Phase 1 with authorization refinement and audit services:
+Start Phase 2 booking and availability foundation:
 
-- apply actor-aware audit helpers to category/location/stock mutations
-- add dedicated audit query endpoints for admins
-- add frontend login and inventory management screens
+- add `bookings` and `booking_lines` models/migration
+- implement date-range and line validation
+- build overlap-based availability checks for tracked assets and stock quantities
+- add conflict-bypass/red-team tests before frontend booking UI

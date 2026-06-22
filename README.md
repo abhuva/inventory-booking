@@ -127,6 +127,8 @@ Current endpoints:
 - `POST /users`
 - `GET /users/{user_id}`
 - `PATCH /users/{user_id}`
+- `GET /audit/logs`
+- `GET /audit/item-events`
 - `GET /categories`
 - `POST /categories`
 - `GET /categories/{category_id}`
@@ -146,6 +148,6 @@ Current endpoints:
 
 ## Next Implementation Steps
 
-1. Add auth/session flow and initial admin seed.
-2. Add CRUD APIs for locations, categories, assets, and stock levels.
-3. Implement availability/conflict tests before building checkout and return workflows.
+1. Add bookings and booking lines.
+2. Implement availability/conflict tests for tracked assets and stock quantities.
+3. Build checkout and return workflows after booking conflicts are enforced in the backend.

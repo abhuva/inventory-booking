@@ -85,7 +85,11 @@ async def get_stock_level(session: AsyncSession, stock_level_id: UUID) -> StockL
     return await session.get(StockLevel, stock_level_id)
 
 
-async def create_stock_level(session: AsyncSession, payload: StockLevelCreate) -> StockLevel:
+async def create_stock_level(
+    session: AsyncSession,
+    payload: StockLevelCreate,
+    actor: User,
+) -> StockLevel:
     asset = await session.get(Asset, payload.asset_id)
     if asset is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Asset does not exist.")
@@ -96,6 +100,27 @@ async def create_stock_level(session: AsyncSession, payload: StockLevelCreate) -
         )
     stock_level = StockLevel(**payload.model_dump())
     session.add(stock_level)
+    await session.flush()
+    await write_item_event(
+        session,
+        asset_id=asset.id,
+        event_type=ItemEventType.UPDATED,
+        actor=actor,
+        notes="Created stock level",
+        details={
+            "stock_level_id": str(stock_level.id),
+            "location_id": str(stock_level.location_id),
+            "quantity_total": stock_level.quantity_total,
+        },
+    )
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.CREATE,
+        entity_type="stock_level",
+        entity_id=stock_level.id,
+        summary=f"Created stock level for {asset.name}",
+    )
     await session.commit()
     await session.refresh(stock_level)
     return stock_level
@@ -105,9 +130,32 @@ async def update_stock_level(
     session: AsyncSession,
     stock_level: StockLevel,
     payload: StockLevelUpdate,
+    actor: User,
 ) -> StockLevel:
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(stock_level, field, value)
+    await write_item_event(
+        session,
+        asset_id=stock_level.asset_id,
+        event_type=ItemEventType.UPDATED,
+        actor=actor,
+        notes="Updated stock level",
+        details={
+            "stock_level_id": str(stock_level.id),
+            "location_id": str(stock_level.location_id),
+            "quantity_total": stock_level.quantity_total,
+            "quantity_reserved": stock_level.quantity_reserved,
+            "quantity_checked_out": stock_level.quantity_checked_out,
+        },
+    )
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.UPDATE,
+        entity_type="stock_level",
+        entity_id=stock_level.id,
+        summary="Updated stock level",
+    )
     await session.commit()
     await session.refresh(stock_level)
     return stock_level

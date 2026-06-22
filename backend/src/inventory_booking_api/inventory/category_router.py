@@ -18,6 +18,7 @@ from inventory_booking_api.inventory.category_service import (
     list_categories,
     update_category,
 )
+from inventory_booking_api.users.models import User
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -29,12 +30,13 @@ async def list_category_endpoint(
     return await list_categories(session)
 
 
-@router.post("", response_model=CategoryRead, dependencies=[Depends(get_current_user)])
+@router.post("", response_model=CategoryRead)
 async def create_category_endpoint(
     payload: CategoryCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> CategoryRead:
-    return await create_category(session, payload)
+    return await create_category(session, payload, current_user)
 
 
 @router.get("/{category_id}", response_model=CategoryRead)
@@ -51,14 +53,14 @@ async def get_category_endpoint(
 @router.patch(
     "/{category_id}",
     response_model=CategoryRead,
-    dependencies=[Depends(get_current_user)],
 )
 async def update_category_endpoint(
     category_id: UUID,
     payload: CategoryUpdate,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> CategoryRead:
     category = await get_category(session, category_id)
     if category is None:
         raise_not_found("Category")
-    return await update_category(session, category, payload)
+    return await update_category(session, category, payload, current_user)

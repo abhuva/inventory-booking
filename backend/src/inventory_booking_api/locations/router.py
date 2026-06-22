@@ -14,6 +14,7 @@ from inventory_booking_api.locations.service import (
     list_locations,
     update_location,
 )
+from inventory_booking_api.users.models import User
 
 router = APIRouter(prefix="/locations", tags=["locations"])
 
@@ -25,12 +26,13 @@ async def list_location_endpoint(
     return await list_locations(session)
 
 
-@router.post("", response_model=LocationRead, dependencies=[Depends(get_current_user)])
+@router.post("", response_model=LocationRead)
 async def create_location_endpoint(
     payload: LocationCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> LocationRead:
-    return await create_location(session, payload)
+    return await create_location(session, payload, current_user)
 
 
 @router.get("/{location_id}", response_model=LocationRead)
@@ -47,14 +49,14 @@ async def get_location_endpoint(
 @router.patch(
     "/{location_id}",
     response_model=LocationRead,
-    dependencies=[Depends(get_current_user)],
 )
 async def update_location_endpoint(
     location_id: UUID,
     payload: LocationUpdate,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> LocationRead:
     location = await get_location(session, location_id)
     if location is None:
         raise_not_found("Location")
-    return await update_location(session, location, payload)
+    return await update_location(session, location, payload, current_user)

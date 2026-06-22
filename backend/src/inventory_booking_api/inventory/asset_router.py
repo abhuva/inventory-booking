@@ -84,13 +84,13 @@ async def list_stock_level_endpoint(
 @stock_router.post(
     "",
     response_model=StockLevelRead,
-    dependencies=[Depends(get_current_user)],
 )
 async def create_stock_level_endpoint(
     payload: StockLevelCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> StockLevelRead:
-    return await create_stock_level(session, payload)
+    return await create_stock_level(session, payload, current_user)
 
 
 @stock_router.get("/{stock_level_id}", response_model=StockLevelRead)
@@ -107,14 +107,14 @@ async def get_stock_level_endpoint(
 @stock_router.patch(
     "/{stock_level_id}",
     response_model=StockLevelRead,
-    dependencies=[Depends(get_current_user)],
 )
 async def update_stock_level_endpoint(
     stock_level_id: UUID,
     payload: StockLevelUpdate,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> StockLevelRead:
     stock_level = await get_stock_level(session, stock_level_id)
     if stock_level is None:
         raise_not_found("Stock level")
-    return await update_stock_level(session, stock_level, payload)
+    return await update_stock_level(session, stock_level, payload, current_user)

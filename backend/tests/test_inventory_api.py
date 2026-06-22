@@ -153,6 +153,14 @@ def test_normal_user_cannot_manage_users(client: TestClient) -> None:
     assert response.status_code == 403
 
 
+def test_normal_user_cannot_read_audit_logs(client: TestClient) -> None:
+    headers = login(client, USER_EMAIL, USER_PASSWORD)
+
+    response = client.get("/audit/logs", headers=headers)
+
+    assert response.status_code == 403
+
+
 def test_create_and_list_category(client: TestClient) -> None:
     headers = login(client)
 
@@ -171,6 +179,12 @@ def test_create_and_list_category(client: TestClient) -> None:
     assert list_response.status_code == 200
     assert list_response.json()[0]["id"] == created["id"]
 
+    audit_response = client.get("/audit/logs", headers=headers)
+
+    assert audit_response.status_code == 200
+    assert audit_response.json()[0]["entity_type"] == "category"
+    assert audit_response.json()[0]["action"] == "create"
+
 
 def test_create_location(client: TestClient) -> None:
     headers = login(client)
@@ -183,6 +197,11 @@ def test_create_location(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["type"] == "storage"
+
+    audit_response = client.get("/audit/logs", headers=headers)
+
+    assert audit_response.status_code == 200
+    assert audit_response.json()[0]["entity_type"] == "location"
 
 
 def test_asset_mode_validation(client: TestClient) -> None:
@@ -257,3 +276,16 @@ def test_create_stock_level_for_stock_asset(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["quantity_total"] == 12
+
+    audit_response = client.get("/audit/logs", headers=headers)
+    event_response = client.get(
+        "/audit/item-events",
+        params={"asset_id": stock_asset["id"]},
+        headers=headers,
+    )
+
+    assert audit_response.status_code == 200
+    assert audit_response.json()[0]["entity_type"] == "stock_level"
+    assert event_response.status_code == 200
+    assert event_response.json()[0]["asset_id"] == stock_asset["id"]
+    assert event_response.json()[0]["event_type"] == "updated"

@@ -1,11 +1,41 @@
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.audit.enums import AuditAction, ItemEventType
 from inventory_booking_api.audit.models import AuditLog, ItemEvent
 from inventory_booking_api.users.models import User
+
+
+async def list_audit_logs(session: AsyncSession, limit: int = 100) -> list[AuditLog]:
+    """Return recent security-relevant mutation logs."""
+
+    result = await session.execute(
+        select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+async def list_item_events(
+    session: AsyncSession,
+    *,
+    asset_id: UUID | None = None,
+    limit: int = 100,
+) -> list[ItemEvent]:
+    """Return recent operational item events, optionally scoped to one asset."""
+
+    statement = select(ItemEvent).order_by(ItemEvent.created_at.desc()).limit(limit)
+    if asset_id is not None:
+        statement = (
+            select(ItemEvent)
+            .where(ItemEvent.asset_id == asset_id)
+            .order_by(ItemEvent.created_at.desc())
+            .limit(limit)
+        )
+    result = await session.execute(statement)
+    return list(result.scalars().all())
 
 
 async def write_audit_log(
