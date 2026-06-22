@@ -1,4 +1,4 @@
-﻿from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient
 
 from inventory_booking_api.main import app
 

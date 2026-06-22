@@ -26,9 +26,7 @@ class Settings(BaseSettings):
         """Return configured CORS origins as a normalized list."""
 
         return [
-            origin.strip().rstrip("/")
-            for origin in self.cors_origins.split(",")
-            if origin.strip()
+            origin.strip().rstrip("/") for origin in self.cors_origins.split(",") if origin.strip()
         ]
 
 

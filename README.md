@@ -63,6 +63,12 @@ The frontend defaults to `http://127.0.0.1:5173` and expects the API at `http://
 docker compose up --build
 ```
 
+Apply database migrations after the containers are running:
+
+```powershell
+.\scripts\migrate.ps1
+```
+
 Services:
 
 - API: `http://127.0.0.1:8000`
@@ -87,10 +93,10 @@ npm.cmd --prefix .\frontend run lint
 
 ## Current Status
 
-This repo is initialized as a clean starting point. The first backend endpoint is `GET /health`, and the first frontend page verifies that the app shell loads.
+This repo has a working Docker-backed local stack. Backend health endpoints are `GET /health` and `GET /health/database`. The initial PostgreSQL migration creates users, locations, categories, tracked/stock assets, stock levels, item events, and audit logs.
 
 ## Next Implementation Steps
 
-1. Add PostgreSQL connection settings and Alembic migrations.
-2. Define core database models for users, locations, items, QR codes, bookings, checkouts, returns, item events, and audit logs.
+1. Add auth/session flow and initial admin seed.
+2. Add CRUD APIs for locations, categories, assets, and stock levels.
 3. Implement availability/conflict tests before building checkout and return workflows.

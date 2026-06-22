@@ -31,3 +31,6 @@ data/
 
 # Python packaging metadata
 *.egg-info/
+
+# Local Obsidian workspace
+.obsidian/

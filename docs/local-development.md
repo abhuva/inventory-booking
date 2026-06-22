@@ -30,6 +30,12 @@ docker compose up --build
 
 Docker is required for PostgreSQL until a separate local PostgreSQL instance is configured.
 
+After the containers are running, apply migrations:
+
+```powershell
+.\scripts\migrate.ps1
+```
+
 If Docker Desktop is running but `docker` is not recognized in PowerShell, open a new terminal first.
 If it is still unavailable, use Docker Desktop's bundled CLI directly:
 
@@ -46,6 +52,22 @@ docker compose down
 ```
 
 Do not use `docker compose down -v` unless you intentionally want to delete the local PostgreSQL data volume.
+
+## Database Inspection
+
+PostgreSQL does not open in a browser. Use `psql` or a database client.
+
+```powershell
+docker compose exec postgres psql -U inventory -d inventory_booking
+```
+
+Useful `psql` commands:
+
+```sql
+\dt
+\d assets
+\q
+```
 
 ## Check Everything
 
