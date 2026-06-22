@@ -168,6 +168,6 @@ Current endpoints:
 
 ## Next Implementation Steps
 
-1. Add stock/location detail views.
-2. Add asset search.
-3. Add multi-line booking editing if real usage needs it.
+1. Add asset search.
+2. Add multi-line booking editing if real usage needs it.
+3. Add deployment hardening runbook.

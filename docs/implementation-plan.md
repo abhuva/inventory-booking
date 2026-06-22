@@ -209,8 +209,8 @@ Dependencies: backend APIs for the target workflow.
 - [x] dashboard
 - [ ] asset list/search
 - [x] asset detail with event history
-- [ ] stock by location view
-- [ ] location list/detail
+- [x] stock by location view
+- [x] location list/detail
 - [x] booking creation form
 - [x] availability feedback
 - [x] checkout screen
@@ -234,5 +234,5 @@ Dependencies: stable MVP.
 
 Continue operational workflow:
 
-- add stock/location detail views
 - add asset search
+- add multi-line booking editing if real usage needs it

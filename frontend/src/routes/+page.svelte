@@ -61,6 +61,7 @@
   let users = $state<User[]>([]);
   let selectedAssetId = $state('');
   let selectedAssetEvents = $state<ItemEvent[]>([]);
+  let selectedLocationId = $state('');
   let resolvedQr = $state<QrResolve | null>(null);
   let selectedReturnCheckout = $state<Checkout | null>(null);
   let availability = $state<Availability | null>(null);
@@ -218,6 +219,7 @@
       users = [];
       selectedAssetId = '';
       selectedAssetEvents = [];
+      selectedLocationId = '';
       message = 'Logged out';
     });
   }
@@ -544,6 +546,22 @@
     return assets.find((asset) => asset.id === selectedAssetId);
   }
 
+  function selectedLocation(): Location | undefined {
+    return locations.find((location) => location.id === selectedLocationId);
+  }
+
+  function stockLevelsAtLocation(locationId: string): StockLevel[] {
+    return stockLevels.filter((level) => level.location_id === locationId);
+  }
+
+  function trackedAssetsAtLocation(locationId: string): Asset[] {
+    return trackedAssets.filter((asset) => asset.current_location_id === locationId);
+  }
+
+  function totalStockAtLocation(locationId: string): number {
+    return stockLevelsAtLocation(locationId).reduce((sum, level) => sum + level.quantity_total, 0);
+  }
+
   function selectedReturnLine() {
     return selectedReturnCheckout?.lines?.find((line) => line.id === returnForm.checkout_line_id);
   }
@@ -590,6 +608,10 @@
 
   function holderLabel(id: string | null): string {
     return id === null ? 'No holder' : userLabel(id);
+  }
+
+  function responsibleLabel(id: string | null): string {
+    return id === null ? 'No responsible person' : userLabel(id);
   }
 
   function returnLineLabel(line: NonNullable<Checkout['lines']>[number]): string {
@@ -1362,6 +1384,90 @@
       </section>
     {/if}
 
+    {#if selectedLocation()}
+      <section class="panel detail-panel" aria-label="Selected location detail">
+        <div class="detail-header">
+          <div>
+            <p class="eyebrow">Location detail</p>
+            <h2>{selectedLocation()?.name}</h2>
+          </div>
+          <button
+            type="button"
+            class="secondary"
+            onclick={() => {
+              selectedLocationId = '';
+            }}
+          >
+            Close detail
+          </button>
+        </div>
+
+        <div class="detail-grid">
+          <div>
+            <span>Type</span>
+            <strong>{selectedLocation()?.type.replaceAll('_', ' ')}</strong>
+          </div>
+          <div>
+            <span>Tracked items</span>
+            <strong>{trackedAssetsAtLocation(selectedLocationId).length}</strong>
+          </div>
+          <div>
+            <span>Stock lines</span>
+            <strong>{stockLevelsAtLocation(selectedLocationId).length}</strong>
+          </div>
+          <div>
+            <span>Total stock units</span>
+            <strong>{totalStockAtLocation(selectedLocationId)}</strong>
+          </div>
+          <div>
+            <span>Responsible</span>
+            <strong>{responsibleLabel(selectedLocation()?.responsible_user_id ?? null)}</strong>
+          </div>
+          <div>
+            <span>State</span>
+            <strong>{selectedLocation()?.is_active ? 'active' : 'inactive'}</strong>
+          </div>
+        </div>
+
+        <div class="split-detail">
+          <article class="mini-list">
+            <h3>Stock at this location</h3>
+            {#each stockLevelsAtLocation(selectedLocationId) as level}
+              <div class="row-card">
+                <strong>{stockAssetName(level.asset_id)}</strong>
+                <span>
+                  {level.quantity_total} total · {level.quantity_reserved} reserved · {level.quantity_checked_out}
+                  checked out
+                </span>
+              </div>
+            {:else}
+              <p class="empty">No stock is stored here.</p>
+            {/each}
+          </article>
+
+          <article class="mini-list">
+            <h3>Tracked items here</h3>
+            {#each trackedAssetsAtLocation(selectedLocationId) as asset}
+              <div class="row-card">
+                <strong>{asset.name}</strong>
+                <span>{asset.status} · {asset.condition}</span>
+                <button
+                  type="button"
+                  class="secondary compact"
+                  onclick={() => selectAssetDetail(asset.id)}
+                  disabled={busy}
+                >
+                  View asset
+                </button>
+              </div>
+            {:else}
+              <p class="empty">No tracked items are currently here.</p>
+            {/each}
+          </article>
+        </div>
+      </section>
+    {/if}
+
     <section class="data-grid" aria-label="Inventory lists">
       {#if currentUser?.role === 'admin'}
         <article class="panel list-panel">
@@ -1475,7 +1581,19 @@
         {#each locations as location}
           <div class="row-card">
             <strong>{location.name}</strong>
-            <span>{location.type.replaceAll('_', ' ')}</span>
+            <span
+              >{location.type.replaceAll('_', ' ')} · {trackedAssetsAtLocation(location.id).length}
+              tracked · {totalStockAtLocation(location.id)} stock units</span
+            >
+            <button
+              type="button"
+              class="secondary compact"
+              onclick={() => {
+                selectedLocationId = location.id;
+              }}
+            >
+              View detail
+            </button>
           </div>
         {:else}
           <p class="empty">No locations yet.</p>
@@ -1786,6 +1904,21 @@
     color: #33443a;
   }
 
+  .split-detail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .mini-list {
+    display: grid;
+    align-content: start;
+    gap: 0.75rem;
+    border-radius: 22px;
+    padding: 1rem;
+    background: rgba(255, 252, 242, 0.62);
+  }
+
   .list-panel {
     display: grid;
     align-content: start;
@@ -1814,7 +1947,8 @@
   @media (max-width: 960px) {
     .masthead,
     .forms-grid,
-    .data-grid {
+    .data-grid,
+    .split-detail {
       grid-template-columns: 1fr;
     }
 
