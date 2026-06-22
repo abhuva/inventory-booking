@@ -167,12 +167,12 @@ Dependencies: Phase 2.
 
 Dependencies: 3.1.
 
-- [ ] return records
-- [ ] partial returns
-- [ ] condition-in fields
-- [ ] damaged/missing handling
-- [ ] event/audit writes
-- [ ] tests for over-return and damaged return flows
+- [x] return records
+- [x] partial returns
+- [x] condition-in fields
+- [x] damaged/missing handling
+- [x] event/audit writes
+- [x] tests for over-return and damaged return flows
 
 ### 3.3 Transfers And Maintenance
 
@@ -234,6 +234,6 @@ Dependencies: stable MVP.
 
 Continue operational workflow:
 
-- build return records and partial return behavior
-- add tests for over-return and damaged return flows
-- add checkout/return UI after backend return behavior exists
+- add checkout/return UI on top of backend workflows
+- add transfer tracked asset location/holder workflow
+- add transfer stock between locations workflow

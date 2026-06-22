@@ -692,3 +692,150 @@ def test_stock_checkout_rejects_insufficient_current_stock(client: TestClient) -
     response = client.post("/checkouts", json={"booking_id": booking["id"]}, headers=headers)
 
     assert response.status_code == 409
+
+
+def test_tracked_return_damaged_updates_asset_and_audit(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Return Aerial Stand", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Damaged return",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    ).json()
+    checkout = client.post("/checkouts", json={"booking_id": booking["id"]}, headers=headers).json()
+    checkout_line_id = checkout["lines"][0]["id"]
+
+    return_response = client.post(
+        "/returns",
+        json={
+            "checkout_id": checkout["id"],
+            "lines": [{"checkout_line_id": checkout_line_id, "condition_in": "damaged"}],
+        },
+        headers=headers,
+    )
+    asset_response = client.get(f"/assets/{tracked_asset['id']}")
+    audit_response = client.get("/audit/logs", headers=headers)
+
+    assert return_response.status_code == 200
+    assert return_response.json()["lines"][0]["condition_in"] == "damaged"
+    assert asset_response.json()["status"] == "damaged"
+    assert asset_response.json()["condition"] == "damaged"
+    assert any(entry["entity_type"] == "return" for entry in audit_response.json())
+
+
+def test_stock_partial_return_updates_checkout_and_stock(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Return Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Return Scarves", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    stock_level = client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 10,
+        },
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Partial stock return",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 6,
+                }
+            ],
+        },
+        headers=headers,
+    ).json()
+    checkout = client.post("/checkouts", json={"booking_id": booking["id"]}, headers=headers).json()
+    checkout_line_id = checkout["lines"][0]["id"]
+
+    return_response = client.post(
+        "/returns",
+        json={
+            "checkout_id": checkout["id"],
+            "lines": [{"checkout_line_id": checkout_line_id, "quantity": 2}],
+        },
+        headers=headers,
+    )
+    checkout_response = client.get(f"/checkouts/{checkout['id']}")
+    stock_response = client.get(f"/stock-levels/{stock_level['id']}")
+
+    assert return_response.status_code == 200
+    assert checkout_response.json()["status"] == "partially_returned"
+    assert checkout_response.json()["lines"][0]["quantity_returned"] == 2
+    assert stock_response.json()["quantity_checked_out"] == 4
+
+
+def test_stock_return_rejects_over_return(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Over Return Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Over Return Clubs", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 4,
+        },
+        headers=headers,
+    )
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Over return",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 4,
+                }
+            ],
+        },
+        headers=headers,
+    ).json()
+    checkout = client.post("/checkouts", json={"booking_id": booking["id"]}, headers=headers).json()
+    checkout_line_id = checkout["lines"][0]["id"]
+
+    response = client.post(
+        "/returns",
+        json={
+            "checkout_id": checkout["id"],
+            "lines": [{"checkout_line_id": checkout_line_id, "quantity": 5}],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 409

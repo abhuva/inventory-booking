@@ -153,9 +153,12 @@ Current endpoints:
 - `GET /checkouts`
 - `POST /checkouts`
 - `GET /checkouts/{checkout_id}`
+- `GET /returns`
+- `POST /returns`
+- `GET /returns/{return_id}`
 
 ## Next Implementation Steps
 
-1. Build return workflows on top of checkout lines.
-2. Add checkout UI once return behavior is defined.
+1. Add checkout and return UI on top of the backend workflows.
+2. Add transfer and maintenance workflows.
 3. Add multi-line booking editing if real usage needs it.
