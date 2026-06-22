@@ -53,7 +53,7 @@ SvelteKit provides the low-friction user interface:
 - maintenance/damage views
 - simple admin settings
 
-The UI should be usable on desktop and phones from the beginning because QR and checkout workflows are phone-first.
+The primary UI is desktop-first because planning, admin, booking, and inventory correction work benefit from tabs, forms, and side-by-side detail panels. Mobile should not be a compressed version of the desktop workspace. A later dedicated field/mobile route should focus on QR lookup, moving items, checkout/return, and damage reporting with large task-based controls.
 
 ## Database Direction
 

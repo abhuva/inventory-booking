@@ -105,6 +105,16 @@ npm.cmd --prefix .\frontend run lint
 
 This repo has a working Docker-backed local stack. Backend health endpoints are `GET /health` and `GET /health/database`. PostgreSQL migrations create users, sessions, locations, categories, tracked/stock assets, stock levels, item events, and audit logs.
 
+The frontend is currently a desktop-first tabbed workspace:
+
+- `Dashboard`: high-level counts.
+- `Inventory`: assets, asset search, asset detail/history, and asset state changes.
+- `Locations`: spaces, stock by location, and movement workflows.
+- `Bookings`: booking creation and availability feedback.
+- `Checkout`: checkout and return workflows.
+- `Field / QR`: QR label creation, assignment, and lookup.
+- `Admin`: users and categories.
+
 ## API
 
 Read endpoints are open during early local development. Mutating endpoints require an authenticated session cookie from `POST /auth/login`.
