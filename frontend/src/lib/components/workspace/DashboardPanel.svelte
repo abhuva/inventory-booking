@@ -20,37 +20,46 @@
   } = $props();
 </script>
 
-<section class="stats-grid" aria-label="Inventory summary">
-  <article>
-    <span>{trackedAssetCount}</span>
-    <p>tracked assets</p>
-  </article>
-  <article>
-    <span>{stockAssetCount}</span>
-    <p>stock assets</p>
-  </article>
-  <article>
-    <span>{locationCount}</span>
-    <p>locations</p>
-  </article>
-  <article>
-    <span>{stockUnitCount}</span>
-    <p>stock units</p>
-  </article>
-  <article>
-    <span>{bookingCount}</span>
-    <p>bookings</p>
-  </article>
-  <article>
-    <span>{checkoutCount}</span>
-    <p>checkouts</p>
-  </article>
-  <article>
-    <span>{returnCount}</span>
-    <p>returns</p>
-  </article>
-  <article>
-    <span>{qrCodeCount}</span>
-    <p>QR labels</p>
-  </article>
+<section class="panel dashboard-panel" aria-label="Inventory summary">
+  <div class="detail-header asset-detail-header">
+    <div>
+      <h2>Workspace summary</h2>
+      <p>Current inventory, booking, and field label counts.</p>
+    </div>
+  </div>
+
+  <div class="dashboard-summary-grid">
+    <div>
+      <span>{trackedAssetCount}</span>
+      <strong>Tracked assets</strong>
+    </div>
+    <div>
+      <span>{stockAssetCount}</span>
+      <strong>Stock assets</strong>
+    </div>
+    <div>
+      <span>{locationCount}</span>
+      <strong>Locations</strong>
+    </div>
+    <div>
+      <span>{stockUnitCount}</span>
+      <strong>Stock units</strong>
+    </div>
+    <div>
+      <span>{bookingCount}</span>
+      <strong>Bookings</strong>
+    </div>
+    <div>
+      <span>{checkoutCount}</span>
+      <strong>Checkouts</strong>
+    </div>
+    <div>
+      <span>{returnCount}</span>
+      <strong>Returns</strong>
+    </div>
+    <div>
+      <span>{qrCodeCount}</span>
+      <strong>QR labels</strong>
+    </div>
+  </div>
 </section>
