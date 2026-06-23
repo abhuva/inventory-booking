@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { Asset, Location, LocationCreate, StockLevel } from '$lib/api';
+  import type { Asset, Location, LocationCreate, LocationUpdate, StockLevel } from '$lib/api';
 
   let showAddLocation = $state(false);
+  let activeLocationDetailTab = $state<'info' | 'extra'>('info');
 
   let {
     locationTypes,
@@ -9,8 +10,10 @@
     selectedLocationId,
     busy,
     locationForm = $bindable(),
+    locationEditForm = $bindable(),
     createLocation,
-    selectLocation,
+    selectLocationDetail,
+    updateSelectedLocation,
     closeLocationDetail,
     selectedLocation,
     stockLevelsAtLocation,
@@ -25,8 +28,10 @@
     selectedLocationId: string;
     busy: boolean;
     locationForm: LocationCreate;
+    locationEditForm: LocationUpdate;
     createLocation: () => void;
-    selectLocation: (locationId: string) => void;
+    selectLocationDetail: (locationId: string) => void;
+    updateSelectedLocation: () => void;
     closeLocationDetail: () => void;
     selectedLocation: () => Location | undefined;
     stockLevelsAtLocation: (locationId: string) => StockLevel[];
@@ -71,7 +76,7 @@
           {#each locations as location}
             <tr
               class:selected-row={location.id === selectedLocationId}
-              onclick={() => selectLocation(location.id)}
+              onclick={() => selectLocationDetail(location.id)}
             >
               <td>
                 <strong>{location.name}</strong>
@@ -103,70 +108,134 @@
         >
       </div>
 
-      <div class="physical-summary-grid">
-        <article>
-          <span>Type</span>
-          <strong>{locationTypeLabel(selectedLocation())}</strong>
-        </article>
-        <article>
-          <span>Tracked items</span>
-          <strong>{trackedAssetsAtLocation(selectedLocationId).length}</strong>
-        </article>
-        <article>
-          <span>Stock units</span>
-          <strong>{totalStockAtLocation(selectedLocationId)}</strong>
-        </article>
-        <article>
-          <span>Stock lines</span>
-          <strong>{stockLevelsAtLocation(selectedLocationId).length}</strong>
-        </article>
-        <article>
-          <span>Responsible</span>
-          <strong>{responsibleLabel(selectedLocation()?.responsible_user_id ?? null)}</strong>
-        </article>
-        <article>
-          <span>State</span>
-          <strong>{selectedLocation()?.is_active ? 'active' : 'inactive'}</strong>
-        </article>
+      <div class="detail-tab-bar" aria-label="Location detail sections">
+        <button
+          type="button"
+          class:active-detail-tab={activeLocationDetailTab === 'info'}
+          onclick={() => (activeLocationDetailTab = 'info')}
+        >
+          Info
+        </button>
+        <button
+          type="button"
+          class:active-detail-tab={activeLocationDetailTab === 'extra'}
+          onclick={() => (activeLocationDetailTab = 'extra')}
+        >
+          Extra
+        </button>
       </div>
 
-      <div class="split-detail location-detail-lists">
-        <article class="mini-list">
-          <h3>Stock here</h3>
-          {#each stockLevelsAtLocation(selectedLocationId) as level}
-            <div class="row-card">
-              <strong>{stockAssetName(level.asset_id)}</strong>
-              <span>
-                {level.quantity_total} total / {level.quantity_checked_out} checked out
-              </span>
+      {#if activeLocationDetailTab === 'info'}
+        <form
+          class="asset-edit-form detail-tab-panel"
+          onsubmit={(event) => {
+            event.preventDefault();
+            updateSelectedLocation();
+          }}
+        >
+          <div class="asset-info-layout">
+            <div class="asset-photo-panel compact-photo-panel">
+              <div class="asset-photo-placeholder">
+                <strong>No photo</strong>
+                <span>Location photo support can be added later.</span>
+              </div>
             </div>
-          {:else}
-            <p class="empty">No stock is stored here.</p>
-          {/each}
-        </article>
 
-        <article class="mini-list">
-          <h3>Tracked items here</h3>
-          {#each trackedAssetsAtLocation(selectedLocationId) as asset}
-            <div class="row-card">
-              <strong>{asset.name}</strong>
-              <span
-                >{asset.status.replaceAll('_', ' ')} / {asset.condition.replaceAll('_', ' ')}</span
-              >
-              <button
-                type="button"
-                class="secondary compact"
-                onclick={() => selectAssetDetail(asset.id)}
-                disabled={busy}
-              >
-                View asset
-              </button>
-            </div>
-          {:else}
-            <p class="empty">No tracked items are currently here.</p>
-          {/each}
-        </article>
-      </div>
+            <label class="description-field" aria-label="Location description">
+              <textarea
+                bind:value={locationEditForm.notes}
+                placeholder="What is this place, how do people find it, and what should they know first?"
+              ></textarea>
+            </label>
+          </div>
+
+          <label class="compact-field-row"
+            >Name <input bind:value={locationEditForm.name} required /></label
+          >
+          <label class="compact-field-row"
+            >Address <input bind:value={locationEditForm.address} /></label
+          >
+
+          <div class="button-row compact-button-row">
+            <button type="submit" class="compact" disabled={busy}>Update info</button>
+            <button type="button" class="secondary compact" onclick={closeLocationDetail}>
+              Close
+            </button>
+          </div>
+        </form>
+      {/if}
+
+      {#if activeLocationDetailTab === 'extra'}
+        <div class="detail-tab-panel">
+          <div class="physical-summary-grid">
+            <article>
+              <span>Type</span>
+              <strong>{locationTypeLabel(selectedLocation())}</strong>
+            </article>
+            <article>
+              <span>Tracked items</span>
+              <strong>{trackedAssetsAtLocation(selectedLocationId).length}</strong>
+            </article>
+            <article>
+              <span>Stock units</span>
+              <strong>{totalStockAtLocation(selectedLocationId)}</strong>
+            </article>
+            <article>
+              <span>Stock lines</span>
+              <strong>{stockLevelsAtLocation(selectedLocationId).length}</strong>
+            </article>
+            <article>
+              <span>Responsible</span>
+              <strong>{responsibleLabel(selectedLocation()?.responsible_user_id ?? null)}</strong>
+            </article>
+            <article>
+              <span>State</span>
+              <strong>{selectedLocation()?.is_active ? 'active' : 'inactive'}</strong>
+            </article>
+          </div>
+
+          <div class="split-detail location-detail-lists">
+            <article class="mini-list">
+              <h3>Stock here</h3>
+              {#each stockLevelsAtLocation(selectedLocationId) as level}
+                <div class="row-card">
+                  <strong>{stockAssetName(level.asset_id)}</strong>
+                  <span>
+                    {level.quantity_total} total / {level.quantity_checked_out} checked out
+                  </span>
+                </div>
+              {:else}
+                <p class="empty">No stock is stored here.</p>
+              {/each}
+            </article>
+
+            <article class="mini-list">
+              <h3>Tracked items here</h3>
+              {#each trackedAssetsAtLocation(selectedLocationId) as asset}
+                <div class="row-card">
+                  <strong>{asset.name}</strong>
+                  <span
+                    >{asset.status.replaceAll('_', ' ')} / {asset.condition.replaceAll(
+                      '_',
+                      ' '
+                    )}</span
+                  >
+                  <button
+                    type="button"
+                    class="secondary compact"
+                    onclick={() => selectAssetDetail(asset.id)}
+                    disabled={busy}
+                  >
+                    View asset
+                  </button>
+                </div>
+              {:else}
+                <p class="empty">No tracked items are currently here.</p>
+              {/each}
+            </article>
+          </div>
+        </div>
+      {/if}
     {:else}
       <div class="empty-detail">
         <h2>Select a location</h2>

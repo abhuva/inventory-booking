@@ -296,6 +296,15 @@ export type LocationCreate = {
   type: LocationType;
 };
 
+export type LocationUpdate = {
+  name?: string | null;
+  type?: LocationType | null;
+  address?: string | null;
+  responsible_user_id?: string | null;
+  notes?: string | null;
+  is_active?: boolean | null;
+};
+
 export type AssetCreate = {
   name: string;
   asset_type: AssetType;

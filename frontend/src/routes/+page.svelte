@@ -29,6 +29,7 @@
     type Location,
     type LocationCreate,
     type LocationType,
+    type LocationUpdate,
     type MaintenanceComplete,
     type MaintenanceStart,
     type QrAssign,
@@ -147,6 +148,14 @@
     password: ''
   });
   let locationForm = $state<LocationCreate>({ name: '', type: 'storage' });
+  let locationEditForm = $state<LocationUpdate>({
+    name: '',
+    type: 'storage',
+    address: '',
+    responsible_user_id: null,
+    notes: '',
+    is_active: true
+  });
   let assetForm = $state<AssetCreate>({
     name: '',
     asset_type: 'tracked',
@@ -332,6 +341,7 @@
       selectedAssetEvents = [];
       resetAssetEditForm();
       selectedLocationId = '';
+      resetLocationEditForm('');
       activeTab = 'dashboard';
       message = 'Logged out';
     });
@@ -394,6 +404,21 @@
       locationForm = { name: '', type: 'storage' };
       await loadInventory();
       message = 'Location created';
+    });
+  }
+
+  async function updateSelectedLocation() {
+    await runAction(async () => {
+      if (!selectedLocationId) {
+        throw new Error('Choose a location first.');
+      }
+      await apiPatch<Location>(
+        `/locations/${selectedLocationId}`,
+        emptyStringsToNull(locationEditForm)
+      );
+      await loadInventory();
+      resetLocationEditForm(selectedLocationId);
+      message = 'Location updated';
     });
   }
 
@@ -1071,6 +1096,23 @@
     return locations.find((location) => location.id === selectedLocationId);
   }
 
+  function selectLocationDetail(locationId: string): void {
+    selectedLocationId = locationId;
+    resetLocationEditForm(locationId);
+  }
+
+  function resetLocationEditForm(locationId: string): void {
+    const location = locations.find((entry) => entry.id === locationId);
+    locationEditForm = {
+      name: location?.name ?? '',
+      type: location?.type ?? 'storage',
+      address: location?.address ?? '',
+      responsible_user_id: location?.responsible_user_id ?? null,
+      notes: location?.notes ?? '',
+      is_active: location?.is_active ?? true
+    };
+  }
+
   function stockLevelsAtLocation(locationId: string): StockLevel[] {
     return stockLevels.filter((level) => level.location_id === locationId);
   }
@@ -1280,12 +1322,13 @@
               {selectedLocationId}
               {busy}
               bind:locationForm
+              bind:locationEditForm
               createLocation={() => void createLocation()}
-              selectLocation={(locationId) => {
-                selectedLocationId = locationId;
-              }}
+              {selectLocationDetail}
+              updateSelectedLocation={() => void updateSelectedLocation()}
               closeLocationDetail={() => {
                 selectedLocationId = '';
+                resetLocationEditForm('');
               }}
               {selectedLocation}
               {stockLevelsAtLocation}
