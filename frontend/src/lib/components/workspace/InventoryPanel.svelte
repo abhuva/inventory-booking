@@ -704,7 +704,7 @@
                   disabled={busy}
                   onclick={() => photoInput?.click()}
                 >
-                  {assetImageUrl(selectedAssetId) ? 'Replace photo' : 'Add photo'}
+                  {assetImageUrl(selectedAssetId) ? 'Replace' : 'Add photo'}
                 </button>
                 {#if assetImageUrl(selectedAssetId)}
                   <button
@@ -719,8 +719,7 @@
               </div>
             </div>
 
-            <label class="description-field">
-              Description
+            <label class="description-field" aria-label="Description">
               <textarea
                 bind:value={assetEditForm.description}
                 placeholder="What is this item, what makes it recognizable, and what should people know first?"
@@ -728,18 +727,18 @@
             </label>
           </div>
 
-          <label>Name <input bind:value={assetEditForm.name} required /></label>
-          <div class="split-fields">
-            <label>
-              Mode
-              <input value={selectedAsset()?.asset_type.replaceAll('_', ' ')} disabled />
-            </label>
-            <label>
-              Unit
-              <input value={selectedAsset()?.unit_name ?? 'single unit'} disabled />
-            </label>
-          </div>
-          <label>
+          <label class="compact-field-row"
+            >Name <input bind:value={assetEditForm.name} required /></label
+          >
+          <label class="compact-field-row">
+            Mode
+            <input value={selectedAsset()?.asset_type.replaceAll('_', ' ')} disabled />
+          </label>
+          <label class="compact-field-row">
+            Unit
+            <input value={selectedAsset()?.unit_name ?? 'single unit'} disabled />
+          </label>
+          <label class="compact-field-row">
             Category
             <select bind:value={assetEditForm.category_id}>
               <option value={null}>No category</option>
