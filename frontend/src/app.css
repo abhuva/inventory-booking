@@ -713,6 +713,98 @@ button.secondary {
   margin: 0;
 }
 
+.booking-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(22rem, 0.65fr);
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+}
+
+.booking-calendar-panel,
+.booking-detail-panel {
+  min-width: 0;
+}
+
+.booking-toolbar {
+  display: flex;
+  gap: 0.55rem;
+  align-items: start;
+  justify-content: space-between;
+  margin-bottom: 0.55rem;
+}
+
+.booking-toolbar h2,
+.booking-toolbar p {
+  margin: 0;
+}
+
+.booking-toolbar p {
+  color: #526358;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.booking-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(8rem, 1fr)) auto;
+  gap: 0.35rem;
+  align-items: center;
+  min-width: min(100%, 46rem);
+}
+
+.calendar-shell {
+  overflow: hidden;
+  border: 1px solid #d4d9d1;
+  border-radius: 8px;
+  padding: 0.45rem;
+  background: #fffef8;
+}
+
+.calendar-shell .fc {
+  color: #33443a;
+  font-family: inherit;
+  font-size: 0.78rem;
+}
+
+.calendar-shell .fc-toolbar-title {
+  color: #14211c;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.calendar-shell .fc-button {
+  min-height: 1.8rem;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 0.55rem;
+  background: #254c37;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.calendar-shell .fc-button-primary:not(:disabled).fc-button-active,
+.calendar-shell .fc-button-primary:not(:disabled):active {
+  background: #61713e;
+}
+
+.calendar-shell .fc-scrollgrid,
+.calendar-shell td,
+.calendar-shell th {
+  border-color: #dfe3dc;
+}
+
+.calendar-shell .fc-col-header-cell,
+.calendar-shell .fc-list-day-cushion {
+  background: #f2f3ee;
+}
+
+.calendar-shell .fc-event {
+  border-radius: 5px;
+  padding: 0.08rem 0.16rem;
+  font-weight: 750;
+}
+
 .stock-batch-list h3 {
   margin-top: 0.2rem;
 }
@@ -816,12 +908,14 @@ button.secondary {
   .forms-grid,
   .data-grid,
   .inventory-workspace,
+  .booking-workspace,
   .asset-info-layout,
   .split-detail {
     grid-template-columns: 1fr;
   }
 
-  .inventory-actions {
+  .inventory-actions,
+  .booking-actions {
     grid-template-columns: 1fr;
   }
 

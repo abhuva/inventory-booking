@@ -5,6 +5,7 @@
     AssetCreate,
     AssetStatus,
     AssetUpdate,
+    Availability,
     Category,
     ItemEvent,
     Location,
@@ -31,6 +32,7 @@
   let showAddAsset = $state(false);
   let showMoveAsset = $state(false);
   let showStockAdjust = $state(false);
+  let showReserveAsset = $state(false);
   let activeDetailTab = $state<AssetDetailTab>('info');
   let inventoryLocationFilter = $state('');
   let moveError = $state('');
@@ -62,16 +64,21 @@
     filteredAssets,
     selectedAssetEvents,
     selectedAssetId,
+    availability,
     busy,
     assetForm = $bindable(),
     assetEditForm = $bindable(),
     assetSearch = $bindable(),
+    bookingForm = $bindable(),
     createAsset,
     updateSelectedAsset,
     moveSelectedTrackedAsset,
     moveSelectedStock,
     addSelectedStock,
     removeSelectedStock,
+    previewBooking,
+    createBooking,
+    clearBookingAvailability,
     uploadSelectedAssetImage,
     deleteSelectedAssetImage,
     selectAssetDetail,
@@ -97,12 +104,24 @@
     assetForm: AssetCreate;
     assetEditForm: AssetUpdate;
     assetSearch: string;
+    bookingForm: {
+      title: string;
+      starts_at: string;
+      ends_at: string;
+      asset_id: string;
+      location_id: string;
+      quantity: number;
+    };
+    availability: Availability | null;
     createAsset: () => void;
     updateSelectedAsset: () => void;
     moveSelectedTrackedAsset: (payload: TrackedAssetTransfer) => Promise<boolean>;
     moveSelectedStock: (payload: StockTransfer) => Promise<boolean>;
     addSelectedStock: (locationId: string, quantity: number) => Promise<boolean>;
     removeSelectedStock: (locationId: string, quantity: number) => Promise<boolean>;
+    previewBooking: () => Promise<boolean>;
+    createBooking: () => Promise<boolean>;
+    clearBookingAvailability: () => void;
     uploadSelectedAssetImage: (file: File) => void;
     deleteSelectedAssetImage: () => void;
     selectAssetDetail: (assetId: string) => void;
@@ -119,6 +138,32 @@
   function submitNewAsset() {
     createAsset();
     showAddAsset = false;
+  }
+
+  function openReserveDialog() {
+    const asset = selectedAsset();
+    if (!asset) {
+      return;
+    }
+    const start = new Date();
+    start.setHours(start.getHours() + 1, 0, 0, 0);
+    const end = new Date(start);
+    end.setHours(end.getHours() + 2);
+    bookingForm = {
+      title: `Reserve ${asset.name}`,
+      starts_at: toDateTimeLocalValue(start),
+      ends_at: toDateTimeLocalValue(end),
+      asset_id: asset.id,
+      location_id: asset.asset_type === 'stock' ? defaultBookingLocation(asset.id) : '',
+      quantity: 1
+    };
+    clearBookingAvailability();
+    showReserveAsset = true;
+  }
+
+  async function submitReserve() {
+    const created = await createBooking();
+    showReserveAsset = !created;
   }
 
   function openMoveDialog() {
@@ -269,6 +314,12 @@
     return stockLevels.filter((level) => level.asset_id === assetId);
   }
 
+  function bookableStockLevelsForAsset(assetId: string): StockLevel[] {
+    return stockLevelsForAsset(assetId).filter(
+      (level) => level.location_id !== null && stockLevelAvailable(level) > 0
+    );
+  }
+
   function movableStockLevelsForAsset(assetId: string): StockLevel[] {
     return stockLevelsForAsset(assetId).filter(
       (level) => level.location_id !== null && stockLevelAvailable(level) > 0
@@ -340,6 +391,14 @@
     return level ? stockLevelAvailable(level) : 0;
   }
 
+  function defaultBookingLocation(assetId: string): string {
+    if (inventoryLocationFilter && stockAvailableAtLocation(inventoryLocationFilter) > 0) {
+      return inventoryLocationFilter;
+    }
+    const levels = bookableStockLevelsForAsset(assetId);
+    return levels.length === 1 ? (levels[0].location_id ?? '') : '';
+  }
+
   function showStockMoveSourceSelect(): boolean {
     return !inventoryLocationFilter && movableStockLevelsForAsset(selectedAssetId).length !== 1;
   }
@@ -397,6 +456,11 @@
       return selectedLocationStockAvailable() > 0;
     }
     return stockAvailableForAsset(selectedAssetId) > 0;
+  }
+
+  function toDateTimeLocalValue(date: Date): string {
+    const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+    return offsetDate.toISOString().slice(0, 16);
   }
 
   $effect(() => {
@@ -648,6 +712,14 @@
             >
               {selectedAsset()?.asset_type === 'stock' ? 'Move' : 'Move tracked item'}
             </button>
+            <button
+              type="button"
+              class="secondary compact"
+              disabled={busy}
+              onclick={openReserveDialog}
+            >
+              Reserve
+            </button>
           </div>
         </form>
       {/if}
@@ -858,6 +930,94 @@
     {/if}
   </aside>
 </section>
+
+{#if showReserveAsset && selectedAsset()}
+  <div class="modal-backdrop" role="presentation">
+    <form
+      class="panel modal-panel"
+      aria-label="Reserve asset"
+      onsubmit={(event) => {
+        event.preventDefault();
+        void submitReserve();
+      }}
+    >
+      <div class="detail-header">
+        <div>
+          <p class="eyebrow">{selectedAsset()?.name}</p>
+          <h2>Reserve</h2>
+        </div>
+        <button type="button" class="secondary compact" onclick={() => (showReserveAsset = false)}
+          >Cancel</button
+        >
+      </div>
+
+      <label>Title <input bind:value={bookingForm.title} required /></label>
+      <div class="split-fields">
+        <label>
+          Start
+          <input bind:value={bookingForm.starts_at} type="datetime-local" required />
+        </label>
+        <label>
+          End
+          <input bind:value={bookingForm.ends_at} type="datetime-local" required />
+        </label>
+      </div>
+
+      {#if selectedAsset()?.asset_type === 'stock'}
+        <div class="split-fields">
+          <label>
+            Location
+            <select bind:value={bookingForm.location_id} required>
+              <option value="">Choose location</option>
+              {#each bookableStockLevelsForAsset(selectedAssetId) as level}
+                <option value={level.location_id ?? ''}>
+                  {locationName(level.location_id)} ({stockLevelAvailable(level)} available)
+                </option>
+              {/each}
+            </select>
+          </label>
+          <label>
+            Quantity
+            <input bind:value={bookingForm.quantity} type="number" min="1" required />
+          </label>
+        </div>
+      {:else}
+        <div class="readonly-field">
+          <span>Item</span>
+          <strong>Exact tracked item</strong>
+        </div>
+      {/if}
+
+      {#if availability}
+        <div class:availability-ok={availability.available} class="availability-result">
+          <strong>{availability.available ? 'Available' : 'Conflict'}</strong>
+          {#each availability.lines as line}
+            <span>
+              {line.available
+                ? `available${line.available_quantity === null ? '' : ` (${line.available_quantity})`}`
+                : line.reason}
+            </span>
+          {/each}
+        </div>
+      {/if}
+
+      <div class="button-row">
+        <button type="button" class="secondary" onclick={() => (showReserveAsset = false)}
+          >Cancel</button
+        >
+        <button
+          type="button"
+          class="secondary"
+          disabled={busy}
+          onclick={() => void previewBooking()}
+        >
+          Check availability
+        </button>
+        <button type="submit" disabled={busy}>Create booking</button>
+      </div>
+    </form>
+  </div>
+{/if}
 
 {#if showStockAdjust && selectedAsset()}
   <div class="modal-backdrop" role="presentation">

@@ -234,17 +234,17 @@
   }
 
   async function loadInventory() {
-    [
-      categories,
-      locations,
-      assets,
-      assetImages,
-      stockLevels,
-      bookings,
-      checkouts,
-      returns,
-      qrCodes,
-      users
+    const [
+      loadedCategories,
+      loadedLocations,
+      loadedAssets,
+      loadedAssetImages,
+      loadedStockLevels,
+      bookingSummaries,
+      loadedCheckouts,
+      loadedReturns,
+      loadedQrCodes,
+      loadedUsers
     ] = await Promise.all([
       apiGet<Category[]>('/categories'),
       apiGet<Location[]>('/locations'),
@@ -257,6 +257,18 @@
       currentUser ? apiGet<QrCode[]>('/qr-codes') : Promise.resolve([]),
       currentUser?.role === 'admin' ? apiGet<User[]>('/users') : Promise.resolve([])
     ]);
+    categories = loadedCategories;
+    locations = loadedLocations;
+    assets = loadedAssets;
+    assetImages = loadedAssetImages;
+    stockLevels = loadedStockLevels;
+    checkouts = loadedCheckouts;
+    returns = loadedReturns;
+    qrCodes = loadedQrCodes;
+    users = loadedUsers;
+    bookings = await Promise.all(
+      bookingSummaries.map((booking) => apiGet<Booking>(`/bookings/${booking.id}`))
+    );
   }
 
   async function login() {
@@ -410,15 +422,15 @@
     });
   }
 
-  async function previewBooking() {
-    await runAction(async () => {
+  async function previewBooking(): Promise<boolean> {
+    return await runAction(async () => {
       availability = await apiPost<Availability>('/bookings/availability', buildBookingPayload());
       message = availability.available ? 'Booking is available' : 'Booking has conflicts';
     });
   }
 
-  async function createBooking() {
-    await runAction(async () => {
+  async function createBooking(): Promise<boolean> {
+    return await runAction(async () => {
       const booking = await apiPost<Booking>('/bookings', buildBookingPayload());
       bookingForm = {
         title: '',
@@ -432,6 +444,10 @@
       await loadInventory();
       message = `Booking created: ${booking.title}`;
     });
+  }
+
+  function clearBookingAvailability() {
+    availability = null;
   }
 
   async function createCheckout() {
@@ -1007,8 +1023,9 @@
           bind:bookingForm
           {selectedBookingAsset}
           {assetName}
-          createBooking={() => void createBooking()}
-          previewBooking={() => void previewBooking()}
+          {createBooking}
+          {previewBooking}
+          {clearBookingAvailability}
           {formatDateTime}
         />
       {/if}
@@ -1059,16 +1076,21 @@
           {filteredAssets}
           {selectedAssetEvents}
           {selectedAssetId}
+          {availability}
           {busy}
           bind:assetForm
           bind:assetEditForm
           bind:assetSearch
+          bind:bookingForm
           createAsset={() => void createAsset()}
           updateSelectedAsset={() => void updateSelectedAsset()}
           {moveSelectedTrackedAsset}
           {moveSelectedStock}
           {addSelectedStock}
           {removeSelectedStock}
+          {previewBooking}
+          {createBooking}
+          {clearBookingAvailability}
           uploadSelectedAssetImage={(file) => void uploadSelectedAssetImage(file)}
           deleteSelectedAssetImage={() => void deleteSelectedAssetImage()}
           selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
