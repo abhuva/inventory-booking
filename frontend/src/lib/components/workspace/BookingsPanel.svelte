@@ -148,6 +148,7 @@
         splitArea: { show: true }
       },
       visualMap: {
+        dimension: 2,
         min: 0,
         max: 1,
         calculable: true,
@@ -164,6 +165,7 @@
         {
           type: 'heatmap',
           data: values,
+          encode: { x: 0, y: 1, value: 2 },
           label: {
             show: showHeatmapNumbers,
             formatter(params: { data: [number, number, number, number] }) {
