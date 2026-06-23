@@ -3,6 +3,7 @@
 
   let showAddLocation = $state(false);
   let activeLocationDetailTab = $state<'info' | 'extra'>('info');
+  let locationPhotoInput = $state<HTMLInputElement>();
 
   let {
     locationTypes,
@@ -21,6 +22,9 @@
     totalStockAtLocation,
     responsibleLabel,
     stockAssetName,
+    locationImageUrl,
+    uploadSelectedLocationImage,
+    deleteSelectedLocationImage,
     selectAssetDetail
   }: {
     locationTypes: string[];
@@ -39,6 +43,9 @@
     totalStockAtLocation: (locationId: string) => number;
     responsibleLabel: (id: string | null) => string;
     stockAssetName: (id: string) => string;
+    locationImageUrl: (locationId: string) => string | null;
+    uploadSelectedLocationImage: (file: File) => void;
+    deleteSelectedLocationImage: () => void;
     selectAssetDetail: (assetId: string) => void;
   } = $props();
 
@@ -49,6 +56,16 @@
 
   function locationTypeLabel(location: Location | undefined): string {
     return location ? location.type.replaceAll('_', ' ') : 'unknown';
+  }
+
+  function handleLocationPhotoChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    uploadSelectedLocationImage(file);
+    input.value = '';
   }
 </script>
 
@@ -135,9 +152,45 @@
         >
           <div class="asset-info-layout">
             <div class="asset-photo-panel compact-photo-panel">
-              <div class="asset-photo-placeholder">
-                <strong>No photo</strong>
-                <span>Location photo support can be added later.</span>
+              {#if locationImageUrl(selectedLocationId)}
+                <img
+                  src={locationImageUrl(selectedLocationId) ?? ''}
+                  alt={`Photo of ${selectedLocation()?.name}`}
+                  class="asset-photo"
+                />
+              {:else}
+                <div class="asset-photo-placeholder">
+                  <strong>No photo</strong>
+                  <span>Add a square reference photo.</span>
+                </div>
+              {/if}
+              <div class="asset-photo-actions">
+                <input
+                  bind:this={locationPhotoInput}
+                  class="visually-hidden"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  capture="environment"
+                  onchange={handleLocationPhotoChange}
+                />
+                <button
+                  type="button"
+                  class="micro-button"
+                  disabled={busy}
+                  onclick={() => locationPhotoInput?.click()}
+                >
+                  {locationImageUrl(selectedLocationId) ? 'Replace' : 'Add photo'}
+                </button>
+                {#if locationImageUrl(selectedLocationId)}
+                  <button
+                    type="button"
+                    class="secondary micro-button"
+                    disabled={busy}
+                    onclick={deleteSelectedLocationImage}
+                  >
+                    Delete
+                  </button>
+                {/if}
               </div>
             </div>
 

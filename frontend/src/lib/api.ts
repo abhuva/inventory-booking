@@ -65,6 +65,17 @@ export type Location = {
   is_active: boolean;
 };
 
+export type LocationImage = {
+  id: string;
+  location_id: string;
+  mime_type: string;
+  size_bytes: number;
+  width: number | null;
+  height: number | null;
+  created_by_user_id: string | null;
+  created_at: string;
+};
+
 export type Asset = {
   id: string;
   name: string;

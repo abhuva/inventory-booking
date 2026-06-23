@@ -29,6 +29,7 @@
       SESSION_COOKIE_SECURE: "false"
       SESSION_MAX_AGE_SECONDS: 1209600
       ASSET_UPLOAD_DIR: /app/data/uploads/assets
+      LOCATION_UPLOAD_DIR: /app/data/uploads/locations
     depends_on:
       postgres:
         condition: service_healthy

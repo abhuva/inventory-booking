@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,5 +32,18 @@ class LocationRead(BaseModel):
     responsible_user_id: UUID | None
     notes: str | None
     is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LocationImageRead(BaseModel):
+    id: UUID
+    location_id: UUID
+    mime_type: str
+    size_bytes: int
+    width: int | None
+    height: int | None
+    created_by_user_id: UUID | None
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

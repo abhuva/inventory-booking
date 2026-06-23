@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     session_max_age_seconds: int = 60 * 60 * 24 * 14
     basket_hold_minutes: int = 60
     asset_upload_dir: str = "data/uploads/assets"
+    location_upload_dir: str = "data/uploads/locations"
     asset_image_max_bytes: int = 1_250_000
     cors_origins: str = Field(
         default="http://127.0.0.1:5173,http://localhost:5173",

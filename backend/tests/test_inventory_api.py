@@ -27,7 +27,9 @@ BOOKING_END = BOOKING_START + timedelta(days=3)
 def client(tmp_path: Path) -> Generator[TestClient]:
     settings = get_settings()
     original_upload_dir = settings.asset_upload_dir
+    original_location_upload_dir = settings.location_upload_dir
     settings.asset_upload_dir = str(tmp_path / "asset-uploads")
+    settings.location_upload_dir = str(tmp_path / "location-uploads")
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -78,6 +80,7 @@ def client(tmp_path: Path) -> Generator[TestClient]:
 
     app.dependency_overrides.clear()
     settings.asset_upload_dir = original_upload_dir
+    settings.location_upload_dir = original_location_upload_dir
     asyncio.run(drop_schema())
 
 
@@ -346,6 +349,76 @@ def test_asset_image_upload_rejects_unsupported_content(client: TestClient) -> N
     response = client.post(
         f"/assets/{asset['id']}/image",
         files={"file": ("asset.svg", b"<svg></svg>", "image/svg+xml")},
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+
+
+def test_location_image_upload_fetch_replace_and_delete(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Photo Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    image_bytes = b"RIFF\x18\x00\x00\x00WEBPVP8 " + (b"\x00" * 20)
+
+    upload_response = client.post(
+        f"/locations/{location['id']}/image",
+        files={"file": ("location.webp", image_bytes, "image/webp")},
+        headers=headers,
+    )
+
+    assert upload_response.status_code == 200
+    created = upload_response.json()
+    assert created["location_id"] == location["id"]
+    assert created["mime_type"] == "image/webp"
+    assert created["size_bytes"] == len(image_bytes)
+
+    list_response = client.get("/locations/images", headers=headers)
+    content_response = client.get(f"/locations/{location['id']}/image/content", headers=headers)
+
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["location_id"] == location["id"]
+    assert content_response.status_code == 200
+    assert content_response.headers["content-type"].startswith("image/webp")
+    assert content_response.content == image_bytes
+
+    replacement_bytes = b"\xff\xd8\xff" + (b"\x00" * 24)
+    replace_response = client.post(
+        f"/locations/{location['id']}/image",
+        files={"file": ("location.jpg", replacement_bytes, "image/jpeg")},
+        headers=headers,
+    )
+    replacement_content_response = client.get(
+        f"/locations/{location['id']}/image/content",
+        headers=headers,
+    )
+    delete_response = client.delete(f"/locations/{location['id']}/image", headers=headers)
+    missing_response = client.get(f"/locations/{location['id']}/image", headers=headers)
+    audit_response = client.get("/audit/logs", headers=headers)
+
+    assert replace_response.status_code == 200
+    assert replace_response.json()["mime_type"] == "image/jpeg"
+    assert replacement_content_response.status_code == 200
+    assert replacement_content_response.content == replacement_bytes
+    assert delete_response.status_code == 204
+    assert missing_response.status_code == 404
+    assert any(entry["entity_type"] == "location_image" for entry in audit_response.json())
+
+
+def test_location_image_upload_rejects_unsupported_content(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Rejected Photo Location", "type": "storage"},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        f"/locations/{location['id']}/image",
+        files={"file": ("location.svg", b"<svg></svg>", "image/svg+xml")},
         headers=headers,
     )
 
@@ -737,9 +810,7 @@ def test_cancelled_booking_releases_tracked_asset(client: TestClient) -> None:
     audit_response = client.get("/audit/logs", headers=headers)
 
     assert audit_response.status_code == 200
-    assert any(
-        entry["summary"].startswith("Cancelled booking") for entry in audit_response.json()
-    )
+    assert any(entry["summary"].startswith("Cancelled booking") for entry in audit_response.json())
 
 
 def test_checkout_tracked_booking_updates_asset_and_audit(client: TestClient) -> None:
@@ -1351,6 +1422,7 @@ def test_qr_endpoints_require_session_and_do_not_enumerate(client: TestClient) -
     assert missing_response.status_code == 404
     assert missing_response.json()["detail"] == "QR label not found."
 
+
 def test_basket_hold_blocks_other_user_booking(client: TestClient) -> None:
     admin_headers = login(client)
     tracked_asset = client.post(
@@ -1424,6 +1496,7 @@ def test_confirm_basket_creates_booking_and_clears_active_basket(client: TestCli
     assert confirmed["lines"][0]["asset_id"] == tracked_asset["id"]
     assert active_response.status_code == 200
     assert active_response.json() is None
+
 
 def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: TestClient) -> None:
     headers = login(client)
@@ -1514,6 +1587,7 @@ def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: Te
     assert held_cell["reserved_quantity"] == 0
     assert held_cell["held_quantity"] == 2
     assert held_cell["available_quantity"] == 6
+
 
 def test_availability_days_reports_stock_conflicts(client: TestClient) -> None:
     headers = login(client)

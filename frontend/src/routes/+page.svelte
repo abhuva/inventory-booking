@@ -28,6 +28,7 @@
     type ItemEvent,
     type Location,
     type LocationCreate,
+    type LocationImage,
     type LocationType,
     type LocationUpdate,
     type MaintenanceComplete,
@@ -55,7 +56,7 @@
   import FieldQrPanel from '$lib/components/workspace/FieldQrPanel.svelte';
   import InventoryPanel from '$lib/components/workspace/InventoryPanel.svelte';
   import LocationsPanel from '$lib/components/workspace/LocationsPanel.svelte';
-  import { prepareAssetImage } from '$lib/image';
+  import { prepareAssetImage, prepareInventoryImage } from '$lib/image';
   import WorkspaceTabs from '$lib/components/workspace/WorkspaceTabs.svelte';
   import type { WorkspaceTab, WorkspaceTabDefinition } from '$lib/components/workspace/types';
 
@@ -96,6 +97,7 @@
   let currentUser = $state<User | null>(null);
   let categories = $state<Category[]>([]);
   let locations = $state<Location[]>([]);
+  let locationImages = $state<LocationImage[]>([]);
   let assets = $state<Asset[]>([]);
   let assetImages = $state<AssetImage[]>([]);
   let stockLevels = $state<StockLevel[]>([]);
@@ -281,6 +283,7 @@
     const [
       loadedCategories,
       loadedLocations,
+      loadedLocationImages,
       loadedAssets,
       loadedAssetImages,
       loadedStockLevels,
@@ -293,6 +296,7 @@
     ] = await Promise.all([
       apiGet<Category[]>('/categories'),
       apiGet<Location[]>('/locations'),
+      currentUser ? apiGet<LocationImage[]>('/locations/images') : Promise.resolve([]),
       apiGet<Asset[]>('/assets'),
       currentUser ? apiGet<AssetImage[]>('/assets/images') : Promise.resolve([]),
       apiGet<StockLevel[]>('/stock-levels'),
@@ -305,6 +309,7 @@
     ]);
     categories = loadedCategories;
     locations = loadedLocations;
+    locationImages = loadedLocationImages;
     assets = loadedAssets;
     assetImages = loadedAssetImages;
     stockLevels = loadedStockLevels;
@@ -332,6 +337,7 @@
       await apiPost<void>('/auth/logout');
       currentUser = null;
       assetImages = [];
+      locationImages = [];
       activeBasket = null;
       basketTitle = '';
       basketNotes = '';
@@ -419,6 +425,33 @@
       await loadInventory();
       resetLocationEditForm(selectedLocationId);
       message = 'Location updated';
+    });
+  }
+
+  async function uploadSelectedLocationImage(file: File) {
+    await runAction(async () => {
+      if (!selectedLocationId) {
+        throw new Error('Choose a location first.');
+      }
+      const processed = await prepareInventoryImage(file);
+      const formData = new FormData();
+      formData.append('file', processed);
+      await apiUpload<LocationImage>(`/locations/${selectedLocationId}/image`, formData);
+      await loadInventory();
+      resetLocationEditForm(selectedLocationId);
+      message = 'Location photo updated';
+    });
+  }
+
+  async function deleteSelectedLocationImage() {
+    await runAction(async () => {
+      if (!selectedLocationId) {
+        throw new Error('Choose a location first.');
+      }
+      await apiDelete<void>(`/locations/${selectedLocationId}/image`);
+      await loadInventory();
+      resetLocationEditForm(selectedLocationId);
+      message = 'Location photo deleted';
     });
   }
 
@@ -1092,6 +1125,20 @@
     );
   }
 
+  function locationImageForLocation(locationId: string): LocationImage | undefined {
+    return locationImages.find((image) => image.location_id === locationId);
+  }
+
+  function locationImageUrl(locationId: string): string | null {
+    const image = locationImageForLocation(locationId);
+    if (!image) {
+      return null;
+    }
+    return apiUrl(
+      `/locations/${encodeURIComponent(locationId)}/image/content?v=${encodeURIComponent(image.created_at)}`
+    );
+  }
+
   function selectedLocation(): Location | undefined {
     return locations.find((location) => location.id === selectedLocationId);
   }
@@ -1336,6 +1383,9 @@
               {totalStockAtLocation}
               {responsibleLabel}
               {stockAssetName}
+              {locationImageUrl}
+              uploadSelectedLocationImage={(file) => void uploadSelectedLocationImage(file)}
+              deleteSelectedLocationImage={() => void deleteSelectedLocationImage()}
               selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
             />
           {/if}

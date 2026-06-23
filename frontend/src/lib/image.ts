@@ -2,6 +2,10 @@ const DEFAULT_SIZE = 768;
 const DEFAULT_QUALITY = 0.72;
 
 export async function prepareAssetImage(file: File): Promise<File> {
+  return prepareInventoryImage(file);
+}
+
+export async function prepareInventoryImage(file: File): Promise<File> {
   if (!file.type.startsWith('image/')) {
     throw new Error('Choose an image file.');
   }
