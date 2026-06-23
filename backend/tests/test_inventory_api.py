@@ -393,6 +393,40 @@ def test_create_stock_level_for_stock_asset(client: TestClient) -> None:
     assert event_response.json()[0]["event_type"] == "updated"
 
 
+def test_stock_level_can_be_reduced_to_zero(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Adjustment Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Adjustment Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    stock_level = client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 3,
+        },
+        headers=headers,
+    ).json()
+
+    response = client.patch(
+        f"/stock-levels/{stock_level['id']}",
+        json={"quantity_total": 0},
+        headers=headers,
+    )
+    list_response = client.get("/stock-levels")
+
+    assert response.status_code == 200
+    assert response.json()["quantity_total"] == 0
+    assert not any(entry["id"] == stock_level["id"] for entry in list_response.json())
+
+
 def test_user_can_read_item_events_but_not_audit_logs(client: TestClient) -> None:
     admin_headers = login(client)
     tracked_asset = client.post(

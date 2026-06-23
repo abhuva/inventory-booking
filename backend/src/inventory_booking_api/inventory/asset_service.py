@@ -210,18 +210,41 @@ async def update_stock_level(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stock batch not found.")
     values = payload.model_dump(exclude_unset=True)
     aggregate = await stock_batch_to_read(session, batch)
+    response_override: StockLevelRead | None = None
     if "quantity_total" in values:
-        if values["quantity_total"] is None or values["quantity_total"] <= 0:
+        if values["quantity_total"] is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Stock batch quantity must be positive.",
+                detail="Stock batch quantity is required.",
             )
         checked_out_quantity = aggregate.quantity_checked_out
+        if values["quantity_total"] < checked_out_quantity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Total quantity cannot be lower than checked-out quantity.",
+            )
         available_quantity = values["quantity_total"] - checked_out_quantity
-        if available_quantity <= 0:
+        if available_quantity == 0 and batch.status == AssetStatus.AVAILABLE:
+            response_override = StockLevelRead(
+                id=batch.id,
+                asset_id=batch.asset_id,
+                location_id=batch.location_id,
+                quantity_total=checked_out_quantity,
+                quantity_reserved=0,
+                quantity_checked_out=checked_out_quantity,
+            )
             await session.delete(batch)
-        else:
+        elif batch.status == AssetStatus.AVAILABLE:
             batch.quantity = available_quantity
+        else:
+            response_override = StockLevelRead(
+                id=batch.id,
+                asset_id=batch.asset_id,
+                location_id=batch.location_id,
+                quantity_total=checked_out_quantity,
+                quantity_reserved=0,
+                quantity_checked_out=checked_out_quantity,
+            )
     if "quantity_checked_out" in values:
         checked_out_quantity = values["quantity_checked_out"] or 0
         if checked_out_quantity < 0 or checked_out_quantity >= aggregate.quantity_total:
@@ -267,6 +290,8 @@ async def update_stock_level(
         summary="Updated stock level",
     )
     await session.commit()
+    if response_override is not None:
+        return response_override
     await session.refresh(batch)
     return await stock_batch_to_read(session, batch)
 

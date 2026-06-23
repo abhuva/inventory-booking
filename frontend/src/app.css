@@ -701,6 +701,18 @@ button.secondary {
   gap: 0.55rem;
 }
 
+.stock-scope-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stock-scope-row .field-note {
+  margin: 0;
+}
+
 .stock-batch-list h3 {
   margin-top: 0.2rem;
 }

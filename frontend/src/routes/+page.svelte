@@ -535,6 +535,48 @@
     });
   }
 
+  async function addSelectedStock(locationId: string, quantity: number): Promise<boolean> {
+    const assetId = selectedAssetId;
+    return await runAction(async () => {
+      if (!assetId) {
+        throw new Error('Choose a stock item first.');
+      }
+      await apiPost<StockLevel>('/stock-levels', {
+        asset_id: assetId,
+        location_id: locationId,
+        quantity_total: quantity
+      });
+      await loadInventory();
+      await selectAssetDetail(assetId);
+      message = 'Stock added';
+    });
+  }
+
+  async function removeSelectedStock(locationId: string, quantity: number): Promise<boolean> {
+    const assetId = selectedAssetId;
+    return await runAction(async () => {
+      if (!assetId) {
+        throw new Error('Choose a stock item first.');
+      }
+      const stockLevel = stockLevels.find(
+        (level) => level.asset_id === assetId && level.location_id === locationId
+      );
+      if (!stockLevel) {
+        throw new Error('No stock exists at this location.');
+      }
+      const availableQuantity = stockLevel.quantity_total - stockLevel.quantity_checked_out;
+      if (quantity > availableQuantity) {
+        throw new Error(`Only ${availableQuantity} available at this location.`);
+      }
+      await apiPatch<StockLevel>(`/stock-levels/${stockLevel.id}`, {
+        quantity_total: stockLevel.quantity_total - quantity
+      });
+      await loadInventory();
+      await selectAssetDetail(assetId);
+      message = 'Stock removed';
+    });
+  }
+
   async function changeAssetOperationalState() {
     await runAction(async () => {
       const assetId = assetStateForm.asset_id;
@@ -1035,6 +1077,8 @@
           updateSelectedAsset={() => void updateSelectedAsset()}
           {moveSelectedTrackedAsset}
           {moveSelectedStock}
+          {addSelectedStock}
+          {removeSelectedStock}
           uploadSelectedAssetImage={(file) => void uploadSelectedAssetImage(file)}
           deleteSelectedAssetImage={() => void deleteSelectedAssetImage()}
           selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}

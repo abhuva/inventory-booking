@@ -26,12 +26,17 @@
   ];
   const assetConditions: AssetCondition[] = ['unknown', 'good', 'worn', 'damaged', 'needs_repair'];
   type AssetDetailTab = 'info' | 'unit' | 'stock' | 'extra' | 'history';
+  type StockAdjustMode = 'add' | 'remove';
 
   let showAddAsset = $state(false);
   let showMoveAsset = $state(false);
+  let showStockAdjust = $state(false);
   let activeDetailTab = $state<AssetDetailTab>('info');
   let inventoryLocationFilter = $state('');
   let moveError = $state('');
+  let stockAdjustMode = $state<StockAdjustMode>('add');
+  let stockAdjustAmount = $state(1);
+  let stockAdjustError = $state('');
   let photoInput = $state<HTMLInputElement>();
   let trackedMoveForm = $state<TrackedAssetTransfer>({
     to_location_id: '',
@@ -64,6 +69,8 @@
     updateSelectedAsset,
     moveSelectedTrackedAsset,
     moveSelectedStock,
+    addSelectedStock,
+    removeSelectedStock,
     uploadSelectedAssetImage,
     deleteSelectedAssetImage,
     selectAssetDetail,
@@ -93,6 +100,8 @@
     updateSelectedAsset: () => void;
     moveSelectedTrackedAsset: (payload: TrackedAssetTransfer) => Promise<boolean>;
     moveSelectedStock: (payload: StockTransfer) => Promise<boolean>;
+    addSelectedStock: (locationId: string, quantity: number) => Promise<boolean>;
+    removeSelectedStock: (locationId: string, quantity: number) => Promise<boolean>;
     uploadSelectedAssetImage: (file: File) => void;
     deleteSelectedAssetImage: () => void;
     selectAssetDetail: (assetId: string) => void;
@@ -175,6 +184,35 @@
 
     const moved = await moveSelectedStock(stockMoveForm);
     showMoveAsset = !moved;
+  }
+
+  function openStockAdjustDialog(mode: StockAdjustMode) {
+    stockAdjustMode = mode;
+    stockAdjustAmount = 1;
+    stockAdjustError = '';
+    showStockAdjust = true;
+  }
+
+  async function submitStockAdjust() {
+    stockAdjustError = '';
+    if (!inventoryLocationFilter) {
+      stockAdjustError = 'Choose a location first.';
+      return;
+    }
+    if (!Number.isFinite(stockAdjustAmount) || stockAdjustAmount < 1) {
+      stockAdjustError = 'Amount must be at least 1.';
+      return;
+    }
+    if (stockAdjustMode === 'remove' && stockAdjustAmount > selectedLocationStockAvailable()) {
+      stockAdjustError = `Only ${selectedLocationStockAvailable()} available at this location.`;
+      return;
+    }
+
+    const adjusted =
+      stockAdjustMode === 'add'
+        ? await addSelectedStock(inventoryLocationFilter, stockAdjustAmount)
+        : await removeSelectedStock(inventoryLocationFilter, stockAdjustAmount);
+    showStockAdjust = !adjusted;
   }
 
   function availableHolderUsers(): User[] {
@@ -277,6 +315,20 @@
     return sourceLevel ? stockLevelAvailable(sourceLevel) : 0;
   }
 
+  function selectedLocationStockLevel(): StockLevel | undefined {
+    if (!inventoryLocationFilter) {
+      return undefined;
+    }
+    return stockLevelsForAsset(selectedAssetId).find(
+      (level) => level.location_id === inventoryLocationFilter
+    );
+  }
+
+  function selectedLocationStockAvailable(): number {
+    const level = selectedLocationStockLevel();
+    return level ? stockLevelAvailable(level) : 0;
+  }
+
   function showStockMoveSourceSelect(): boolean {
     return !inventoryLocationFilter && movableStockLevelsForAsset(selectedAssetId).length !== 1;
   }
@@ -323,6 +375,10 @@
 
   function moveDialogTitle(): string {
     return selectedAsset()?.asset_type === 'stock' ? 'Move stock' : 'Move tracked item';
+  }
+
+  function stockAdjustDialogTitle(): string {
+    return stockAdjustMode === 'add' ? 'Add stock' : 'Remove stock';
   }
 
   $effect(() => {
@@ -651,7 +707,29 @@
 
       {#if activeDetailTab === 'stock' && selectedAsset()?.asset_type === 'stock'}
         <div class="detail-tab-panel stock-panel">
-          <p class="field-note">Scope: {stockDetailScopeLabel()}</p>
+          <div class="stock-scope-row">
+            <p class="field-note">Scope: {stockDetailScopeLabel()}</p>
+            {#if inventoryLocationFilter}
+              <div class="button-row compact-button-row">
+                <button
+                  type="button"
+                  class="compact"
+                  disabled={busy}
+                  onclick={() => openStockAdjustDialog('add')}
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  class="secondary compact"
+                  disabled={busy || selectedLocationStockAvailable() < 1}
+                  onclick={() => openStockAdjustDialog('remove')}
+                >
+                  Remove
+                </button>
+              </div>
+            {/if}
+          </div>
 
           <div class="physical-summary-grid">
             <article>
@@ -698,7 +776,9 @@
           </div>
 
           <p class="field-note">
-            Stock movement and new batches are handled in the Locations tab for now.
+            {inventoryLocationFilter
+              ? 'Add, remove, or move stock for the selected location here.'
+              : 'Select a location in the inventory filter to add or remove stock here.'}
           </p>
         </div>
       {/if}
@@ -762,6 +842,74 @@
     {/if}
   </aside>
 </section>
+
+{#if showStockAdjust && selectedAsset() && inventoryLocationFilter}
+  <div class="modal-backdrop" role="presentation">
+    <form
+      class="panel modal-panel"
+      aria-label={stockAdjustDialogTitle()}
+      onsubmit={(event) => {
+        event.preventDefault();
+        void submitStockAdjust();
+      }}
+    >
+      <div class="detail-header">
+        <div>
+          <p class="eyebrow">{selectedAsset()?.name} / {locationName(inventoryLocationFilter)}</p>
+          <h2>{stockAdjustDialogTitle()}</h2>
+        </div>
+        <button
+          type="button"
+          class="secondary compact"
+          onclick={() => {
+            showStockAdjust = false;
+            stockAdjustError = '';
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+
+      {#if stockAdjustError}
+        <p class="notice error">{stockAdjustError}</p>
+      {/if}
+
+      <div class="readonly-field">
+        <span>Current available</span>
+        <strong>{selectedLocationStockAvailable()} {selectedAsset()?.unit_name ?? 'units'}</strong>
+      </div>
+
+      <label>
+        Amount
+        <input
+          bind:value={stockAdjustAmount}
+          type="number"
+          min="1"
+          max={stockAdjustMode === 'remove'
+            ? selectedLocationStockAvailable() || undefined
+            : undefined}
+          required
+        />
+      </label>
+
+      <div class="button-row">
+        <button
+          type="button"
+          class="secondary"
+          onclick={() => {
+            showStockAdjust = false;
+            stockAdjustError = '';
+          }}
+        >
+          Cancel
+        </button>
+        <button type="submit" disabled={busy}>
+          {stockAdjustMode === 'add' ? 'Add' : 'Remove'}
+        </button>
+      </div>
+    </form>
+  </div>
+{/if}
 
 {#if showMoveAsset && selectedAsset()}
   <div class="modal-backdrop" role="presentation">
