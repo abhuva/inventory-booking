@@ -16,6 +16,7 @@
     type AssetUpdate,
     type Booking,
     type BookingCreate,
+    type BookingLineCreate,
     type Category,
     type CategoryCreate,
     type CategoryUpdate,
@@ -73,6 +74,18 @@
     { id: 'field', label: 'Field / QR', description: 'QR labels and quick lookup' },
     { id: 'admin', label: 'Admin', description: 'Users and categories' }
   ];
+
+  type BookingDraftLine = BookingLineCreate & {
+    client_id: string;
+  };
+
+  type BookingDraft = {
+    title: string;
+    starts_at: string;
+    ends_at: string;
+    notes: string;
+    lines: BookingDraftLine[];
+  };
 
   let currentUser = $state<User | null>(null);
   let categories = $state<Category[]>([]);
@@ -142,6 +155,19 @@
     asset_id: '',
     location_id: '',
     quantity: 1
+  });
+  let bookingDraft = $state<BookingDraft>({
+    title: '',
+    starts_at: '',
+    ends_at: '',
+    notes: '',
+    lines: []
+  });
+  let bookingDraftLineForm = $state({
+    asset_id: '',
+    location_id: '',
+    quantity: 1,
+    notes: ''
   });
   let checkoutForm = $state<CheckoutCreate>({
     booking_id: '',
@@ -450,6 +476,85 @@
     availability = null;
   }
 
+  async function previewBookingDraft(): Promise<boolean> {
+    return await runAction(async () => {
+      availability = await apiPost<Availability>(
+        '/bookings/availability',
+        buildBookingDraftPayload()
+      );
+      message = availability.available
+        ? 'Booking bundle is available'
+        : 'Booking bundle has conflicts';
+    });
+  }
+
+  async function createBookingDraft(): Promise<boolean> {
+    return await runAction(async () => {
+      const booking = await apiPost<Booking>('/bookings', buildBookingDraftPayload());
+      resetBookingDraft();
+      availability = null;
+      await loadInventory();
+      message = `Booking created: ${booking.title}`;
+    });
+  }
+
+  function addBookingDraftLine(line: BookingLineCreate): void {
+    bookingDraft.lines = [
+      ...bookingDraft.lines,
+      {
+        ...line,
+        client_id: crypto.randomUUID()
+      }
+    ];
+    availability = null;
+  }
+
+  function addBookingDraftLineFromForm(): void {
+    const asset = assets.find((entry) => entry.id === bookingDraftLineForm.asset_id);
+    if (!asset) {
+      error = 'Choose an asset first.';
+      return;
+    }
+    if (asset.asset_type === 'stock' && !bookingDraftLineForm.location_id) {
+      error = 'Choose a stock source location.';
+      return;
+    }
+    addBookingDraftLine({
+      asset_id: bookingDraftLineForm.asset_id,
+      location_id: asset.asset_type === 'stock' ? bookingDraftLineForm.location_id : null,
+      quantity: asset.asset_type === 'stock' ? bookingDraftLineForm.quantity : null,
+      notes: bookingDraftLineForm.notes || null
+    });
+    bookingDraftLineForm = {
+      asset_id: '',
+      location_id: '',
+      quantity: 1,
+      notes: ''
+    };
+    message = 'Added line to booking bundle';
+  }
+
+  function removeBookingDraftLine(clientId: string): void {
+    bookingDraft.lines = bookingDraft.lines.filter((line) => line.client_id !== clientId);
+    availability = null;
+  }
+
+  function resetBookingDraft(): void {
+    bookingDraft = {
+      title: '',
+      starts_at: '',
+      ends_at: '',
+      notes: '',
+      lines: []
+    };
+    bookingDraftLineForm = {
+      asset_id: '',
+      location_id: '',
+      quantity: 1,
+      notes: ''
+    };
+  }
+
   async function createCheckout() {
     await runAction(async () => {
       const checkout = await apiPost<Checkout>('/checkouts', emptyStringsToNull(checkoutForm));
@@ -745,6 +850,19 @@
     };
   }
 
+  function buildBookingDraftPayload(): BookingCreate {
+    if (!bookingDraft.lines.length) {
+      throw new Error('Add at least one item to the booking bundle.');
+    }
+    return {
+      title: bookingDraft.title,
+      starts_at: new Date(bookingDraft.starts_at).toISOString(),
+      ends_at: new Date(bookingDraft.ends_at).toISOString(),
+      notes: bookingDraft.notes || null,
+      lines: bookingDraft.lines.map(({ client_id: _clientId, ...line }) => line)
+    };
+  }
+
   function visibleTabs(): { id: WorkspaceTab; label: string; description: string }[] {
     return workspaceTabs.filter((tab) => tab.id !== 'admin' || currentUser?.role === 'admin');
   }
@@ -802,6 +920,10 @@
 
   function selectedBookingAsset(): Asset | undefined {
     return assets.find((asset) => asset.id === bookingForm.asset_id);
+  }
+
+  function selectedBookingDraftAsset(): Asset | undefined {
+    return assets.find((asset) => asset.id === bookingDraftLineForm.asset_id);
   }
 
   function selectedAsset(): Asset | undefined {
@@ -1020,11 +1142,15 @@
           {bookings}
           {availability}
           {busy}
-          bind:bookingForm
-          {selectedBookingAsset}
+          bind:bookingDraft
+          bind:bookingDraftLineForm
+          {selectedBookingDraftAsset}
           {assetName}
-          {createBooking}
-          {previewBooking}
+          {createBookingDraft}
+          {previewBookingDraft}
+          {addBookingDraftLineFromForm}
+          {removeBookingDraftLine}
+          {resetBookingDraft}
           {clearBookingAvailability}
           {formatDateTime}
         />
@@ -1082,6 +1208,7 @@
           bind:assetEditForm
           bind:assetSearch
           bind:bookingForm
+          bind:bookingDraft
           createAsset={() => void createAsset()}
           updateSelectedAsset={() => void updateSelectedAsset()}
           {moveSelectedTrackedAsset}
@@ -1090,6 +1217,9 @@
           {removeSelectedStock}
           {previewBooking}
           {createBooking}
+          {addBookingDraftLine}
+          {previewBookingDraft}
+          {createBookingDraft}
           {clearBookingAvailability}
           uploadSelectedAssetImage={(file) => void uploadSelectedAssetImage(file)}
           deleteSelectedAssetImage={() => void deleteSelectedAssetImage()}

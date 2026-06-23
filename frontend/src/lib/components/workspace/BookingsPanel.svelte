@@ -1,6 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Asset, Availability, Booking, BookingLine, Location } from '$lib/api';
+  import type {
+    Asset,
+    Availability,
+    Booking,
+    BookingLine,
+    BookingLineCreate,
+    Location
+  } from '$lib/api';
   import type { Calendar as FullCalendarInstance, EventInput } from '@fullcalendar/core';
 
   let calendarElement = $state<HTMLElement>();
@@ -10,6 +17,7 @@
   let statusFilter = $state('active');
   let assetFilter = $state('');
   let locationFilter = $state('');
+  let calendarMode = $state<'bundle' | 'item'>('bundle');
 
   let {
     assets,
@@ -17,11 +25,15 @@
     bookings,
     availability,
     busy,
-    bookingForm = $bindable(),
-    selectedBookingAsset,
+    bookingDraft = $bindable(),
+    bookingDraftLineForm = $bindable(),
+    selectedBookingDraftAsset,
     assetName,
-    createBooking,
-    previewBooking,
+    createBookingDraft,
+    previewBookingDraft,
+    addBookingDraftLineFromForm,
+    removeBookingDraftLine,
+    resetBookingDraft,
     clearBookingAvailability,
     formatDateTime
   }: {
@@ -30,18 +42,26 @@
     bookings: Booking[];
     availability: Availability | null;
     busy: boolean;
-    bookingForm: {
+    bookingDraft: {
       title: string;
       starts_at: string;
       ends_at: string;
+      notes: string;
+      lines: Array<BookingLineCreate & { client_id: string }>;
+    };
+    bookingDraftLineForm: {
       asset_id: string;
       location_id: string;
       quantity: number;
+      notes: string;
     };
-    selectedBookingAsset: () => Asset | undefined;
+    selectedBookingDraftAsset: () => Asset | undefined;
     assetName: (id: string) => string;
-    createBooking: () => Promise<boolean>;
-    previewBooking: () => Promise<boolean>;
+    createBookingDraft: () => Promise<boolean>;
+    previewBookingDraft: () => Promise<boolean>;
+    addBookingDraftLineFromForm: () => void;
+    removeBookingDraftLine: (clientId: string) => void;
+    resetBookingDraft: () => void;
     clearBookingAvailability: () => void;
     formatDateTime: (value: string) => string;
   } = $props();
@@ -93,12 +113,35 @@
   });
 
   function calendarEvents(): EventInput[] {
-    return bookings.flatMap((booking) => {
-      const lines = booking.lines?.length ? booking.lines : [null];
-      return lines
-        .map((line) => bookingLineEvent(booking, line))
+    if (calendarMode === 'bundle') {
+      return bookings
+        .map((booking) => bookingBundleEvent(booking))
         .filter((event): event is EventInput => event !== null);
-    });
+    }
+    return bookings.flatMap((booking) =>
+      (booking.lines?.length ? booking.lines : [null])
+        .map((line) => bookingLineEvent(booking, line))
+        .filter((event): event is EventInput => event !== null)
+    );
+  }
+
+  function bookingBundleEvent(booking: Booking): EventInput | null {
+    if (!bookingMatchesFilters(booking, null)) {
+      return null;
+    }
+    const lineCount = booking.lines?.length ?? 0;
+    return {
+      id: booking.id,
+      title: `${booking.title} / ${lineCount} ${lineCount === 1 ? 'item' : 'items'}`,
+      start: booking.starts_at,
+      end: booking.ends_at,
+      backgroundColor: bookingColor(booking.status),
+      borderColor: bookingColor(booking.status),
+      extendedProps: {
+        bookingId: booking.id,
+        lineId: null
+      }
+    };
   }
 
   function bookingLineEvent(booking: Booking, line: BookingLine | null): EventInput | null {
@@ -137,11 +180,22 @@
     if (statusFilter !== 'all' && statusFilter !== 'active' && booking.status !== statusFilter) {
       return false;
     }
-    if (assetFilter && line?.asset_id !== assetFilter) {
-      return false;
+    const lines = booking.lines ?? [];
+    if (assetFilter) {
+      const assetMatches = line
+        ? line.asset_id === assetFilter
+        : lines.some((entry) => entry.asset_id === assetFilter);
+      if (!assetMatches) {
+        return false;
+      }
     }
-    if (locationFilter && line?.location_id !== locationFilter) {
-      return false;
+    if (locationFilter) {
+      const locationMatches = line
+        ? line.location_id === locationFilter
+        : lines.some((entry) => entry.location_id === locationFilter);
+      if (!locationMatches) {
+        return false;
+      }
     }
     return true;
   }
@@ -167,6 +221,18 @@
     return selectedBooking()?.lines ?? [];
   }
 
+  function trackedBookingLines(): BookingLine[] {
+    return selectedBookingLines().filter((line) => assetType(line.asset_id) === 'tracked');
+  }
+
+  function stockBookingLines(): BookingLine[] {
+    return selectedBookingLines().filter((line) => assetType(line.asset_id) === 'stock');
+  }
+
+  function assetType(assetId: string): Asset['asset_type'] | 'unknown' {
+    return assets.find((asset) => asset.id === assetId)?.asset_type ?? 'unknown';
+  }
+
   function locationName(id: string | null): string {
     return id === null
       ? 'No location'
@@ -174,13 +240,26 @@
   }
 
   async function submitNewBooking() {
-    const created = await createBooking();
+    const created = await createBookingDraft();
     showNewBooking = !created;
   }
 
   function openNewBooking() {
     clearBookingAvailability();
+    if (!bookingDraft.starts_at || !bookingDraft.ends_at) {
+      const start = new Date();
+      start.setHours(start.getHours() + 1, 0, 0, 0);
+      const end = new Date(start);
+      end.setHours(end.getHours() + 2);
+      bookingDraft.starts_at = toDateTimeLocalValue(start);
+      bookingDraft.ends_at = toDateTimeLocalValue(end);
+    }
     showNewBooking = true;
+  }
+
+  function toDateTimeLocalValue(date: Date): string {
+    const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+    return offsetDate.toISOString().slice(0, 16);
   }
 </script>
 
@@ -192,6 +271,10 @@
         <p>{bookings.length} bookings</p>
       </div>
       <div class="booking-actions">
+        <select bind:value={calendarMode} aria-label="Calendar display mode">
+          <option value="bundle">Bundle view</option>
+          <option value="item">Item view</option>
+        </select>
         <select bind:value={statusFilter} aria-label="Filter bookings by status">
           <option value="active">Active</option>
           <option value="all">All statuses</option>
@@ -247,21 +330,26 @@
       </div>
 
       <article class="mini-list">
-        <h3>Reserved items</h3>
-        {#each selectedBookingLines() as line}
+        <h3>Tracked items</h3>
+        {#each trackedBookingLines() as line}
           <div class="row-card">
             <strong>{assetName(line.asset_id)}</strong>
-            <span>
-              {locationName(line.location_id)}
-              {#if line.quantity}
-                / {line.quantity} requested
-              {:else}
-                / exact item
-              {/if}
-            </span>
+            <span>Exact item</span>
           </div>
         {:else}
-          <p class="empty">No booking lines loaded.</p>
+          <p class="empty">No tracked items in this booking.</p>
+        {/each}
+      </article>
+
+      <article class="mini-list">
+        <h3>Stock items</h3>
+        {#each stockBookingLines() as line}
+          <div class="row-card">
+            <strong>{assetName(line.asset_id)}</strong>
+            <span>{locationName(line.location_id)} / {line.quantity ?? 0} requested</span>
+          </div>
+        {:else}
+          <p class="empty">No stock items in this booking.</p>
         {/each}
       </article>
     {:else}
@@ -292,50 +380,94 @@
           >Cancel</button
         >
       </div>
-      <label>Title <input bind:value={bookingForm.title} required /></label>
+      <label>Title <input bind:value={bookingDraft.title} required /></label>
       <div class="split-fields">
         <label>
           Start
-          <input bind:value={bookingForm.starts_at} type="datetime-local" required />
+          <input bind:value={bookingDraft.starts_at} type="datetime-local" required />
         </label>
         <label>
           End
-          <input bind:value={bookingForm.ends_at} type="datetime-local" required />
+          <input bind:value={bookingDraft.ends_at} type="datetime-local" required />
         </label>
       </div>
-      <div class="split-fields">
-        <label>
-          Asset
-          <select bind:value={bookingForm.asset_id} required>
-            <option value="">Choose asset</option>
-            {#each assets as asset}
-              <option value={asset.id}>{asset.name} / {asset.asset_type}</option>
-            {/each}
-          </select>
-        </label>
-        {#if selectedBookingAsset()?.asset_type === 'stock'}
-          <label>
-            Location
-            <select bind:value={bookingForm.location_id} required>
-              <option value="">Choose location</option>
-              {#each locations as location}
-                <option value={location.id}>{location.name}</option>
-              {/each}
-            </select>
-          </label>
-        {:else}
-          <label>
-            Location
-            <input value="Tracked assets reserve the exact item" disabled />
-          </label>
-        {/if}
+      <label>Notes <textarea bind:value={bookingDraft.notes}></textarea></label>
+
+      <div class="booking-builder">
+        <article class="mini-list">
+          <h3>Add item</h3>
+          <div class="split-fields">
+            <label>
+              Asset
+              <select bind:value={bookingDraftLineForm.asset_id} required>
+                <option value="">Choose asset</option>
+                {#each assets as asset}
+                  <option value={asset.id}>{asset.name} / {asset.asset_type}</option>
+                {/each}
+              </select>
+            </label>
+            {#if selectedBookingDraftAsset()?.asset_type === 'stock'}
+              <label>
+                Location
+                <select bind:value={bookingDraftLineForm.location_id} required>
+                  <option value="">Choose location</option>
+                  {#each locations as location}
+                    <option value={location.id}>{location.name}</option>
+                  {/each}
+                </select>
+              </label>
+            {:else}
+              <label>
+                Location
+                <input value="Tracked assets reserve the exact item" disabled />
+              </label>
+            {/if}
+          </div>
+          {#if selectedBookingDraftAsset()?.asset_type === 'stock'}
+            <label>
+              Quantity
+              <input bind:value={bookingDraftLineForm.quantity} type="number" min="1" required />
+            </label>
+          {/if}
+          <label>Line notes <textarea bind:value={bookingDraftLineForm.notes}></textarea></label>
+          <button
+            type="button"
+            class="compact"
+            disabled={busy}
+            onclick={addBookingDraftLineFromForm}
+          >
+            Add line
+          </button>
+        </article>
+
+        <article class="mini-list">
+          <h3>Bundle lines</h3>
+          {#each bookingDraft.lines as line}
+            <div class="row-card">
+              <strong>{assetName(line.asset_id)}</strong>
+              <span>
+                {locationName(line.location_id ?? null)}
+                {#if line.quantity}
+                  / {line.quantity} requested
+                {:else}
+                  / exact item
+                {/if}
+              </span>
+              <button
+                type="button"
+                class="secondary compact"
+                disabled={busy}
+                onclick={() => removeBookingDraftLine(line.client_id)}
+              >
+                Remove
+              </button>
+            </div>
+          {:else}
+            <p class="empty">No items added yet.</p>
+          {/each}
+        </article>
       </div>
-      {#if selectedBookingAsset()?.asset_type === 'stock'}
-        <label>
-          Quantity
-          <input bind:value={bookingForm.quantity} type="number" min="1" required />
-        </label>
-      {/if}
+
       {#if availability}
         <div class:availability-ok={availability.available} class="availability-result">
           <strong>{availability.available ? 'Available' : 'Conflict'}</strong>
@@ -356,12 +488,17 @@
         <button
           type="button"
           class="secondary"
-          onclick={() => void previewBooking()}
+          onclick={() => void previewBookingDraft()}
           disabled={busy}
         >
           Check availability
         </button>
-        <button type="submit" disabled={busy}>Create booking</button>
+        <button type="button" class="secondary" onclick={resetBookingDraft} disabled={busy}>
+          Clear bundle
+        </button>
+        <button type="submit" disabled={busy || bookingDraft.lines.length === 0}>
+          Create booking
+        </button>
       </div>
     </form>
   </div>

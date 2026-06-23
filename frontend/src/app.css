@@ -746,10 +746,16 @@ button.secondary {
 
 .booking-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(8rem, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(8rem, 1fr)) auto;
   gap: 0.35rem;
   align-items: center;
-  min-width: min(100%, 46rem);
+  min-width: min(100%, 54rem);
+}
+
+.booking-builder {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
 }
 
 .calendar-shell {
@@ -909,6 +915,7 @@ button.secondary {
   .data-grid,
   .inventory-workspace,
   .booking-workspace,
+  .booking-builder,
   .asset-info-layout,
   .split-detail {
     grid-template-columns: 1fr;
