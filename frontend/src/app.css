@@ -1162,6 +1162,22 @@ button.secondary {
   background: #d9e7ef;
 }
 
+.status-booking-reserved {
+  background: #d9e7ef;
+}
+
+.status-booking-cancelled {
+  background: #f9d7cf;
+}
+
+.status-booking-checked_out {
+  background: #f1e5be;
+}
+
+.status-booking-completed {
+  background: #dbeacb;
+}
+
 .asset-edit-form {
   display: grid;
   gap: 0.55rem;

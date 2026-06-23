@@ -239,14 +239,11 @@
   }
 </script>
 
-<section
-  class="booking-workspace heatmap-only-workspace"
-  aria-label="Bookings availability workspace"
->
+<section class="booking-workspace heatmap-only-workspace" aria-label="Stock availability workspace">
   <section class="panel booking-calendar-panel heatmap-panel">
     <div class="booking-toolbar">
       <div>
-        <h2>Availability heatmap</h2>
+        <h2>Stock availability</h2>
         <p>{heatmap?.items.length ?? 0} stock items / {bookings.length} bookings</p>
       </div>
       <div class="booking-actions">

@@ -50,6 +50,7 @@
   } from '$lib/api';
   import AdminPanel from '$lib/components/workspace/AdminPanel.svelte';
   import BasketPanel from '$lib/components/workspace/BasketPanel.svelte';
+  import BookingListPanel from '$lib/components/workspace/BookingListPanel.svelte';
   import BookingsPanel from '$lib/components/workspace/BookingsPanel.svelte';
   import CheckoutPanel from '$lib/components/workspace/CheckoutPanel.svelte';
   import DashboardPanel from '$lib/components/workspace/DashboardPanel.svelte';
@@ -76,7 +77,8 @@
     { id: 'inventory', label: 'Inventory', description: 'Assets, state, and history' },
     { id: 'basket', label: 'Basket', description: 'Temporary held items' },
     { id: 'locations', label: 'Locations', description: 'Spaces, stock, and movement' },
-    { id: 'bookings', label: 'Bookings', description: 'Reservations and availability' },
+    { id: 'stock', label: 'Stock', description: 'Stock availability heatmap' },
+    { id: 'bookings', label: 'Bookings', description: 'Reservation list and details' },
     { id: 'checkout', label: 'Checkout', description: 'Hand out and return equipment' },
     { id: 'field', label: 'Field / QR', description: 'QR labels and quick lookup' },
     { id: 'admin', label: 'Admin', description: 'Users and categories' }
@@ -1390,7 +1392,7 @@
             />
           {/if}
 
-          {#if activeTab === 'bookings'}
+          {#if activeTab === 'stock'}
             <BookingsPanel
               {assets}
               {locations}
@@ -1407,6 +1409,18 @@
               {removeBookingDraftLine}
               {resetBookingDraft}
               {clearBookingAvailability}
+            />
+          {/if}
+
+          {#if activeTab === 'bookings'}
+            <BookingListPanel
+              {bookings}
+              {assets}
+              {users}
+              {assetName}
+              {locationName}
+              {userLabel}
+              {formatDateTime}
             />
           {/if}
 
