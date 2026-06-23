@@ -109,7 +109,7 @@
   }
 
   function selectedStockLevels(): StockLevel[] {
-    return stockLevelsForAsset(selectedAssetId);
+    return visibleStockLevelsForAsset(selectedAssetId);
   }
 
   function selectedStockTotal(): number {
@@ -200,6 +200,10 @@
     return checkedOutQuantity > 0
       ? `${availableQuantity} available / ${checkedOutQuantity} out`
       : `${availableQuantity} available`;
+  }
+
+  function stockDetailScopeLabel(): string {
+    return inventoryLocationFilter ? locationName(inventoryLocationFilter) : 'All locations';
   }
 
   $effect(() => {
@@ -518,6 +522,8 @@
 
       {#if activeDetailTab === 'stock' && selectedAsset()?.asset_type === 'stock'}
         <div class="detail-tab-panel stock-panel">
+          <p class="field-note">Scope: {stockDetailScopeLabel()}</p>
+
           <div class="physical-summary-grid">
             <article>
               <span>Total</span>
@@ -537,7 +543,7 @@
           </div>
 
           <div class="stock-batch-list">
-            <h3>Physical batches</h3>
+            <h3>{inventoryLocationFilter ? 'Physical stock here' : 'Physical batches'}</h3>
             {#each selectedStockLevels() as level}
               <article class="stock-batch-card">
                 <div>
@@ -554,7 +560,11 @@
                 >
               </article>
             {:else}
-              <p class="empty">No stock batches exist for this item yet.</p>
+              <p class="empty">
+                {inventoryLocationFilter
+                  ? 'No stock exists for this item at the selected location.'
+                  : 'No stock batches exist for this item yet.'}
+              </p>
             {/each}
           </div>
 
