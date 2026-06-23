@@ -7,7 +7,7 @@ from inventory_booking_api.core.models import Base, IdMixin, TimestampMixin
 
 
 class QrCode(IdMixin, TimestampMixin, Base):
-    """Opaque QR label that may be assigned to one tracked asset."""
+    """Opaque QR label that may be assigned to one asset."""
 
     __tablename__ = "qr_codes"
 

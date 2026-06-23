@@ -907,6 +907,33 @@ button.secondary {
   margin: 0;
 }
 
+.qr-panel {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.qr-preview {
+  display: grid;
+  place-items: center;
+  min-height: 17rem;
+  border: 1px solid #d4d9d1;
+  border-radius: 10px;
+  background: #fffef8;
+}
+
+.qr-preview svg {
+  width: min(17rem, 100%);
+  height: auto;
+}
+
+.qr-placeholder {
+  min-height: 15rem;
+}
+
+.qr-detail-copy h3 {
+  margin: 0 0 0.35rem;
+}
+
 .booking-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(22rem, 0.65fr);

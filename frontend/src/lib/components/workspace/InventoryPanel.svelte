@@ -1,5 +1,6 @@
 <script lang="ts">
   import AvailabilityDatePicker from './AvailabilityDatePicker.svelte';
+  import { downloadSvg, renderQrSvg, safeFilename } from '$lib/qr';
   import type {
     Asset,
     AssetCondition,
@@ -9,6 +10,7 @@
     Category,
     ItemEvent,
     Location,
+    QrCode,
     StockLevel,
     StockTransfer,
     TrackedAssetTransfer,
@@ -26,7 +28,7 @@
     'retired'
   ];
   const assetConditions: AssetCondition[] = ['unknown', 'good', 'worn', 'damaged', 'needs_repair'];
-  type AssetDetailTab = 'info' | 'unit' | 'stock' | 'extra' | 'history';
+  type AssetDetailTab = 'info' | 'unit' | 'stock' | 'extra' | 'qr' | 'history';
   type StockAdjustMode = 'add' | 'remove';
 
   let showAddAsset = $state(false);
@@ -36,6 +38,8 @@
   let showDatePicker = $state(false);
   let dateSelectionAccepted = $state(false);
   let activeDetailTab = $state<AssetDetailTab>('info');
+  let qrSvg = $state('');
+  let qrError = $state('');
   let inventoryLocationFilter = $state('');
   let moveError = $state('');
   let stockAdjustMode = $state<StockAdjustMode>('add');
@@ -66,6 +70,7 @@
     filteredAssets,
     selectedAssetEvents,
     selectedAssetId,
+    qrCodes,
     busy,
     assetForm = $bindable(),
     assetEditForm = $bindable(),
@@ -82,6 +87,7 @@
     clearBookingAvailability,
     uploadSelectedAssetImage,
     deleteSelectedAssetImage,
+    generateSelectedAssetQr,
     selectAssetDetail,
     closeAssetDetail,
     selectedAsset,
@@ -90,6 +96,8 @@
     holderLabel,
     userLabel,
     assetImageUrl,
+    qrCodeForAsset,
+    qrScanUrl,
     formatDateTime
   }: {
     assets: Asset[];
@@ -101,6 +109,7 @@
     filteredAssets: Asset[];
     selectedAssetEvents: ItemEvent[];
     selectedAssetId: string;
+    qrCodes: QrCode[];
     busy: boolean;
     assetForm: AssetCreate;
     assetEditForm: AssetUpdate;
@@ -136,6 +145,7 @@
     clearBookingAvailability: () => void;
     uploadSelectedAssetImage: (file: File) => void;
     deleteSelectedAssetImage: () => void;
+    generateSelectedAssetQr: () => void;
     selectAssetDetail: (assetId: string) => void;
     closeAssetDetail: () => void;
     selectedAsset: () => Asset | undefined;
@@ -144,6 +154,8 @@
     holderLabel: (id: string | null) => string;
     userLabel: (id: string | null) => string;
     assetImageUrl: (assetId: string) => string | null;
+    qrCodeForAsset: (assetId: string) => QrCode | undefined;
+    qrScanUrl: (token: string) => string;
     formatDateTime: (value: string) => string;
   } = $props();
 
@@ -489,6 +501,18 @@
     return stockAvailableForAsset(selectedAssetId) > 0;
   }
 
+  function selectedAssetQr(): QrCode | undefined {
+    return selectedAssetId ? qrCodeForAsset(selectedAssetId) : undefined;
+  }
+
+  function downloadSelectedAssetQr(): void {
+    const asset = selectedAsset();
+    if (!asset || !qrSvg) {
+      return;
+    }
+    downloadSvg(`qr-${safeFilename(asset.name) || 'asset'}.svg`, qrSvg);
+  }
+
   function toDateTimeLocalValue(date: Date): string {
     const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
     return offsetDate.toISOString().slice(0, 16);
@@ -520,6 +544,24 @@
     if (activeDetailTab === 'stock' && asset.asset_type !== 'stock') {
       activeDetailTab = 'unit';
     }
+  });
+
+  $effect(() => {
+    const qrCode = selectedAssetQr();
+    const renderKey = `${activeDetailTab}:${selectedAssetId}:${qrCode?.token ?? ''}:${qrCodes.length}`;
+    void renderKey;
+    qrSvg = '';
+    qrError = '';
+    if (activeDetailTab !== 'qr' || !qrCode) {
+      return;
+    }
+    renderQrSvg(qrScanUrl(qrCode.token))
+      .then((svg) => {
+        qrSvg = svg;
+      })
+      .catch((caught: unknown) => {
+        qrError = caught instanceof Error ? caught.message : 'Could not render QR code.';
+      });
   });
 </script>
 
@@ -657,6 +699,13 @@
           onclick={() => (activeDetailTab = 'extra')}
         >
           Extra
+        </button>
+        <button
+          type="button"
+          class:active-detail-tab={activeDetailTab === 'qr'}
+          onclick={() => (activeDetailTab = 'qr')}
+        >
+          QR
         </button>
         <button
           type="button"
@@ -941,6 +990,57 @@
           </label>
           <button type="submit" class="compact" disabled={busy}>Update extra</button>
         </form>
+      {/if}
+
+      {#if activeDetailTab === 'qr'}
+        <div class="detail-tab-panel qr-panel">
+          <div class="qr-preview">
+            {#if selectedAssetQr() && qrSvg}
+              {@html qrSvg}
+            {:else}
+              <div class="asset-photo-placeholder qr-placeholder">
+                <strong>No QR code</strong>
+                <span>Generate a QR code for this asset.</span>
+              </div>
+            {/if}
+          </div>
+
+          <div class="qr-detail-copy">
+            <h3>{selectedAsset()?.name}</h3>
+            {#if selectedAssetQr()}
+              <p class="field-note">
+                Scanning this QR will open this asset once scan routing exists.
+              </p>
+            {:else}
+              <p class="field-note">
+                No QR code exists for this asset yet. Generate one and download the SVG for
+                printing.
+              </p>
+            {/if}
+            {#if qrError}
+              <p class="notice error">{qrError}</p>
+            {/if}
+          </div>
+
+          <div class="button-row compact-button-row">
+            <button
+              type="button"
+              class="compact"
+              disabled={busy || Boolean(selectedAssetQr())}
+              onclick={generateSelectedAssetQr}
+            >
+              Generate QR code
+            </button>
+            <button
+              type="button"
+              class="secondary compact"
+              disabled={!selectedAssetQr() || !qrSvg}
+              onclick={downloadSelectedAssetQr}
+            >
+              Download SVG
+            </button>
+          </div>
+        </div>
       {/if}
 
       {#if activeDetailTab === 'history'}

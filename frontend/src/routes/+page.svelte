@@ -1,4 +1,5 @@
-﻿<script lang="ts">
+<script lang="ts">
+  import { PUBLIC_APP_BASE_URL } from '$env/static/public';
   import {
     ApiError,
     apiDelete,
@@ -497,6 +498,17 @@
       await loadInventory();
       await selectAssetDetail(selectedAssetId);
       message = 'Asset photo deleted';
+    });
+  }
+
+  async function generateSelectedAssetQr() {
+    await runAction(async () => {
+      if (!selectedAssetId) {
+        throw new Error('Choose an asset first.');
+      }
+      await apiPost<QrCode>(`/assets/${selectedAssetId}/qr`);
+      await loadInventory();
+      message = 'QR code ready';
     });
   }
 
@@ -1103,6 +1115,14 @@
     );
   }
 
+  function qrCodeForAsset(assetId: string): QrCode | undefined {
+    return qrCodes.find((qrCode) => qrCode.asset_id === assetId);
+  }
+
+  function qrScanUrl(token: string): string {
+    return `${PUBLIC_APP_BASE_URL.replace(/\/$/, '')}/qr/${encodeURIComponent(token)}`;
+  }
+
   function locationImageForLocation(locationId: string): LocationImage | undefined {
     return locationImages.find((image) => image.location_id === locationId);
   }
@@ -1435,6 +1455,7 @@
               {filteredAssets}
               {selectedAssetEvents}
               {selectedAssetId}
+              {qrCodes}
               {busy}
               bind:assetForm
               bind:assetEditForm
@@ -1451,6 +1472,7 @@
               {clearBookingAvailability}
               uploadSelectedAssetImage={(file) => void uploadSelectedAssetImage(file)}
               deleteSelectedAssetImage={() => void deleteSelectedAssetImage()}
+              generateSelectedAssetQr={() => void generateSelectedAssetQr()}
               selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
               closeAssetDetail={() => {
                 selectedAssetId = '';
@@ -1463,6 +1485,8 @@
               {holderLabel}
               {userLabel}
               {assetImageUrl}
+              {qrCodeForAsset}
+              {qrScanUrl}
               {formatDateTime}
             />
           {/if}

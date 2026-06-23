@@ -48,22 +48,23 @@ async def assign_qr_code(
     asset = await session.get(Asset, payload.asset_id)
     if asset is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Asset does not exist.")
-    if asset.asset_type != AssetType.TRACKED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="QR labels can only be assigned to tracked assets.",
-        )
-    unit = await get_primary_tracked_unit(session, asset.id)
-    if unit is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tracked asset has no physical unit.",
-        )
-    if unit.status in (AssetStatus.RETIRED, AssetStatus.LOST):
+    if asset.status in (AssetStatus.RETIRED, AssetStatus.LOST):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Asset in status {unit.status.value} cannot receive a QR label.",
+            detail=f"Asset in status {asset.status.value} cannot receive a QR label.",
         )
+    if asset.asset_type == AssetType.TRACKED:
+        unit = await get_primary_tracked_unit(session, asset.id)
+        if unit is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tracked asset has no physical unit.",
+            )
+        if unit.status in (AssetStatus.RETIRED, AssetStatus.LOST):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Asset in status {unit.status.value} cannot receive a QR label.",
+            )
     existing_assignment = await get_qr_code_by_asset(session, asset.id)
     if existing_assignment is not None and existing_assignment.id != qr_code.id:
         raise HTTPException(
@@ -93,6 +94,28 @@ async def assign_qr_code(
     await session.commit()
     await session.refresh(qr_code)
     return qr_code
+
+
+async def get_qr_code_for_asset(session: AsyncSession, asset_id: UUID) -> QrCode | None:
+    return await get_qr_code_by_asset(session, asset_id)
+
+
+async def ensure_qr_code_for_asset(session: AsyncSession, asset: Asset, actor: User) -> QrCode:
+    existing_assignment = await get_qr_code_by_asset(session, asset.id)
+    if existing_assignment is not None:
+        return existing_assignment
+
+    qr_code = await create_qr_code(
+        session,
+        QrCodeCreate(label=asset.name, notes="Created from asset detail."),
+        actor,
+    )
+    return await assign_qr_code(
+        session,
+        qr_code.token,
+        QrAssign(asset_id=asset.id, notes="Assigned from asset detail."),
+        actor,
+    )
 
 
 async def resolve_qr_code(session: AsyncSession, token: str) -> QrResolveRead:

@@ -44,6 +44,8 @@ from inventory_booking_api.inventory.asset_service import (
     update_asset,
     update_stock_level,
 )
+from inventory_booking_api.qr.schemas import QrCodeRead
+from inventory_booking_api.qr.service import ensure_qr_code_for_asset, get_qr_code_for_asset
 from inventory_booking_api.users.models import User
 
 asset_router = APIRouter(prefix="/assets", tags=["assets"])
@@ -95,6 +97,33 @@ async def get_asset_image_endpoint(
     if image is None:
         raise_not_found("Asset image")
     return image
+
+
+@asset_router.get("/{asset_id}/qr", response_model=QrCodeRead)
+async def get_asset_qr_endpoint(
+    asset_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> QrCodeRead:
+    asset = await get_asset(session, asset_id)
+    if asset is None:
+        raise_not_found("Asset")
+    qr_code = await get_qr_code_for_asset(session, asset.id)
+    if qr_code is None:
+        raise_not_found("QR label")
+    return qr_code
+
+
+@asset_router.post("/{asset_id}/qr", response_model=QrCodeRead)
+async def ensure_asset_qr_endpoint(
+    asset_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> QrCodeRead:
+    asset = await get_asset(session, asset_id)
+    if asset is None:
+        raise_not_found("Asset")
+    return await ensure_qr_code_for_asset(session, asset, current_user)
 
 
 @asset_router.get("/{asset_id}/image/content")

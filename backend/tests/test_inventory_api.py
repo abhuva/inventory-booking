@@ -1372,7 +1372,7 @@ def test_qr_create_assign_and_resolve_tracked_asset(client: TestClient) -> None:
     assert event_response.json()[0]["event_type"] == "qr_assigned"
 
 
-def test_qr_assignment_rejects_stock_asset(client: TestClient) -> None:
+def test_qr_assignment_accepts_stock_asset(client: TestClient) -> None:
     headers = login(client)
     stock_asset = client.post(
         "/assets",
@@ -1387,7 +1387,37 @@ def test_qr_assignment_rejects_stock_asset(client: TestClient) -> None:
         headers=headers,
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 200
+    assert response.json()["asset_id"] == stock_asset["id"]
+
+
+def test_asset_qr_endpoint_creates_and_returns_existing_qr(client: TestClient) -> None:
+    headers = login(client)
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Asset QR Stock Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+
+    missing_response = client.get(f"/assets/{stock_asset['id']}/qr", headers=headers)
+    create_response = client.post(f"/assets/{stock_asset['id']}/qr", headers=headers)
+    second_create_response = client.post(f"/assets/{stock_asset['id']}/qr", headers=headers)
+    get_response = client.get(f"/assets/{stock_asset['id']}/qr", headers=headers)
+    event_response = client.get(
+        "/audit/item-events",
+        params={"asset_id": stock_asset["id"]},
+        headers=headers,
+    )
+
+    assert missing_response.status_code == 404
+    assert create_response.status_code == 200
+    assert create_response.json()["asset_id"] == stock_asset["id"]
+    assert len(create_response.json()["token"]) >= 24
+    assert second_create_response.status_code == 200
+    assert second_create_response.json()["id"] == create_response.json()["id"]
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == create_response.json()["id"]
+    assert event_response.json()[0]["event_type"] == "qr_assigned"
 
 
 def test_qr_assignment_rejects_lost_asset(client: TestClient) -> None:
