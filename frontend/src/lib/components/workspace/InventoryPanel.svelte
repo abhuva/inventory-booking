@@ -35,6 +35,7 @@
   let inventoryLocationFilter = $state('');
   let moveError = $state('');
   let stockAdjustMode = $state<StockAdjustMode>('add');
+  let stockAdjustLocationId = $state('');
   let stockAdjustAmount = $state(1);
   let stockAdjustError = $state('');
   let photoInput = $state<HTMLInputElement>();
@@ -188,6 +189,7 @@
 
   function openStockAdjustDialog(mode: StockAdjustMode) {
     stockAdjustMode = mode;
+    stockAdjustLocationId = inventoryLocationFilter;
     stockAdjustAmount = 1;
     stockAdjustError = '';
     showStockAdjust = true;
@@ -195,7 +197,7 @@
 
   async function submitStockAdjust() {
     stockAdjustError = '';
-    if (!inventoryLocationFilter) {
+    if (!stockAdjustLocationId) {
       stockAdjustError = 'Choose a location first.';
       return;
     }
@@ -203,15 +205,18 @@
       stockAdjustError = 'Amount must be at least 1.';
       return;
     }
-    if (stockAdjustMode === 'remove' && stockAdjustAmount > selectedLocationStockAvailable()) {
-      stockAdjustError = `Only ${selectedLocationStockAvailable()} available at this location.`;
+    if (
+      stockAdjustMode === 'remove' &&
+      stockAdjustAmount > stockAvailableAtLocation(stockAdjustLocationId)
+    ) {
+      stockAdjustError = `Only ${stockAvailableAtLocation(stockAdjustLocationId)} available at this location.`;
       return;
     }
 
     const adjusted =
       stockAdjustMode === 'add'
-        ? await addSelectedStock(inventoryLocationFilter, stockAdjustAmount)
-        : await removeSelectedStock(inventoryLocationFilter, stockAdjustAmount);
+        ? await addSelectedStock(stockAdjustLocationId, stockAdjustAmount)
+        : await removeSelectedStock(stockAdjustLocationId, stockAdjustAmount);
     showStockAdjust = !adjusted;
   }
 
@@ -325,7 +330,13 @@
   }
 
   function selectedLocationStockAvailable(): number {
-    const level = selectedLocationStockLevel();
+    return inventoryLocationFilter ? stockAvailableAtLocation(inventoryLocationFilter) : 0;
+  }
+
+  function stockAvailableAtLocation(locationId: string): number {
+    const level = stockLevelsForAsset(selectedAssetId).find(
+      (entry) => entry.location_id === locationId
+    );
     return level ? stockLevelAvailable(level) : 0;
   }
 
@@ -379,6 +390,13 @@
 
   function stockAdjustDialogTitle(): string {
     return stockAdjustMode === 'add' ? 'Add stock' : 'Remove stock';
+  }
+
+  function canRemoveStock(): boolean {
+    if (inventoryLocationFilter) {
+      return selectedLocationStockAvailable() > 0;
+    }
+    return stockAvailableForAsset(selectedAssetId) > 0;
   }
 
   $effect(() => {
@@ -709,26 +727,24 @@
         <div class="detail-tab-panel stock-panel">
           <div class="stock-scope-row">
             <p class="field-note">Scope: {stockDetailScopeLabel()}</p>
-            {#if inventoryLocationFilter}
-              <div class="button-row compact-button-row">
-                <button
-                  type="button"
-                  class="compact"
-                  disabled={busy}
-                  onclick={() => openStockAdjustDialog('add')}
-                >
-                  Add
-                </button>
-                <button
-                  type="button"
-                  class="secondary compact"
-                  disabled={busy || selectedLocationStockAvailable() < 1}
-                  onclick={() => openStockAdjustDialog('remove')}
-                >
-                  Remove
-                </button>
-              </div>
-            {/if}
+            <div class="button-row compact-button-row">
+              <button
+                type="button"
+                class="compact"
+                disabled={busy}
+                onclick={() => openStockAdjustDialog('add')}
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                class="secondary compact"
+                disabled={busy || !canRemoveStock()}
+                onclick={() => openStockAdjustDialog('remove')}
+              >
+                Remove
+              </button>
+            </div>
           </div>
 
           <div class="physical-summary-grid">
@@ -778,7 +794,7 @@
           <p class="field-note">
             {inventoryLocationFilter
               ? 'Add, remove, or move stock for the selected location here.'
-              : 'Select a location in the inventory filter to add or remove stock here.'}
+              : 'Add stock here by choosing a location in the popup.'}
           </p>
         </div>
       {/if}
@@ -843,7 +859,7 @@
   </aside>
 </section>
 
-{#if showStockAdjust && selectedAsset() && inventoryLocationFilter}
+{#if showStockAdjust && selectedAsset()}
   <div class="modal-backdrop" role="presentation">
     <form
       class="panel modal-panel"
@@ -855,7 +871,12 @@
     >
       <div class="detail-header">
         <div>
-          <p class="eyebrow">{selectedAsset()?.name} / {locationName(inventoryLocationFilter)}</p>
+          <p class="eyebrow">
+            {selectedAsset()?.name}
+            {#if stockAdjustLocationId}
+              / {locationName(stockAdjustLocationId)}
+            {/if}
+          </p>
           <h2>{stockAdjustDialogTitle()}</h2>
         </div>
         <button
@@ -874,10 +895,32 @@
         <p class="notice error">{stockAdjustError}</p>
       {/if}
 
-      <div class="readonly-field">
-        <span>Current available</span>
-        <strong>{selectedLocationStockAvailable()} {selectedAsset()?.unit_name ?? 'units'}</strong>
-      </div>
+      {#if inventoryLocationFilter}
+        <div class="readonly-field">
+          <span>Location</span>
+          <strong>{locationName(stockAdjustLocationId)}</strong>
+        </div>
+      {:else}
+        <label>
+          Location
+          <select bind:value={stockAdjustLocationId} required>
+            <option value="">Choose location</option>
+            {#each locations as location}
+              <option value={location.id}>{location.name}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
+
+      {#if stockAdjustLocationId}
+        <div class="readonly-field">
+          <span>Current available</span>
+          <strong
+            >{stockAvailableAtLocation(stockAdjustLocationId)}
+            {selectedAsset()?.unit_name ?? 'units'}</strong
+          >
+        </div>
+      {/if}
 
       <label>
         Amount
@@ -886,7 +929,7 @@
           type="number"
           min="1"
           max={stockAdjustMode === 'remove'
-            ? selectedLocationStockAvailable() || undefined
+            ? stockAvailableAtLocation(stockAdjustLocationId) || undefined
             : undefined}
           required
         />
