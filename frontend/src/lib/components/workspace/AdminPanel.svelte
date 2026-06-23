@@ -43,6 +43,7 @@
   } = $props();
 
   let activeAdminTab = $state<AdminTab>('users');
+  let showCreateUser = $state(false);
 
   function startCreateUser(): void {
     userCreateForm = {
@@ -59,6 +60,7 @@
       is_active: true,
       password: ''
     };
+    showCreateUser = true;
   }
 
   function selectUser(user: User): void {
@@ -194,44 +196,11 @@
             </div>
           </form>
         {:else}
-          <div class="detail-header asset-detail-header">
-            <div>
-              <h2>Create user</h2>
-              <p>Add a local account for this tool.</p>
-            </div>
+          <div class="empty-detail">
+            <h2>No user selected</h2>
+            <p>Click a row in the table to view and edit user information.</p>
+            <button type="button" class="compact" onclick={startCreateUser}>Add user</button>
           </div>
-
-          <form
-            class="admin-detail-form"
-            onsubmit={(event) => {
-              event.preventDefault();
-              createUser();
-            }}
-          >
-            <label>Email <input bind:value={userCreateForm.email} type="email" required /></label>
-            <label>Name <input bind:value={userCreateForm.display_name} required /></label>
-            <div class="split-fields">
-              <label>
-                Role
-                <select bind:value={userCreateForm.role}>
-                  <option value="user">user</option>
-                  <option value="admin">admin</option>
-                </select>
-              </label>
-              <label
-                >Password <input
-                  bind:value={userCreateForm.password}
-                  type="password"
-                  required
-                /></label
-              >
-            </div>
-            <label class="checkbox-label">
-              <input bind:checked={userCreateForm.is_active} type="checkbox" />
-              Active
-            </label>
-            <button type="submit" class="compact" disabled={busy}>Create user</button>
-          </form>
         {/if}
       </section>
     </div>
@@ -326,3 +295,56 @@
     </div>
   {/if}
 </section>
+
+{#if showCreateUser}
+  <div class="modal-backdrop" role="presentation">
+    <form
+      class="panel modal-panel"
+      aria-label="Create user"
+      onsubmit={(event) => {
+        event.preventDefault();
+        createUser();
+        showCreateUser = false;
+      }}
+    >
+      <div class="detail-header asset-detail-header">
+        <div>
+          <h2>Create user</h2>
+          <p>Add a local account for this tool.</p>
+        </div>
+        <button
+          type="button"
+          class="secondary micro-button"
+          onclick={() => (showCreateUser = false)}
+        >
+          Close
+        </button>
+      </div>
+
+      <label>Email <input bind:value={userCreateForm.email} type="email" required /></label>
+      <label>Name <input bind:value={userCreateForm.display_name} required /></label>
+      <div class="split-fields">
+        <label>
+          Role
+          <select bind:value={userCreateForm.role}>
+            <option value="user">user</option>
+            <option value="admin">admin</option>
+          </select>
+        </label>
+        <label
+          >Password <input bind:value={userCreateForm.password} type="password" required /></label
+        >
+      </div>
+      <label class="checkbox-label">
+        <input bind:checked={userCreateForm.is_active} type="checkbox" />
+        Active
+      </label>
+      <div class="button-row compact-button-row">
+        <button type="submit" class="compact" disabled={busy}>Create user</button>
+        <button type="button" class="secondary compact" onclick={() => (showCreateUser = false)}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+{/if}
