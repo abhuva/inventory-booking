@@ -1130,28 +1130,6 @@
     return stockLevelsAtLocation(locationId).reduce((sum, level) => sum + level.quantity_total, 0);
   }
 
-  function selectCategoryForEdit(event: Event) {
-    const categoryId = (event.currentTarget as HTMLSelectElement).value;
-    const category = categories.find((entry) => entry.id === categoryId);
-    categoryUpdateForm = {
-      category_id: categoryId,
-      name: category?.name ?? '',
-      description: category?.description ?? ''
-    };
-  }
-
-  function selectUserForEdit(event: Event) {
-    const userId = (event.currentTarget as HTMLSelectElement).value;
-    const user = users.find((entry) => entry.id === userId);
-    userUpdateForm = {
-      user_id: userId,
-      display_name: user?.display_name ?? '',
-      role: user?.role ?? 'user',
-      is_active: user?.is_active ?? true,
-      password: ''
-    };
-  }
-
   function bookingTitle(id: string): string {
     return bookings.find((booking) => booking.id === id)?.title ?? 'Unknown booking';
   }
@@ -1301,8 +1279,6 @@
               updateCategory={() => void updateCategory()}
               createUser={() => void createUser()}
               updateUser={() => void updateUser()}
-              {selectCategoryForEdit}
-              {selectUserForEdit}
             />
           {/if}
 

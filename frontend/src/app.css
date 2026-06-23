@@ -366,6 +366,8 @@ button.secondary {
 .forms-grid,
 .data-grid,
 .inventory-workspace,
+.admin-workspace,
+.admin-split-workspace,
 .basket-workspace,
 .booking-workspace {
   height: 100%;
@@ -653,8 +655,42 @@ button.secondary {
   align-items: stretch;
 }
 
+.admin-workspace {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.55rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.admin-tab-bar {
+  grid-template-columns: repeat(2, minmax(5rem, 8rem));
+  justify-content: start;
+  margin-bottom: 0;
+}
+
+.admin-split-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(24rem, 1fr);
+  gap: 0.55rem;
+  min-height: 0;
+}
+
+.admin-detail-panel {
+  display: grid;
+  align-content: start;
+  gap: 0.7rem;
+}
+
+.admin-detail-form {
+  display: grid;
+  gap: 0.6rem;
+}
+
 .inventory-table-panel,
 .inventory-detail-panel,
+.admin-table-panel,
+.admin-detail-panel,
 .basket-table-panel,
 .basket-detail-panel {
   min-width: 0;
@@ -1245,6 +1281,7 @@ button.secondary {
   .forms-grid,
   .data-grid,
   .inventory-workspace,
+  .admin-split-workspace,
   .basket-workspace,
   .booking-workspace,
   .booking-builder,
