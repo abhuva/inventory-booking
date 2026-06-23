@@ -131,9 +131,16 @@ async def update_asset(
 
 async def list_stock_levels(session: AsyncSession) -> list[StockLevelRead]:
     result = await session.execute(
-        select(StockBatch).order_by(StockBatch.location_id, StockBatch.created_at)
+        select(StockBatch.asset_id, StockBatch.location_id)
+        .distinct()
+        .order_by(StockBatch.location_id)
     )
-    return [await stock_batch_to_read(session, batch) for batch in result.scalars().all()]
+    stock_levels: list[StockLevelRead] = []
+    for asset_id, location_id in result.all():
+        batch = await get_display_stock_batch(session, asset_id, location_id)
+        if batch is not None:
+            stock_levels.append(await stock_batch_to_read(session, batch))
+    return stock_levels
 
 
 async def get_stock_level(session: AsyncSession, stock_level_id: UUID) -> StockLevelRead | None:
@@ -582,7 +589,7 @@ def copy_unit_state_to_asset(asset: Asset, unit: TrackedUnit) -> None:
 async def get_available_stock_batch(
     session: AsyncSession,
     asset_id: UUID,
-    location_id: UUID,
+    location_id: UUID | None,
 ) -> StockBatch | None:
     result = await session.execute(
         select(StockBatch)
@@ -600,9 +607,20 @@ async def get_available_stock_batch(
 async def get_mergeable_stock_batch(
     session: AsyncSession,
     asset_id: UUID,
-    location_id: UUID,
+    location_id: UUID | None,
 ) -> StockBatch | None:
     return await get_available_stock_batch(session, asset_id, location_id)
+
+
+async def get_display_stock_batch(
+    session: AsyncSession,
+    asset_id: UUID,
+    location_id: UUID | None,
+) -> StockBatch | None:
+    available_batch = await get_available_stock_batch(session, asset_id, location_id)
+    if available_batch is not None:
+        return available_batch
+    return await get_checked_out_stock_batch(session, asset_id, location_id)
 
 
 async def stock_batch_to_read(session: AsyncSession, batch: StockBatch) -> StockLevelRead:
@@ -611,11 +629,12 @@ async def stock_batch_to_read(session: AsyncSession, batch: StockBatch) -> Stock
         batch.asset_id,
         batch.location_id,
     )
+    available_quantity = batch.quantity if batch.status == AssetStatus.AVAILABLE else 0
     return StockLevelRead(
         id=batch.id,
         asset_id=batch.asset_id,
         location_id=batch.location_id,
-        quantity_total=batch.quantity + checked_out_quantity,
+        quantity_total=available_quantity + checked_out_quantity,
         quantity_reserved=0,
         quantity_checked_out=checked_out_quantity,
     )

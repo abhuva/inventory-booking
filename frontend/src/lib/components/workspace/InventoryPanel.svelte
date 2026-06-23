@@ -27,6 +27,7 @@
 
   let showAddAsset = $state(false);
   let activeDetailTab = $state<AssetDetailTab>('info');
+  let inventoryLocationFilter = $state('');
   let photoInput = $state<HTMLInputElement>();
 
   let {
@@ -108,7 +109,7 @@
   }
 
   function selectedStockLevels(): StockLevel[] {
-    return stockLevels.filter((level) => level.asset_id === selectedAssetId);
+    return stockLevelsForAsset(selectedAssetId);
   }
 
   function selectedStockTotal(): number {
@@ -117,6 +118,88 @@
 
   function selectedStockCheckedOut(): number {
     return selectedStockLevels().reduce((sum, level) => sum + level.quantity_checked_out, 0);
+  }
+
+  function displayedAssets(): Asset[] {
+    return filteredAssets.filter((asset) => assetMatchesLocation(asset));
+  }
+
+  function assetMatchesLocation(asset: Asset): boolean {
+    if (!inventoryLocationFilter) {
+      return true;
+    }
+    if (asset.asset_type === 'tracked') {
+      return asset.current_location_id === inventoryLocationFilter;
+    }
+    return stockLevelsForAsset(asset.id).some(
+      (level) => level.location_id === inventoryLocationFilter && level.quantity_total > 0
+    );
+  }
+
+  function stockLevelsForAsset(assetId: string): StockLevel[] {
+    return stockLevels.filter((level) => level.asset_id === assetId);
+  }
+
+  function visibleStockLevelsForAsset(assetId: string): StockLevel[] {
+    const levels = stockLevelsForAsset(assetId);
+    if (!inventoryLocationFilter) {
+      return levels;
+    }
+    return levels.filter((level) => level.location_id === inventoryLocationFilter);
+  }
+
+  function stockTotalForAsset(assetId: string): number {
+    return visibleStockLevelsForAsset(assetId).reduce(
+      (sum, level) => sum + level.quantity_total,
+      0
+    );
+  }
+
+  function stockCheckedOutForAsset(assetId: string): number {
+    return visibleStockLevelsForAsset(assetId).reduce(
+      (sum, level) => sum + level.quantity_checked_out,
+      0
+    );
+  }
+
+  function stockAvailableForAsset(assetId: string): number {
+    return stockTotalForAsset(assetId) - stockCheckedOutForAsset(assetId);
+  }
+
+  function assetLocationSummary(asset: Asset): string {
+    if (asset.asset_type === 'tracked') {
+      return locationName(asset.current_location_id);
+    }
+    if (inventoryLocationFilter) {
+      return locationName(inventoryLocationFilter);
+    }
+    const levels = stockLevelsForAsset(asset.id).filter((level) => level.quantity_total > 0);
+    if (levels.length === 0) {
+      return 'No stock location';
+    }
+    if (levels.length === 1) {
+      return locationName(levels[0].location_id);
+    }
+    return `${levels.length} locations`;
+  }
+
+  function assetHolderSummary(asset: Asset): string {
+    if (asset.asset_type === 'tracked') {
+      return holderLabel(asset.current_holder_user_id);
+    }
+    const checkedOutQuantity = stockCheckedOutForAsset(asset.id);
+    return checkedOutQuantity > 0 ? `${checkedOutQuantity} checked out` : 'Stock item';
+  }
+
+  function assetStatusSummary(asset: Asset): string {
+    if (asset.asset_type === 'tracked') {
+      return asset.status.replaceAll('_', ' ');
+    }
+    const checkedOutQuantity = stockCheckedOutForAsset(asset.id);
+    const availableQuantity = stockAvailableForAsset(asset.id);
+    return checkedOutQuantity > 0
+      ? `${availableQuantity} available / ${checkedOutQuantity} out`
+      : `${availableQuantity} available`;
   }
 
   $effect(() => {
@@ -138,7 +221,7 @@
     <div class="inventory-toolbar">
       <div>
         <h2>Assets</h2>
-        <p>{filteredAssets.length} of {assets.length} shown</p>
+        <p>{displayedAssets().length} of {assets.length} shown</p>
       </div>
       <div class="inventory-actions">
         <input
@@ -147,11 +230,20 @@
           placeholder="Search assets..."
           type="search"
         />
+        <select bind:value={inventoryLocationFilter} aria-label="Filter assets by location">
+          <option value="">All locations</option>
+          {#each locations as location}
+            <option value={location.id}>{location.name}</option>
+          {/each}
+        </select>
         <button
           type="button"
           class="secondary compact"
-          disabled={!assetSearch}
-          onclick={() => (assetSearch = '')}
+          disabled={!assetSearch && !inventoryLocationFilter}
+          onclick={() => {
+            assetSearch = '';
+            inventoryLocationFilter = '';
+          }}
         >
           Clear
         </button>
@@ -172,7 +264,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each filteredAssets as asset}
+          {#each displayedAssets() as asset}
             <tr
               class:selected-row={asset.id === selectedAssetId}
               onclick={() => selectAssetDetail(asset.id)}
@@ -186,22 +278,26 @@
                   {/if}
                   <div>
                     <strong>{asset.name}</strong>
-                    <span>{asset.asset_type} · {categoryName(asset.category_id)}</span>
+                    <span>{asset.asset_type} / {categoryName(asset.category_id)}</span>
                   </div>
                 </div>
               </td>
-              <td
-                ><span class={`status-pill status-${asset.status}`}
-                  >{asset.status.replaceAll('_', ' ')}</span
-                ></td
-              >
-              <td>{locationName(asset.current_location_id)}</td>
-              <td>{holderLabel(asset.current_holder_user_id)}</td>
+              <td>
+                <span
+                  class={asset.asset_type === 'tracked'
+                    ? `status-pill status-${asset.status}`
+                    : 'status-pill status-stock'}
+                >
+                  {assetStatusSummary(asset)}
+                </span>
+              </td>
+              <td>{assetLocationSummary(asset)}</td>
+              <td>{assetHolderSummary(asset)}</td>
             </tr>
           {:else}
             <tr>
               <td colspan="4" class="empty">
-                {assets.length ? 'No assets match this search.' : 'No assets yet.'}
+                {assets.length ? 'No assets match this filter.' : 'No assets yet.'}
               </td>
             </tr>
           {/each}
@@ -449,7 +545,7 @@
                   <span>
                     {level.quantity_total - level.quantity_checked_out} available
                     {#if level.quantity_checked_out}
-                      · {level.quantity_checked_out} checked out
+                      / {level.quantity_checked_out} checked out
                     {/if}
                   </span>
                 </div>

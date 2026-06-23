@@ -78,3 +78,10 @@ StockBatch
 - [x] Run `.\scripts\check.ps1`.
 - [x] Apply migration locally.
 - [x] Commit refactor.
+
+### 8. Location-Oriented Inventory UX
+
+- [x] Add Inventory tab location filter.
+- [x] Show tracked items by current unit location.
+- [x] Show stock items when a stock batch exists at the selected location.
+- [x] Summarize stock rows by logical asset/location stock levels.
