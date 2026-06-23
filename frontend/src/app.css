@@ -268,11 +268,13 @@ button.secondary {
 }
 
 .compact-button-row {
+  flex-wrap: nowrap;
   justify-content: flex-start;
 }
 
 .compact-button-row button {
   flex: 0 1 auto;
+  width: auto;
 }
 
 .readonly-field {
