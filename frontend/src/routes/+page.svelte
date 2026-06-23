@@ -52,7 +52,6 @@
   import BasketPanel from '$lib/components/workspace/BasketPanel.svelte';
   import BookingListPanel from '$lib/components/workspace/BookingListPanel.svelte';
   import BookingsPanel from '$lib/components/workspace/BookingsPanel.svelte';
-  import CheckoutPanel from '$lib/components/workspace/CheckoutPanel.svelte';
   import DashboardPanel from '$lib/components/workspace/DashboardPanel.svelte';
   import FieldQrPanel from '$lib/components/workspace/FieldQrPanel.svelte';
   import InventoryPanel from '$lib/components/workspace/InventoryPanel.svelte';
@@ -79,7 +78,6 @@
     { id: 'locations', label: 'Locations', description: 'Spaces, stock, and movement' },
     { id: 'stock', label: 'Stock', description: 'Stock availability heatmap' },
     { id: 'bookings', label: 'Bookings', description: 'Reservation list and details' },
-    { id: 'checkout', label: 'Checkout', description: 'Hand out and return equipment' },
     { id: 'field', label: 'Field / QR', description: 'QR labels and quick lookup' },
     { id: 'admin', label: 'Admin', description: 'Users and categories' }
   ];
@@ -114,7 +112,6 @@
   let selectedAssetEvents = $state<ItemEvent[]>([]);
   let selectedLocationId = $state('');
   let resolvedQr = $state<QrResolve | null>(null);
-  let selectedReturnCheckout = $state<Checkout | null>(null);
   let availability = $state<Availability | null>(null);
   let email = $state('admin@example.org');
   let password = $state('change-this-password');
@@ -191,18 +188,6 @@
   });
   let basketTitle = $state('');
   let basketNotes = $state('');
-  let checkoutForm = $state<CheckoutCreate>({
-    booking_id: '',
-    condition_out: 'unknown',
-    notes: ''
-  });
-  let returnForm = $state({
-    checkout_id: '',
-    checkout_line_id: '',
-    quantity: 1,
-    condition_in: 'unknown' as const,
-    notes: ''
-  });
   let trackedTransferForm = $state<TrackedAssetTransfer & { asset_id: string }>({
     asset_id: '',
     to_location_id: '',
@@ -730,48 +715,39 @@
     };
   }
 
-  async function createCheckout() {
-    await runAction(async () => {
-      const checkout = await apiPost<Checkout>('/checkouts', emptyStringsToNull(checkoutForm));
-      checkoutForm = { booking_id: '', condition_out: 'unknown', notes: '' };
+  async function createCheckoutForBooking(
+    bookingId: string,
+    conditionOut: CheckoutCreate['condition_out'],
+    notes: string
+  ): Promise<boolean> {
+    return await runAction(async () => {
+      const checkout = await apiPost<Checkout>(
+        '/checkouts',
+        emptyStringsToNull({
+          booking_id: bookingId,
+          condition_out: conditionOut,
+          notes
+        })
+      );
       await loadInventory();
       message = `Checkout created for booking ${bookingTitle(checkout.booking_id)}`;
     });
   }
 
-  async function loadCheckoutForReturn() {
-    await runAction(async () => {
-      selectedReturnCheckout = await apiGet<Checkout>(`/checkouts/${returnForm.checkout_id}`);
-      returnForm.checkout_line_id = selectedReturnCheckout.lines?.[0]?.id ?? '';
+  async function loadCheckoutDetails(checkoutId: string): Promise<Checkout | null> {
+    let checkout: Checkout | null = null;
+    const loaded = await runAction(async () => {
+      checkout = await apiGet<Checkout>(`/checkouts/${checkoutId}`);
       message = 'Checkout lines loaded';
     });
+    return loaded ? checkout : null;
   }
 
-  async function createReturn() {
-    await runAction(async () => {
-      const payload: ReturnCreate = {
-        checkout_id: returnForm.checkout_id,
-        notes: returnForm.notes || null,
-        lines: [
-          {
-            checkout_line_id: returnForm.checkout_line_id,
-            quantity: selectedReturnLine()?.quantity === null ? null : returnForm.quantity,
-            condition_in: returnForm.condition_in,
-            notes: returnForm.notes || null
-          }
-        ]
-      };
+  async function createReturnForCheckout(payload: ReturnCreate): Promise<boolean> {
+    return await runAction(async () => {
       await apiPost<ReturnRecord>('/returns', payload);
-      returnForm = {
-        checkout_id: '',
-        checkout_line_id: '',
-        quantity: 1,
-        condition_in: 'unknown',
-        notes: ''
-      };
-      selectedReturnCheckout = null;
       await loadInventory();
-      message = 'Return recorded';
+      message = 'Check in recorded';
     });
   }
 
@@ -1174,10 +1150,6 @@
     return stockLevelsAtLocation(locationId).reduce((sum, level) => sum + level.quantity_total, 0);
   }
 
-  function selectedReturnLine() {
-    return selectedReturnCheckout?.lines?.find((line) => line.id === returnForm.checkout_line_id);
-  }
-
   function selectCategoryForEdit(event: Event) {
     const categoryId = (event.currentTarget as HTMLSelectElement).value;
     const category = categories.find((entry) => entry.id === categoryId);
@@ -1204,10 +1176,6 @@
     return bookings.find((booking) => booking.id === id)?.title ?? 'Unknown booking';
   }
 
-  function checkoutLabel(checkout: Checkout): string {
-    return `${bookingTitle(checkout.booking_id)} · ${checkout.status}`;
-  }
-
   function userLabel(id: string | null): string {
     if (id === null) {
       return 'system';
@@ -1224,12 +1192,6 @@
 
   function responsibleLabel(id: string | null): string {
     return id === null ? 'No responsible person' : userLabel(id);
-  }
-
-  function returnLineLabel(line: NonNullable<Checkout['lines']>[number]): string {
-    const quantityText = line.quantity === null ? 'tracked item' : `${line.quantity} total`;
-    const returnedText = line.quantity_returned > 0 ? `, ${line.quantity_returned} returned` : '';
-    return `${assetName(line.asset_id)} · ${quantityText}${returnedText}`;
   }
 
   function formatDateTime(value: string): string {
@@ -1415,12 +1377,17 @@
           {#if activeTab === 'bookings'}
             <BookingListPanel
               {bookings}
+              {checkouts}
               {assets}
               {users}
+              {busy}
               {assetName}
               {locationName}
               {userLabel}
               {formatDateTime}
+              {createCheckoutForBooking}
+              {loadCheckoutDetails}
+              {createReturnForCheckout}
             />
           {/if}
 
@@ -1438,25 +1405,6 @@
               {assetName}
               {locationName}
               {formatDateTime}
-            />
-          {/if}
-
-          {#if activeTab === 'checkout'}
-            <CheckoutPanel
-              {bookings}
-              {checkouts}
-              {returns}
-              {busy}
-              bind:checkoutForm
-              bind:returnForm
-              {selectedReturnCheckout}
-              createCheckout={() => void createCheckout()}
-              createReturn={() => void createReturn()}
-              loadCheckoutForReturn={() => void loadCheckoutForReturn()}
-              {selectedReturnLine}
-              {checkoutLabel}
-              {returnLineLabel}
-              {bookingTitle}
             />
           {/if}
 

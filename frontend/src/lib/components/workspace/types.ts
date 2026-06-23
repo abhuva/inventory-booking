@@ -5,7 +5,6 @@ export type WorkspaceTab =
   | 'locations'
   | 'stock'
   | 'bookings'
-  | 'checkout'
   | 'field'
   | 'admin';
 
