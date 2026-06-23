@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -65,6 +66,19 @@ class AssetRead(BaseModel):
     asset_tag: str | None
     replacement_value: Decimal | None
     notes: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AssetImageRead(BaseModel):
+    id: UUID
+    asset_id: UUID
+    mime_type: str
+    size_bytes: int
+    width: int | None
+    height: int | None
+    created_by_user_id: UUID | None
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

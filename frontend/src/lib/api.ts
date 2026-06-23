@@ -83,6 +83,17 @@ export type Asset = {
   notes: string | null;
 };
 
+export type AssetImage = {
+  id: string;
+  asset_id: string;
+  mime_type: string;
+  size_bytes: number;
+  width: number | null;
+  height: number | null;
+  created_by_user_id: string | null;
+  created_at: string;
+};
+
 export type StockLevel = {
   id: string;
   asset_id: string;
@@ -346,9 +357,21 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
+export async function apiDelete<T>(path: string): Promise<T> {
+  return request<T>(path, { method: 'DELETE' });
+}
+
+export async function apiUpload<T>(path: string, body: FormData): Promise<T> {
+  return request<T>(path, { method: 'POST', body });
+}
+
+export function apiUrl(path: string): string {
+  return `${PUBLIC_API_BASE_URL}${path}`;
+}
+
 async function request<T>(path: string, init: RequestInit): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body !== undefined) {
+  if (init.body !== undefined && !(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
 

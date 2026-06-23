@@ -15,6 +15,7 @@ Internal inventory and equipment booking system for small teams managing physica
 - `frontend/src/lib/components/workspace/`: desktop workspace tab components.
 - `docs/`: project notes, workflow docs, and task tracking.
 - `docker-compose.yml`: local service topology for PostgreSQL, API, and web app.
+- `asset-uploads` Docker volume: processed asset photos stored outside Postgres.
 - `inventory-booking-tool-proposal.md`: original product and architecture proposal.
 
 ## Prerequisites
@@ -70,6 +71,10 @@ Apply database migrations after the containers are running:
 ```powershell
 .\scripts\migrate.ps1
 ```
+
+Asset photos are stored as processed derivatives only. The frontend crops/resizes/compresses
+camera or file input before upload, and the backend stores the result in the Docker
+`asset-uploads` volume while keeping metadata in PostgreSQL.
 
 Seed the first admin account:
 
@@ -152,6 +157,11 @@ Current endpoints:
 - `POST /assets`
 - `GET /assets/{asset_id}`
 - `PATCH /assets/{asset_id}`
+- `GET /assets/images`
+- `GET /assets/{asset_id}/image`
+- `GET /assets/{asset_id}/image/content`
+- `POST /assets/{asset_id}/image`
+- `DELETE /assets/{asset_id}/image`
 - `POST /assets/{asset_id}/transfer`
 - `POST /assets/{asset_id}/maintenance/start`
 - `POST /assets/{asset_id}/maintenance/complete`

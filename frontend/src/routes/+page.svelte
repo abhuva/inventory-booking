@@ -1,12 +1,16 @@
 ﻿<script lang="ts">
   import {
     ApiError,
+    apiDelete,
     apiGet,
     apiPatch,
     apiPost,
+    apiUpload,
+    apiUrl,
     type Availability,
     type Asset,
     type AssetCreate,
+    type AssetImage,
     type AssetStateChange,
     type AssetType,
     type AssetUpdate,
@@ -45,6 +49,7 @@
   import FieldQrPanel from '$lib/components/workspace/FieldQrPanel.svelte';
   import InventoryPanel from '$lib/components/workspace/InventoryPanel.svelte';
   import LocationsPanel from '$lib/components/workspace/LocationsPanel.svelte';
+  import { prepareAssetImage } from '$lib/image';
   import WorkspaceTabs from '$lib/components/workspace/WorkspaceTabs.svelte';
   import type { WorkspaceTab, WorkspaceTabDefinition } from '$lib/components/workspace/types';
 
@@ -73,6 +78,7 @@
   let categories = $state<Category[]>([]);
   let locations = $state<Location[]>([]);
   let assets = $state<Asset[]>([]);
+  let assetImages = $state<AssetImage[]>([]);
   let stockLevels = $state<StockLevel[]>([]);
   let bookings = $state<Booking[]>([]);
   let checkouts = $state<Checkout[]>([]);
@@ -227,18 +233,29 @@
   }
 
   async function loadInventory() {
-    [categories, locations, assets, stockLevels, bookings, checkouts, returns, qrCodes, users] =
-      await Promise.all([
-        apiGet<Category[]>('/categories'),
-        apiGet<Location[]>('/locations'),
-        apiGet<Asset[]>('/assets'),
-        apiGet<StockLevel[]>('/stock-levels'),
-        apiGet<Booking[]>('/bookings'),
-        apiGet<Checkout[]>('/checkouts'),
-        apiGet<ReturnRecord[]>('/returns'),
-        currentUser ? apiGet<QrCode[]>('/qr-codes') : Promise.resolve([]),
-        currentUser?.role === 'admin' ? apiGet<User[]>('/users') : Promise.resolve([])
-      ]);
+    [
+      categories,
+      locations,
+      assets,
+      assetImages,
+      stockLevels,
+      bookings,
+      checkouts,
+      returns,
+      qrCodes,
+      users
+    ] = await Promise.all([
+      apiGet<Category[]>('/categories'),
+      apiGet<Location[]>('/locations'),
+      apiGet<Asset[]>('/assets'),
+      currentUser ? apiGet<AssetImage[]>('/assets/images') : Promise.resolve([]),
+      apiGet<StockLevel[]>('/stock-levels'),
+      apiGet<Booking[]>('/bookings'),
+      apiGet<Checkout[]>('/checkouts'),
+      apiGet<ReturnRecord[]>('/returns'),
+      currentUser ? apiGet<QrCode[]>('/qr-codes') : Promise.resolve([]),
+      currentUser?.role === 'admin' ? apiGet<User[]>('/users') : Promise.resolve([])
+    ]);
   }
 
   async function login() {
@@ -253,6 +270,7 @@
     await runAction(async () => {
       await apiPost<void>('/auth/logout');
       currentUser = null;
+      assetImages = [];
       qrCodes = [];
       users = [];
       selectedAssetId = '';
@@ -352,6 +370,33 @@
       await loadInventory();
       await selectAssetDetail(selectedAssetId);
       message = 'Asset updated';
+    });
+  }
+
+  async function uploadSelectedAssetImage(file: File) {
+    await runAction(async () => {
+      if (!selectedAssetId) {
+        throw new Error('Choose an asset first.');
+      }
+      const processed = await prepareAssetImage(file);
+      const formData = new FormData();
+      formData.append('file', processed);
+      await apiUpload<AssetImage>(`/assets/${selectedAssetId}/image`, formData);
+      await loadInventory();
+      await selectAssetDetail(selectedAssetId);
+      message = 'Asset photo updated';
+    });
+  }
+
+  async function deleteSelectedAssetImage() {
+    await runAction(async () => {
+      if (!selectedAssetId) {
+        throw new Error('Choose an asset first.');
+      }
+      await apiDelete<void>(`/assets/${selectedAssetId}/image`);
+      await loadInventory();
+      await selectAssetDetail(selectedAssetId);
+      message = 'Asset photo deleted';
     });
   }
 
@@ -671,6 +716,20 @@
     return assets.find((asset) => asset.id === selectedAssetId);
   }
 
+  function assetImageForAsset(assetId: string): AssetImage | undefined {
+    return assetImages.find((image) => image.asset_id === assetId);
+  }
+
+  function assetImageUrl(assetId: string): string | null {
+    const image = assetImageForAsset(assetId);
+    if (!image) {
+      return null;
+    }
+    return apiUrl(
+      `/assets/${encodeURIComponent(assetId)}/image/content?v=${encodeURIComponent(image.created_at)}`
+    );
+  }
+
   function selectedLocation(): Location | undefined {
     return locations.find((location) => location.id === selectedLocationId);
   }
@@ -940,6 +999,8 @@
           bind:assetSearch
           createAsset={() => void createAsset()}
           updateSelectedAsset={() => void updateSelectedAsset()}
+          uploadSelectedAssetImage={(file) => void uploadSelectedAssetImage(file)}
+          deleteSelectedAssetImage={() => void deleteSelectedAssetImage()}
           selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
           closeAssetDetail={() => {
             selectedAssetId = '';
@@ -951,6 +1012,7 @@
           {locationName}
           {holderLabel}
           {userLabel}
+          {assetImageUrl}
           {formatDateTime}
         />
       {/if}

@@ -1,7 +1,16 @@
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, Enum, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from inventory_booking_api.core.models import Base, IdMixin, TimestampMixin
@@ -92,3 +101,22 @@ class StockLevel(IdMixin, TimestampMixin, Base):
     quantity_total: Mapped[int] = mapped_column(nullable=False, default=0)
     quantity_reserved: Mapped[int] = mapped_column(nullable=False, default=0)
     quantity_checked_out: Mapped[int] = mapped_column(nullable=False, default=0)
+
+
+class AssetImage(IdMixin, TimestampMixin, Base):
+    """Stored primary image metadata for one inventory asset."""
+
+    __tablename__ = "asset_images"
+
+    asset_id: Mapped[UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)

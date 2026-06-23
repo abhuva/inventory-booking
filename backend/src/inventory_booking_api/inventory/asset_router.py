@@ -1,14 +1,23 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.errors import raise_not_found
 from inventory_booking_api.core.security import get_current_user
+from inventory_booking_api.inventory.asset_image_service import (
+    delete_asset_image,
+    get_asset_image,
+    list_asset_images,
+    resolve_image_file,
+    store_asset_image,
+)
 from inventory_booking_api.inventory.asset_schemas import (
     AssetCreate,
+    AssetImageRead,
     AssetRead,
     AssetStateChange,
     AssetUpdate,
@@ -57,6 +66,14 @@ async def create_asset_endpoint(
     return await create_asset(session, payload, current_user)
 
 
+@asset_router.get("/images", response_model=list[AssetImageRead])
+async def list_asset_images_endpoint(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> list[AssetImageRead]:
+    return await list_asset_images(session)
+
+
 @asset_router.get("/{asset_id}", response_model=AssetRead)
 async def get_asset_endpoint(
     asset_id: UUID,
@@ -66,6 +83,56 @@ async def get_asset_endpoint(
     if asset is None:
         raise_not_found("Asset")
     return asset
+
+
+@asset_router.get("/{asset_id}/image", response_model=AssetImageRead)
+async def get_asset_image_endpoint(
+    asset_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AssetImageRead:
+    image = await get_asset_image(session, asset_id)
+    if image is None:
+        raise_not_found("Asset image")
+    return image
+
+
+@asset_router.get("/{asset_id}/image/content")
+async def get_asset_image_content_endpoint(
+    asset_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> FileResponse:
+    image = await get_asset_image(session, asset_id)
+    if image is None:
+        raise_not_found("Asset image")
+    return FileResponse(resolve_image_file(image), media_type=image.mime_type)
+
+
+@asset_router.post("/{asset_id}/image", response_model=AssetImageRead)
+async def upload_asset_image_endpoint(
+    asset_id: UUID,
+    file: UploadFile,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AssetImageRead:
+    asset = await get_asset(session, asset_id)
+    if asset is None:
+        raise_not_found("Asset")
+    return await store_asset_image(session, asset, file, current_user)
+
+
+@asset_router.delete("/{asset_id}/image", status_code=204)
+async def delete_asset_image_endpoint(
+    asset_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    asset = await get_asset(session, asset_id)
+    if asset is None:
+        raise_not_found("Asset")
+    await delete_asset_image(session, asset, current_user)
+    return Response(status_code=204)
 
 
 @asset_router.patch(

@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator, Generator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +11,7 @@ from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.security import hash_password
 from inventory_booking_api.main import app
 from inventory_booking_api.models import Base
+from inventory_booking_api.settings import get_settings
 from inventory_booking_api.users.enums import UserRole
 from inventory_booking_api.users.models import User
 
@@ -22,7 +24,10 @@ BOOKING_END = BOOKING_START + timedelta(days=3)
 
 
 @pytest.fixture
-def client() -> Generator[TestClient]:
+def client(tmp_path: Path) -> Generator[TestClient]:
+    settings = get_settings()
+    original_upload_dir = settings.asset_upload_dir
+    settings.asset_upload_dir = str(tmp_path / "asset-uploads")
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -72,6 +77,7 @@ def client() -> Generator[TestClient]:
         yield test_client
 
     app.dependency_overrides.clear()
+    settings.asset_upload_dir = original_upload_dir
     asyncio.run(drop_schema())
 
 
@@ -247,6 +253,75 @@ def test_stock_level_requires_stock_asset(client: TestClient) -> None:
             "location_id": location["id"],
             "quantity_total": 4,
         },
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+
+
+def test_asset_image_upload_fetch_replace_and_delete(client: TestClient) -> None:
+    headers = login(client)
+    asset = client.post(
+        "/assets",
+        json={"name": "Photo Aerial Stand", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    image_bytes = b"RIFF\x18\x00\x00\x00WEBPVP8 " + (b"\x00" * 20)
+
+    upload_response = client.post(
+        f"/assets/{asset['id']}/image",
+        files={"file": ("asset.webp", image_bytes, "image/webp")},
+        headers=headers,
+    )
+
+    assert upload_response.status_code == 200
+    created = upload_response.json()
+    assert created["asset_id"] == asset["id"]
+    assert created["mime_type"] == "image/webp"
+    assert created["size_bytes"] == len(image_bytes)
+
+    list_response = client.get("/assets/images", headers=headers)
+    content_response = client.get(f"/assets/{asset['id']}/image/content", headers=headers)
+
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["asset_id"] == asset["id"]
+    assert content_response.status_code == 200
+    assert content_response.headers["content-type"].startswith("image/webp")
+    assert content_response.content == image_bytes
+
+    replacement_bytes = b"\xff\xd8\xff" + (b"\x00" * 24)
+    replace_response = client.post(
+        f"/assets/{asset['id']}/image",
+        files={"file": ("asset.jpg", replacement_bytes, "image/jpeg")},
+        headers=headers,
+    )
+    replacement_content_response = client.get(
+        f"/assets/{asset['id']}/image/content", headers=headers
+    )
+    delete_response = client.delete(f"/assets/{asset['id']}/image", headers=headers)
+    missing_response = client.get(f"/assets/{asset['id']}/image", headers=headers)
+    audit_response = client.get("/audit/logs", headers=headers)
+
+    assert replace_response.status_code == 200
+    assert replace_response.json()["mime_type"] == "image/jpeg"
+    assert replacement_content_response.status_code == 200
+    assert replacement_content_response.content == replacement_bytes
+    assert delete_response.status_code == 204
+    assert missing_response.status_code == 404
+    assert any(entry["entity_type"] == "asset_image" for entry in audit_response.json())
+
+
+def test_asset_image_upload_rejects_unsupported_content(client: TestClient) -> None:
+    headers = login(client)
+    asset = client.post(
+        "/assets",
+        json={"name": "Rejected Photo Asset", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        f"/assets/{asset['id']}/image",
+        files={"file": ("asset.svg", b"<svg></svg>", "image/svg+xml")},
         headers=headers,
     )
 

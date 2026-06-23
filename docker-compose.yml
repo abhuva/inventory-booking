@@ -28,6 +28,7 @@
       CSRF_COOKIE_NAME: inventory_booking_csrf
       SESSION_COOKIE_SECURE: "false"
       SESSION_MAX_AGE_SECONDS: 1209600
+      ASSET_UPLOAD_DIR: /app/data/uploads/assets
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,6 +37,7 @@
     volumes:
       - ./backend/alembic:/app/alembic
       - ./backend/src:/app/src
+      - asset-uploads:/app/data/uploads
     command: ["uv", "run", "uvicorn", "inventory_booking_api.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
 
   frontend:
@@ -54,3 +56,4 @@
 
 volumes:
   postgres-data:
+  asset-uploads:

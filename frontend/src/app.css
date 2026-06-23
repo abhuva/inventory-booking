@@ -504,6 +504,84 @@ button.secondary {
   font-size: 0.76rem;
 }
 
+.asset-name-cell {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.asset-thumb {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 7px;
+  object-fit: cover;
+  background: #dde4d4;
+}
+
+.asset-thumb-empty {
+  display: grid;
+  place-items: center;
+  padding: 0.2rem;
+  color: #697163;
+  font-size: 0.55rem;
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.asset-photo-panel {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: stretch;
+  margin-bottom: 0.75rem;
+}
+
+.asset-photo,
+.asset-photo-placeholder {
+  width: 9rem;
+  height: 9rem;
+  border: 1px solid #d4d9d1;
+  border-radius: 9px;
+  background: #f2f3ee;
+}
+
+.asset-photo {
+  object-fit: cover;
+}
+
+.asset-photo-placeholder {
+  display: grid;
+  align-content: center;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  color: #526358;
+  text-align: center;
+}
+
+.asset-photo-placeholder strong {
+  color: #33443a;
+}
+
+.asset-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-content: end;
+  align-items: end;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .status-pill {
   display: inline-block;
   border-radius: 999px;

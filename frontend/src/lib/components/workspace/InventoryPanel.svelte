@@ -25,6 +25,7 @@
   const assetConditions: AssetCondition[] = ['unknown', 'good', 'worn', 'damaged', 'needs_repair'];
 
   let showAddAsset = $state(false);
+  let photoInput = $state<HTMLInputElement>();
 
   let {
     assets,
@@ -42,6 +43,8 @@
     assetSearch = $bindable(),
     createAsset,
     updateSelectedAsset,
+    uploadSelectedAssetImage,
+    deleteSelectedAssetImage,
     selectAssetDetail,
     closeAssetDetail,
     selectedAsset,
@@ -49,6 +52,7 @@
     locationName,
     holderLabel,
     userLabel,
+    assetImageUrl,
     formatDateTime
   }: {
     assets: Asset[];
@@ -66,6 +70,8 @@
     assetSearch: string;
     createAsset: () => void;
     updateSelectedAsset: () => void;
+    uploadSelectedAssetImage: (file: File) => void;
+    deleteSelectedAssetImage: () => void;
     selectAssetDetail: (assetId: string) => void;
     closeAssetDetail: () => void;
     selectedAsset: () => Asset | undefined;
@@ -73,6 +79,7 @@
     locationName: (id: string | null) => string;
     holderLabel: (id: string | null) => string;
     userLabel: (id: string | null) => string;
+    assetImageUrl: (assetId: string) => string | null;
     formatDateTime: (value: string) => string;
   } = $props();
 
@@ -86,6 +93,16 @@
       return users;
     }
     return users.some((user) => user.id === currentUser.id) ? users : [currentUser, ...users];
+  }
+
+  function handlePhotoChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    uploadSelectedAssetImage(file);
+    input.value = '';
   }
 </script>
 
@@ -134,8 +151,17 @@
               onclick={() => selectAssetDetail(asset.id)}
             >
               <td>
-                <strong>{asset.name}</strong>
-                <span>{asset.asset_type} · {categoryName(asset.category_id)}</span>
+                <div class="asset-name-cell">
+                  {#if assetImageUrl(asset.id)}
+                    <img src={assetImageUrl(asset.id) ?? ''} alt="" class="asset-thumb" />
+                  {:else}
+                    <span class="asset-thumb asset-thumb-empty">No photo</span>
+                  {/if}
+                  <div>
+                    <strong>{asset.name}</strong>
+                    <span>{asset.asset_type} · {categoryName(asset.category_id)}</span>
+                  </div>
+                </div>
               </td>
               <td
                 ><span class={`status-pill status-${asset.status}`}
@@ -165,6 +191,44 @@
           <h2>{selectedAsset()?.name}</h2>
         </div>
         <button type="button" class="secondary compact" onclick={closeAssetDetail}>Close</button>
+      </div>
+
+      <div class="asset-photo-panel">
+        {#if assetImageUrl(selectedAssetId)}
+          <img
+            src={assetImageUrl(selectedAssetId) ?? ''}
+            alt={`Photo of ${selectedAsset()?.name}`}
+            class="asset-photo"
+          />
+        {:else}
+          <div class="asset-photo-placeholder">
+            <strong>No photo</strong>
+            <span>Add a square reference photo for quick recognition.</span>
+          </div>
+        {/if}
+        <div class="asset-photo-actions">
+          <input
+            bind:this={photoInput}
+            class="visually-hidden"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            capture="environment"
+            onchange={handlePhotoChange}
+          />
+          <button type="button" class="compact" disabled={busy} onclick={() => photoInput?.click()}>
+            {assetImageUrl(selectedAssetId) ? 'Replace photo' : 'Add photo'}
+          </button>
+          {#if assetImageUrl(selectedAssetId)}
+            <button
+              type="button"
+              class="secondary compact"
+              disabled={busy}
+              onclick={deleteSelectedAssetImage}
+            >
+              Delete photo
+            </button>
+          {/if}
+        </div>
       </div>
 
       <form

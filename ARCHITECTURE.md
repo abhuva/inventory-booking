@@ -65,12 +65,17 @@ PostgreSQL is the source of truth for operational data:
 - assets with `tracked` and `stock` modes
 - stock levels per location
 - QR codes
+- asset image metadata
 - bookings and booking lines
 - checkouts and returns
 - item events
 - audit logs
 
 Operational state must not live in Markdown/YAML files.
+
+Asset photo binaries are stored on the backend filesystem in a persistent Docker volume.
+PostgreSQL stores only metadata and the server-generated storage path. The system stores
+processed derivatives only, not original camera files.
 
 ## Initial Domain Boundaries
 
