@@ -190,16 +190,12 @@
             </label>
             <div class="button-row compact-button-row">
               <button type="submit" class="compact" disabled={busy}>Update user</button>
-              <button type="button" class="secondary compact" onclick={startCreateUser}
-                >New user</button
-              >
             </div>
           </form>
         {:else}
           <div class="empty-detail">
             <h2>No user selected</h2>
             <p>Click a row in the table to view and edit user information.</p>
-            <button type="button" class="compact" onclick={startCreateUser}>Add user</button>
           </div>
         {/if}
       </section>
