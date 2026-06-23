@@ -313,19 +313,20 @@ button.secondary {
 }
 
 .tab-bar {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
   margin: 0 0 0.35rem;
 }
 
 .tab-bar button {
   display: grid;
-  min-width: 0;
+  width: auto;
+  min-width: max-content;
   min-height: 2.25rem;
   border: 1px solid #d4d9d1;
   border-radius: 7px;
-  padding: 0.34rem 0.42rem;
+  padding: 0.34rem 0.62rem;
   color: #33443a;
   background: #f9f8f1;
   box-shadow: none;
@@ -339,11 +340,9 @@ button.secondary {
 }
 
 .tab-bar span {
-  overflow: hidden;
   font-weight: 900;
   font-size: 0.78rem;
   line-height: 1;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1232,10 +1231,6 @@ button.secondary {
     grid-template-columns: 1fr;
   }
 
-  .tab-bar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1247,8 +1242,7 @@ button.secondary {
 
 @media (max-width: 560px) {
   .stats-grid,
-  .split-fields,
-  .tab-bar {
+  .split-fields {
     grid-template-columns: 1fr;
   }
 }
