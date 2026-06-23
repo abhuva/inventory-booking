@@ -2,6 +2,11 @@
 
 This document is a first-pass technical note for discussing whether the inventory booking tool can be hosted on an existing server. It is not a final production runbook yet.
 
+Related short notes:
+
+- `docs/it-server-request-note.md`: concise handoff note for IT.
+- `docs/linux-server-access-basics.md`: Windows-to-Linux SSH basics for Marc.
+
 ## What The App Is
 
 Internal web app for a small local team managing inventory, locations, reservations, checkouts, returns, and photos.
@@ -32,7 +37,7 @@ Internet
 Example public URL:
 
 ```text
-https://inventar.example.org
+https://inventar.nica.network
 ```
 
 PostgreSQL should not be public. It should only be reachable from the app/backend on the server.
@@ -108,8 +113,8 @@ Backups should include:
 
 Recommended backup frequency:
 
-- Daily database backup.
-- Daily upload backup, or file-system snapshot if available.
+- weekly database backup.
+- weekly upload backup, or file-system snapshot if available.
 - Keep at least a few older restore points.
 
 Important: a backup plan is only real if restore has been tested once.
