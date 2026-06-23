@@ -69,7 +69,7 @@ StockBatch
 - [x] Keep current Inventory tab working with compatible API shapes.
 - [x] Show tracked state from tracked unit summaries.
 - [x] Show stock state from stock batch summaries.
-- [ ] Later: add dedicated `Units` and `Stock` right-panel tabs.
+- [x] Add dedicated `Unit` and `Stock` right-panel tabs.
 
 ### 7. Verification
 

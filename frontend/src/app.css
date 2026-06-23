@@ -312,7 +312,7 @@ button.secondary {
 
 .detail-tab-bar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(4rem, 1fr));
   gap: 0.3rem;
   margin-bottom: 0.65rem;
 }
@@ -640,6 +640,64 @@ button.secondary {
 .history-panel {
   display: grid;
   gap: 0.65rem;
+}
+
+.physical-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 0.45rem;
+}
+
+.physical-summary-grid article,
+.stock-batch-card {
+  border: 1px solid #d4d9d1;
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+  background: #f7f6ee;
+}
+
+.physical-summary-grid span,
+.stock-batch-card span,
+.field-note {
+  color: #526358;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.physical-summary-grid strong {
+  display: block;
+  margin-top: 0.18rem;
+}
+
+.stock-panel,
+.stock-batch-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.stock-batch-list h3 {
+  margin-top: 0.2rem;
+}
+
+.stock-batch-card {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stock-batch-card strong,
+.stock-batch-card span {
+  display: block;
+}
+
+.stock-quantity {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.field-note {
+  margin: 0;
 }
 
 .visually-hidden {

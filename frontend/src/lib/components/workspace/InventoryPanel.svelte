@@ -23,7 +23,7 @@
     'retired'
   ];
   const assetConditions: AssetCondition[] = ['unknown', 'good', 'worn', 'damaged', 'needs_repair'];
-  type AssetDetailTab = 'info' | 'extra' | 'history';
+  type AssetDetailTab = 'info' | 'unit' | 'stock' | 'extra' | 'history';
 
   let showAddAsset = $state(false);
   let activeDetailTab = $state<AssetDetailTab>('info');
@@ -106,6 +106,31 @@
     uploadSelectedAssetImage(file);
     input.value = '';
   }
+
+  function selectedStockLevels(): StockLevel[] {
+    return stockLevels.filter((level) => level.asset_id === selectedAssetId);
+  }
+
+  function selectedStockTotal(): number {
+    return selectedStockLevels().reduce((sum, level) => sum + level.quantity_total, 0);
+  }
+
+  function selectedStockCheckedOut(): number {
+    return selectedStockLevels().reduce((sum, level) => sum + level.quantity_checked_out, 0);
+  }
+
+  $effect(() => {
+    const asset = selectedAsset();
+    if (!asset) {
+      return;
+    }
+    if (activeDetailTab === 'unit' && asset.asset_type !== 'tracked') {
+      activeDetailTab = 'stock';
+    }
+    if (activeDetailTab === 'stock' && asset.asset_type !== 'stock') {
+      activeDetailTab = 'unit';
+    }
+  });
 </script>
 
 <section class="inventory-workspace" aria-label="Inventory workspace">
@@ -205,6 +230,24 @@
         >
           Info
         </button>
+        {#if selectedAsset()?.asset_type === 'tracked'}
+          <button
+            type="button"
+            class:active-detail-tab={activeDetailTab === 'unit'}
+            onclick={() => (activeDetailTab = 'unit')}
+          >
+            Unit
+          </button>
+        {/if}
+        {#if selectedAsset()?.asset_type === 'stock'}
+          <button
+            type="button"
+            class:active-detail-tab={activeDetailTab === 'stock'}
+            onclick={() => (activeDetailTab = 'stock')}
+          >
+            Stock
+          </button>
+        {/if}
         <button
           type="button"
           class:active-detail-tab={activeDetailTab === 'extra'}
@@ -285,6 +328,56 @@
           <label>Name <input bind:value={assetEditForm.name} required /></label>
           <div class="split-fields">
             <label>
+              Mode
+              <input value={selectedAsset()?.asset_type.replaceAll('_', ' ')} disabled />
+            </label>
+            <label>
+              Unit
+              <input value={selectedAsset()?.unit_name ?? 'single unit'} disabled />
+            </label>
+          </div>
+          <label>
+            Category
+            <select bind:value={assetEditForm.category_id}>
+              <option value={null}>No category</option>
+              {#each categories as category}
+                <option value={category.id}>{category.name}</option>
+              {/each}
+            </select>
+          </label>
+          <button type="submit" class="compact" disabled={busy}>Update info</button>
+        </form>
+      {/if}
+
+      {#if activeDetailTab === 'unit' && selectedAsset()?.asset_type === 'tracked'}
+        <form
+          class="asset-edit-form detail-tab-panel"
+          onsubmit={(event) => {
+            event.preventDefault();
+            updateSelectedAsset();
+          }}
+        >
+          <div class="physical-summary-grid">
+            <article>
+              <span>Status</span>
+              <strong>{selectedAsset()?.status.replaceAll('_', ' ')}</strong>
+            </article>
+            <article>
+              <span>Condition</span>
+              <strong>{selectedAsset()?.condition.replaceAll('_', ' ')}</strong>
+            </article>
+            <article>
+              <span>Location</span>
+              <strong>{locationName(selectedAsset()?.current_location_id ?? null)}</strong>
+            </article>
+            <article>
+              <span>Holder</span>
+              <strong>{holderLabel(selectedAsset()?.current_holder_user_id ?? null)}</strong>
+            </article>
+          </div>
+
+          <div class="split-fields">
+            <label>
               Status
               <select bind:value={assetEditForm.status}>
                 {#each assetStatuses as status}
@@ -310,8 +403,69 @@
               {/each}
             </select>
           </label>
-          <button type="submit" class="compact" disabled={busy}>Update info</button>
+          <label>
+            Holder
+            <select bind:value={assetEditForm.current_holder_user_id}>
+              <option value={null}>No holder</option>
+              {#each availableHolderUsers() as user}
+                <option value={user.id}>{user.display_name}</option>
+              {/each}
+            </select>
+          </label>
+          <div class="split-fields">
+            <label>Serial <input bind:value={assetEditForm.serial_number} /></label>
+            <label>Asset tag <input bind:value={assetEditForm.asset_tag} /></label>
+          </div>
+          <button type="submit" class="compact" disabled={busy}>Update unit</button>
         </form>
+      {/if}
+
+      {#if activeDetailTab === 'stock' && selectedAsset()?.asset_type === 'stock'}
+        <div class="detail-tab-panel stock-panel">
+          <div class="physical-summary-grid">
+            <article>
+              <span>Total</span>
+              <strong>{selectedStockTotal()} {selectedAsset()?.unit_name ?? 'units'}</strong>
+            </article>
+            <article>
+              <span>Available</span>
+              <strong
+                >{selectedStockTotal() - selectedStockCheckedOut()}
+                {selectedAsset()?.unit_name ?? 'units'}</strong
+              >
+            </article>
+            <article>
+              <span>Checked out</span>
+              <strong>{selectedStockCheckedOut()} {selectedAsset()?.unit_name ?? 'units'}</strong>
+            </article>
+          </div>
+
+          <div class="stock-batch-list">
+            <h3>Physical batches</h3>
+            {#each selectedStockLevels() as level}
+              <article class="stock-batch-card">
+                <div>
+                  <strong>{locationName(level.location_id)}</strong>
+                  <span>
+                    {level.quantity_total - level.quantity_checked_out} available
+                    {#if level.quantity_checked_out}
+                      · {level.quantity_checked_out} checked out
+                    {/if}
+                  </span>
+                </div>
+                <span class="stock-quantity"
+                  >{level.quantity_total} {selectedAsset()?.unit_name ?? 'units'}</span
+                >
+              </article>
+            {:else}
+              <p class="empty">No stock batches exist for this item yet.</p>
+            {/each}
+          </div>
+
+          <p class="field-note">
+            Stock movement and new batches are handled in the Locations tab for now.
+          </p>
+        </div>
       {/if}
 
       {#if activeDetailTab === 'extra'}
@@ -323,34 +477,13 @@
           }}
         >
           <div class="split-fields">
-            <label>
-              Category
-              <select bind:value={assetEditForm.category_id}>
-                <option value={null}>No category</option>
-                {#each categories as category}
-                  <option value={category.id}>{category.name}</option>
-                {/each}
-              </select>
-            </label>
-            <label>
-              Holder
-              <select bind:value={assetEditForm.current_holder_user_id}>
-                <option value={null}>No holder</option>
-                {#each availableHolderUsers() as user}
-                  <option value={user.id}>{user.display_name}</option>
-                {/each}
-              </select>
-            </label>
-          </div>
-          <div class="split-fields">
             <label>Manufacturer <input bind:value={assetEditForm.manufacturer} /></label>
             <label>Model <input bind:value={assetEditForm.model} /></label>
           </div>
           <div class="split-fields">
-            <label>Serial <input bind:value={assetEditForm.serial_number} /></label>
-            <label>Asset tag <input bind:value={assetEditForm.asset_tag} /></label>
+            <label>Replacement value <input bind:value={assetEditForm.replacement_value} /></label>
+            <label>Definition type <input value={selectedAsset()?.asset_type} disabled /></label>
           </div>
-          <label>Replacement value <input bind:value={assetEditForm.replacement_value} /></label>
           <label>
             Internal notes
             <textarea
@@ -364,23 +497,6 @@
 
       {#if activeDetailTab === 'history'}
         <div class="detail-tab-panel history-panel">
-          {#if selectedAsset()?.asset_type === 'stock'}
-            <div class="detail-grid">
-              <div>
-                <span>Unit</span>
-                <strong>{selectedAsset()?.unit_name ?? 'unit'}</strong>
-              </div>
-              <div>
-                <span>Total stock</span>
-                <strong
-                  >{stockLevels
-                    .filter((level) => level.asset_id === selectedAssetId)
-                    .reduce((sum, level) => sum + level.quantity_total, 0)}</strong
-                >
-              </div>
-            </div>
-          {/if}
-
           <div class="timeline">
             <h3>History</h3>
             {#each selectedAssetEvents as event}
