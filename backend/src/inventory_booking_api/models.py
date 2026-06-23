@@ -1,4 +1,5 @@
 from inventory_booking_api.audit.models import AuditLog, ItemEvent
+from inventory_booking_api.baskets.models import Basket, BasketLine
 from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.checkouts.models import Checkout, CheckoutLine
 from inventory_booking_api.core.models import Base
@@ -21,6 +22,8 @@ __all__ = [
     "AssetImage",
     "AuditLog",
     "Base",
+    "Basket",
+    "BasketLine",
     "Booking",
     "BookingLine",
     "Category",

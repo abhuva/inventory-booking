@@ -14,6 +14,9 @@
     type AssetStateChange,
     type AssetType,
     type AssetUpdate,
+    type Basket,
+    type BasketCreate,
+    type BasketUpdate,
     type Booking,
     type BookingCreate,
     type BookingLineCreate,
@@ -44,6 +47,7 @@
     type UserUpdate
   } from '$lib/api';
   import AdminPanel from '$lib/components/workspace/AdminPanel.svelte';
+  import BasketPanel from '$lib/components/workspace/BasketPanel.svelte';
   import BookingsPanel from '$lib/components/workspace/BookingsPanel.svelte';
   import CheckoutPanel from '$lib/components/workspace/CheckoutPanel.svelte';
   import DashboardPanel from '$lib/components/workspace/DashboardPanel.svelte';
@@ -68,6 +72,7 @@
   const workspaceTabs: WorkspaceTabDefinition[] = [
     { id: 'dashboard', label: 'Dashboard', description: 'Counts and workspace overview' },
     { id: 'inventory', label: 'Inventory', description: 'Assets, state, and history' },
+    { id: 'basket', label: 'Basket', description: 'Temporary held items' },
     { id: 'locations', label: 'Locations', description: 'Spaces, stock, and movement' },
     { id: 'bookings', label: 'Bookings', description: 'Reservations and availability' },
     { id: 'checkout', label: 'Checkout', description: 'Hand out and return equipment' },
@@ -93,6 +98,7 @@
   let assets = $state<Asset[]>([]);
   let assetImages = $state<AssetImage[]>([]);
   let stockLevels = $state<StockLevel[]>([]);
+  let activeBasket = $state<Basket | null>(null);
   let bookings = $state<Booking[]>([]);
   let checkouts = $state<Checkout[]>([]);
   let returns = $state<ReturnRecord[]>([]);
@@ -170,6 +176,8 @@
     quantity: 1,
     notes: ''
   });
+  let basketTitle = $state('');
+  let basketNotes = $state('');
   let checkoutForm = $state<CheckoutCreate>({
     booking_id: '',
     condition_out: 'unknown',
@@ -267,6 +275,7 @@
       loadedAssets,
       loadedAssetImages,
       loadedStockLevels,
+      loadedActiveBasket,
       bookingSummaries,
       loadedCheckouts,
       loadedReturns,
@@ -278,6 +287,7 @@
       apiGet<Asset[]>('/assets'),
       currentUser ? apiGet<AssetImage[]>('/assets/images') : Promise.resolve([]),
       apiGet<StockLevel[]>('/stock-levels'),
+      currentUser ? apiGet<Basket | null>('/basket/active') : Promise.resolve(null),
       apiGet<Booking[]>('/bookings'),
       apiGet<Checkout[]>('/checkouts'),
       apiGet<ReturnRecord[]>('/returns'),
@@ -289,6 +299,8 @@
     assets = loadedAssets;
     assetImages = loadedAssetImages;
     stockLevels = loadedStockLevels;
+    activeBasket = loadedActiveBasket;
+    syncBasketForm();
     checkouts = loadedCheckouts;
     returns = loadedReturns;
     qrCodes = loadedQrCodes;
@@ -311,6 +323,9 @@
       await apiPost<void>('/auth/logout');
       currentUser = null;
       assetImages = [];
+      activeBasket = null;
+      basketTitle = '';
+      basketNotes = '';
       qrCodes = [];
       users = [];
       selectedAssetId = '';
@@ -497,6 +512,105 @@
       await loadInventory();
       message = `Booking created: ${booking.title}`;
     });
+  }
+
+  async function addBookingFormToBasket(): Promise<boolean> {
+    return await runAction(async () => {
+      const asset = assets.find((entry) => entry.id === bookingForm.asset_id);
+      if (!asset) {
+        throw new Error('Choose an asset first.');
+      }
+      const basket = await ensureBasketFromBookingForm();
+      activeBasket = await apiPost<Basket>(`/basket/${basket.id}/lines`, {
+        asset_id: bookingForm.asset_id,
+        location_id: asset.asset_type === 'stock' ? bookingForm.location_id : null,
+        quantity: asset.asset_type === 'stock' ? bookingForm.quantity : null,
+        notes: null
+      });
+      syncBasketForm();
+      activeTab = 'basket';
+      message = `Added ${asset.name} to basket`;
+    });
+  }
+
+  async function updateBasket(): Promise<boolean> {
+    return await runAction(async () => {
+      if (!activeBasket) {
+        throw new Error('No active basket.');
+      }
+      activeBasket = await apiPatch<Basket>(
+        `/basket/${activeBasket.id}`,
+        emptyStringsToNull<BasketUpdate>({
+          title: basketTitle,
+          notes: basketNotes,
+          starts_at: activeBasket.starts_at,
+          ends_at: activeBasket.ends_at
+        })
+      );
+      syncBasketForm();
+      message = 'Basket updated';
+    });
+  }
+
+  async function removeBasketLine(lineId: string): Promise<boolean> {
+    return await runAction(async () => {
+      if (!activeBasket) {
+        throw new Error('No active basket.');
+      }
+      await apiDelete<void>(`/basket/${activeBasket.id}/lines/${lineId}`);
+      activeBasket = await apiGet<Basket | null>('/basket/active');
+      syncBasketForm();
+      if (!activeBasket?.lines.length) {
+        activeTab = 'inventory';
+      }
+      message = 'Basket item removed';
+    });
+  }
+
+  async function confirmBasket(): Promise<boolean> {
+    return await runAction(async () => {
+      if (!activeBasket) {
+        throw new Error('No active basket.');
+      }
+      const booking = await apiPost<Booking>(`/basket/${activeBasket.id}/confirm`);
+      activeBasket = null;
+      basketTitle = '';
+      basketNotes = '';
+      await loadInventory();
+      activeTab = 'bookings';
+      message = `Booking created: ${booking.title}`;
+    });
+  }
+
+  async function cancelBasket(): Promise<boolean> {
+    return await runAction(async () => {
+      if (!activeBasket) {
+        throw new Error('No active basket.');
+      }
+      await apiPost<Basket>(`/basket/${activeBasket.id}/cancel`);
+      activeBasket = null;
+      basketTitle = '';
+      basketNotes = '';
+      activeTab = 'inventory';
+      message = 'Basket cancelled';
+    });
+  }
+
+  async function ensureBasketFromBookingForm(): Promise<Basket> {
+    const payload: BasketCreate = {
+      title: bookingDraft.title || bookingForm.title || 'New basket',
+      starts_at: new Date(bookingDraft.starts_at || bookingForm.starts_at).toISOString(),
+      ends_at: new Date(bookingDraft.ends_at || bookingForm.ends_at).toISOString(),
+      notes: bookingDraft.notes || null
+    };
+    activeBasket = await apiPost<Basket>('/basket', payload);
+    syncBasketForm();
+    return activeBasket;
+  }
+
+  function syncBasketForm(): void {
+    basketTitle = activeBasket?.title ?? '';
+    basketNotes = activeBasket?.notes ?? '';
   }
 
   function addBookingDraftLine(line: BookingLineCreate): void {
@@ -865,7 +979,15 @@
   }
 
   function visibleTabs(): { id: WorkspaceTab; label: string; description: string }[] {
-    return workspaceTabs.filter((tab) => tab.id !== 'admin' || currentUser?.role === 'admin');
+    return workspaceTabs.filter((tab) => {
+      if (tab.id === 'admin') {
+        return currentUser?.role === 'admin';
+      }
+      if (tab.id === 'basket') {
+        return Boolean(activeBasket?.lines.length);
+      }
+      return true;
+    });
   }
 
   function switchTab(tab: WorkspaceTab) {
@@ -1038,16 +1160,29 @@
 <main class="app-shell">
   <section class="masthead">
     <h1>NICA e.V. Inventar</h1>
-    <button
-      type="button"
-      class="account-button"
-      aria-label={currentUser ? 'Account' : 'Login'}
-      onclick={() => (showAccountPanel = true)}
-    >
-      <span class="account-avatar" aria-hidden="true">
-        {currentUser ? currentUser.display_name.slice(0, 1).toUpperCase() : ''}
-      </span>
-    </button>
+    <div class="header-actions">
+      {#if activeBasket?.lines.length}
+        <button
+          type="button"
+          class="basket-button"
+          aria-label="Open basket"
+          onclick={() => (activeTab = 'basket')}
+        >
+          <span class="basket-icon" aria-hidden="true"></span>
+          <strong>{activeBasket.lines.length}</strong>
+        </button>
+      {/if}
+      <button
+        type="button"
+        class="account-button"
+        aria-label={currentUser ? 'Account' : 'Login'}
+        onclick={() => (showAccountPanel = true)}
+      >
+        <span class="account-avatar" aria-hidden="true">
+          {currentUser ? currentUser.display_name.slice(0, 1).toUpperCase() : ''}
+        </span>
+      </button>
+    </div>
   </section>
 
   {#if showAccountPanel}
@@ -1183,6 +1318,23 @@
             />
           {/if}
 
+          {#if activeTab === 'basket'}
+            <BasketPanel
+              basket={activeBasket}
+              {assets}
+              {busy}
+              bind:basketTitle
+              bind:basketNotes
+              {updateBasket}
+              {removeBasketLine}
+              {confirmBasket}
+              {cancelBasket}
+              {assetName}
+              {locationName}
+              {formatDateTime}
+            />
+          {/if}
+
           {#if activeTab === 'checkout'}
             <CheckoutPanel
               {bookings}
@@ -1229,7 +1381,6 @@
               {filteredAssets}
               {selectedAssetEvents}
               {selectedAssetId}
-              {availability}
               {busy}
               bind:assetForm
               bind:assetEditForm
@@ -1242,11 +1393,7 @@
               {moveSelectedStock}
               {addSelectedStock}
               {removeSelectedStock}
-              {previewBooking}
-              {createBooking}
-              {addBookingDraftLine}
-              {previewBookingDraft}
-              {createBookingDraft}
+              {addBookingFormToBasket}
               {clearBookingAvailability}
               uploadSelectedAssetImage={(file) => void uploadSelectedAssetImage(file)}
               deleteSelectedAssetImage={() => void deleteSelectedAssetImage()}

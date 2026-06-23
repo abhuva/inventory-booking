@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     csrf_cookie_name: str = "inventory_booking_csrf"
     session_cookie_secure: bool = False
     session_max_age_seconds: int = 60 * 60 * 24 * 14
+    basket_hold_minutes: int = 60
     asset_upload_dir: str = "data/uploads/assets"
     asset_image_max_bytes: int = 1_250_000
     cors_origins: str = Field(

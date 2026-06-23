@@ -22,6 +22,7 @@ export type LocationType =
   | 'repair'
   | 'unknown';
 export type BookingStatus = 'reserved' | 'cancelled' | 'checked_out' | 'completed';
+export type BasketStatus = 'active' | 'confirmed' | 'cancelled' | 'expired';
 export type CheckoutStatus = 'checked_out' | 'partially_returned' | 'returned';
 
 export type User = {
@@ -122,6 +123,27 @@ export type Booking = {
   ends_at: string;
   notes: string | null;
   lines?: BookingLine[];
+};
+
+export type BasketLine = {
+  id: string;
+  basket_id: string;
+  asset_id: string;
+  location_id: string | null;
+  quantity: number | null;
+  notes: string | null;
+};
+
+export type Basket = {
+  id: string;
+  user_id: string;
+  title: string;
+  status: BasketStatus;
+  starts_at: string;
+  ends_at: string;
+  expires_at: string;
+  notes: string | null;
+  lines: BasketLine[];
 };
 
 export type AvailabilityLine = {
@@ -272,6 +294,20 @@ export type BookingCreate = {
   ends_at: string;
   notes?: string | null;
   lines: BookingLineCreate[];
+};
+
+export type BasketCreate = {
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  notes?: string | null;
+};
+
+export type BasketUpdate = {
+  title?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  notes?: string | null;
 };
 
 export type CheckoutCreate = {

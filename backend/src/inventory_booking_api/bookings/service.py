@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -6,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.audit.enums import AuditAction, ItemEventType
 from inventory_booking_api.audit.service import write_audit_log, write_item_event
+from inventory_booking_api.baskets.enums import BasketStatus
+from inventory_booking_api.baskets.models import Basket, BasketLine
 from inventory_booking_api.bookings.enums import BookingStatus
 from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.bookings.schemas import (
@@ -43,8 +46,11 @@ async def create_booking(
     session: AsyncSession,
     payload: BookingCreate,
     actor: User,
+    *,
+    excluded_basket_id: UUID | None = None,
+    commit: bool = True,
 ) -> tuple[Booking, list[BookingLine]]:
-    await validate_booking_lines(session, payload)
+    await validate_booking_lines(session, payload, excluded_basket_id=excluded_basket_id)
 
     booking = Booking(
         requested_by_user_id=actor.id,
@@ -83,10 +89,11 @@ async def create_booking(
         entity_id=booking.id,
         summary=f"Created booking {booking.title}",
     )
-    await session.commit()
-    await session.refresh(booking)
-    for line in booking_lines:
-        await session.refresh(line)
+    if commit:
+        await session.commit()
+        await session.refresh(booking)
+        for line in booking_lines:
+            await session.refresh(line)
     return booking, booking_lines
 
 
@@ -113,7 +120,12 @@ async def cancel_booking(session: AsyncSession, booking: Booking, actor: User) -
     return booking
 
 
-async def preview_availability(session: AsyncSession, payload: BookingCreate) -> AvailabilityRead:
+async def preview_availability(
+    session: AsyncSession,
+    payload: BookingCreate,
+    *,
+    excluded_basket_id: UUID | None = None,
+) -> AvailabilityRead:
     line_results: list[AvailabilityLineRead] = []
     seen_lines: set[tuple[UUID, UUID | None]] = set()
     for line in payload.lines:
@@ -128,7 +140,14 @@ async def preview_availability(session: AsyncSession, payload: BookingCreate) ->
             )
             continue
         seen_lines.add(line_key)
-        line_results.append(await preview_line_availability(session, payload, line))
+        line_results.append(
+            await preview_line_availability(
+                session,
+                payload,
+                line,
+                excluded_basket_id=excluded_basket_id,
+            )
+        )
 
     return AvailabilityRead(
         available=all(line.available for line in line_results),
@@ -136,7 +155,12 @@ async def preview_availability(session: AsyncSession, payload: BookingCreate) ->
     )
 
 
-async def validate_booking_lines(session: AsyncSession, payload: BookingCreate) -> None:
+async def validate_booking_lines(
+    session: AsyncSession,
+    payload: BookingCreate,
+    *,
+    excluded_basket_id: UUID | None = None,
+) -> None:
     seen_lines: set[tuple[UUID, UUID | None]] = set()
     for line in payload.lines:
         line_key = (line.asset_id, line.location_id)
@@ -154,7 +178,13 @@ async def validate_booking_lines(session: AsyncSession, payload: BookingCreate) 
                 detail="Booking line asset does not exist.",
             )
         if asset.asset_type == AssetType.TRACKED:
-            await validate_tracked_line(session, payload, line.asset_id, line.quantity)
+            await validate_tracked_line(
+                session,
+                payload,
+                line.asset_id,
+                line.quantity,
+                excluded_basket_id=excluded_basket_id,
+            )
         else:
             await validate_stock_line(
                 session,
@@ -162,6 +192,7 @@ async def validate_booking_lines(session: AsyncSession, payload: BookingCreate) 
                 line.asset_id,
                 line.location_id,
                 line.quantity,
+                excluded_basket_id=excluded_basket_id,
             )
 
 
@@ -170,6 +201,8 @@ async def validate_tracked_line(
     payload: BookingCreate,
     asset_id: UUID,
     quantity: int | None,
+    *,
+    excluded_basket_id: UUID | None = None,
 ) -> None:
     unit = await get_primary_tracked_unit(session, asset_id)
     if unit is None:
@@ -204,6 +237,16 @@ async def validate_tracked_line(
             status_code=status.HTTP_409_CONFLICT,
             detail="Tracked asset is already booked for this time range.",
         )
+    if await has_overlapping_tracked_basket_hold(
+        session,
+        payload,
+        asset_id,
+        excluded_basket_id=excluded_basket_id,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tracked asset is temporarily held in another basket for this time range.",
+        )
 
 
 async def validate_stock_line(
@@ -212,6 +255,8 @@ async def validate_stock_line(
     asset_id: UUID,
     location_id: UUID | None,
     quantity: int | None,
+    *,
+    excluded_basket_id: UUID | None = None,
 ) -> None:
     if location_id is None:
         raise HTTPException(
@@ -228,7 +273,14 @@ async def validate_stock_line(
     overlapping_quantity = await get_overlapping_stock_quantity(
         session, payload, asset_id, location_id
     )
-    if stock_quantity - overlapping_quantity < quantity:
+    held_quantity = await get_overlapping_stock_basket_quantity(
+        session,
+        payload,
+        asset_id,
+        location_id,
+        excluded_basket_id=excluded_basket_id,
+    )
+    if stock_quantity - overlapping_quantity - held_quantity < quantity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Not enough stock is available for this time range.",
@@ -275,19 +327,33 @@ async def preview_line_availability(
     session: AsyncSession,
     payload: BookingCreate,
     line: BookingLineCreate,
+    *,
+    excluded_basket_id: UUID | None = None,
 ) -> AvailabilityLineRead:
     asset = await session.get(Asset, line.asset_id)
     if asset is None:
         return build_availability_line(line, available=False, reason="Asset does not exist.")
     if asset.asset_type == AssetType.TRACKED:
-        return await preview_tracked_line(session, payload, line)
-    return await preview_stock_line(session, payload, line)
+        return await preview_tracked_line(
+            session,
+            payload,
+            line,
+            excluded_basket_id=excluded_basket_id,
+        )
+    return await preview_stock_line(
+        session,
+        payload,
+        line,
+        excluded_basket_id=excluded_basket_id,
+    )
 
 
 async def preview_tracked_line(
     session: AsyncSession,
     payload: BookingCreate,
     line: BookingLineCreate,
+    *,
+    excluded_basket_id: UUID | None = None,
 ) -> AvailabilityLineRead:
     unit = await get_primary_tracked_unit(session, line.asset_id)
     if unit is None:
@@ -330,6 +396,18 @@ async def preview_tracked_line(
             available_quantity=0,
             reason="Tracked asset is already booked for this time range.",
         )
+    if await has_overlapping_tracked_basket_hold(
+        session,
+        payload,
+        line.asset_id,
+        excluded_basket_id=excluded_basket_id,
+    ):
+        return build_availability_line(
+            line,
+            available=False,
+            available_quantity=0,
+            reason="Tracked asset is temporarily held in another basket for this time range.",
+        )
     return build_availability_line(line, available=True, available_quantity=1)
 
 
@@ -337,6 +415,8 @@ async def preview_stock_line(
     session: AsyncSession,
     payload: BookingCreate,
     line: BookingLineCreate,
+    *,
+    excluded_basket_id: UUID | None = None,
 ) -> AvailabilityLineRead:
     if line.location_id is None:
         return build_availability_line(
@@ -358,7 +438,14 @@ async def preview_stock_line(
         line.asset_id,
         line.location_id,
     )
-    available_quantity = stock_quantity - overlapping_quantity
+    held_quantity = await get_overlapping_stock_basket_quantity(
+        session,
+        payload,
+        line.asset_id,
+        line.location_id,
+        excluded_basket_id=excluded_basket_id,
+    )
+    available_quantity = stock_quantity - overlapping_quantity - held_quantity
     return build_availability_line(
         line,
         available=available_quantity >= line.quantity,
@@ -391,3 +478,58 @@ async def get_primary_tracked_unit(session: AsyncSession, asset_id: UUID) -> Tra
         select(TrackedUnit).where(TrackedUnit.asset_id == asset_id).order_by(TrackedUnit.created_at)
     )
     return result.scalars().first()
+
+
+async def has_overlapping_tracked_basket_hold(
+    session: AsyncSession,
+    payload: BookingCreate,
+    asset_id: UUID,
+    *,
+    excluded_basket_id: UUID | None = None,
+) -> bool:
+    result = await session.execute(
+        basket_hold_query(payload, excluded_basket_id=excluded_basket_id)
+        .with_only_columns(BasketLine.id)
+        .where(BasketLine.asset_id == asset_id)
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def get_overlapping_stock_basket_quantity(
+    session: AsyncSession,
+    payload: BookingCreate,
+    asset_id: UUID,
+    location_id: UUID,
+    *,
+    excluded_basket_id: UUID | None = None,
+) -> int:
+    result = await session.execute(
+        basket_hold_query(payload, excluded_basket_id=excluded_basket_id)
+        .with_only_columns(func.coalesce(func.sum(BasketLine.quantity), 0))
+        .where(
+            BasketLine.asset_id == asset_id,
+            BasketLine.location_id == location_id,
+        )
+    )
+    return int(result.scalar_one())
+
+
+def basket_hold_query(
+    payload: BookingCreate,
+    *,
+    excluded_basket_id: UUID | None = None,
+):
+    query = (
+        select(BasketLine)
+        .join(Basket, BasketLine.basket_id == Basket.id)
+        .where(
+            Basket.status == BasketStatus.ACTIVE,
+            Basket.expires_at > datetime.now(UTC),
+            Basket.starts_at < payload.ends_at,
+            Basket.ends_at > payload.starts_at,
+        )
+    )
+    if excluded_basket_id is not None:
+        query = query.where(Basket.id != excluded_basket_id)
+    return query

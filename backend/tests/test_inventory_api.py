@@ -1350,3 +1350,77 @@ def test_qr_endpoints_require_session_and_do_not_enumerate(client: TestClient) -
     assert unauthenticated_response.status_code == 401
     assert missing_response.status_code == 404
     assert missing_response.json()["detail"] == "QR label not found."
+
+def test_basket_hold_blocks_other_user_booking(client: TestClient) -> None:
+    admin_headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Held Aerial Stand", "asset_type": "tracked"},
+        headers=admin_headers,
+    ).json()
+    basket = client.post(
+        "/basket",
+        json={
+            "title": "Held workshop basket",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+        },
+        headers=admin_headers,
+    ).json()
+    line_response = client.post(
+        f"/basket/{basket['id']}/lines",
+        json={"asset_id": tracked_asset["id"]},
+        headers=admin_headers,
+    )
+
+    client.cookies.clear()
+    user_headers = login(client, USER_EMAIL, USER_PASSWORD)
+    booking_response = client.post(
+        "/bookings",
+        json={
+            "title": "Conflicting real booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=user_headers,
+    )
+
+    assert line_response.status_code == 200
+    assert line_response.json()["lines"][0]["asset_id"] == tracked_asset["id"]
+    assert booking_response.status_code == 409
+    assert "temporarily held" in booking_response.json()["detail"]
+
+
+def test_confirm_basket_creates_booking_and_clears_active_basket(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Confirm Basket Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    basket = client.post(
+        "/basket",
+        json={
+            "title": "Confirmed basket booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "notes": "Bundle for project week",
+        },
+        headers=headers,
+    ).json()
+    client.post(
+        f"/basket/{basket['id']}/lines",
+        json={"asset_id": tracked_asset["id"]},
+        headers=headers,
+    )
+
+    confirm_response = client.post(f"/basket/{basket['id']}/confirm", headers=headers)
+    active_response = client.get("/basket/active", headers=headers)
+
+    assert confirm_response.status_code == 200
+    confirmed = confirm_response.json()
+    assert confirmed["title"] == "Confirmed basket booking"
+    assert confirmed["lines"][0]["asset_id"] == tracked_asset["id"]
+    assert active_response.status_code == 200
+    assert active_response.json() is None

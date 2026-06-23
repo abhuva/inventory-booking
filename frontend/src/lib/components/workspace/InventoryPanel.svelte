@@ -5,8 +5,6 @@
     AssetCreate,
     AssetStatus,
     AssetUpdate,
-    Availability,
-    BookingLineCreate,
     Category,
     ItemEvent,
     Location,
@@ -65,7 +63,6 @@
     filteredAssets,
     selectedAssetEvents,
     selectedAssetId,
-    availability,
     busy,
     assetForm = $bindable(),
     assetEditForm = $bindable(),
@@ -78,11 +75,7 @@
     moveSelectedStock,
     addSelectedStock,
     removeSelectedStock,
-    previewBooking,
-    createBooking,
-    addBookingDraftLine,
-    previewBookingDraft,
-    createBookingDraft,
+    addBookingFormToBasket,
     clearBookingAvailability,
     uploadSelectedAssetImage,
     deleteSelectedAssetImage,
@@ -122,20 +115,21 @@
       starts_at: string;
       ends_at: string;
       notes: string;
-      lines: Array<BookingLineCreate & { client_id: string }>;
+      lines: Array<{
+        client_id: string;
+        asset_id: string;
+        location_id?: string | null;
+        quantity?: number | null;
+        notes?: string | null;
+      }>;
     };
-    availability: Availability | null;
     createAsset: () => void;
     updateSelectedAsset: () => void;
     moveSelectedTrackedAsset: (payload: TrackedAssetTransfer) => Promise<boolean>;
     moveSelectedStock: (payload: StockTransfer) => Promise<boolean>;
     addSelectedStock: (locationId: string, quantity: number) => Promise<boolean>;
     removeSelectedStock: (locationId: string, quantity: number) => Promise<boolean>;
-    previewBooking: () => Promise<boolean>;
-    createBooking: () => Promise<boolean>;
-    addBookingDraftLine: (line: BookingLineCreate) => void;
-    previewBookingDraft: () => Promise<boolean>;
-    createBookingDraft: () => Promise<boolean>;
+    addBookingFormToBasket: () => Promise<boolean>;
     clearBookingAvailability: () => void;
     uploadSelectedAssetImage: (file: File) => void;
     deleteSelectedAssetImage: () => void;
@@ -186,24 +180,8 @@
   }
 
   async function submitReserve() {
-    if (!bookingDraft.lines.length) {
-      addSelectedAssetToBookingDraft();
-    }
-    const created = await createBookingDraft();
-    showReserveAsset = !created;
-  }
-
-  function addSelectedAssetToBookingDraft() {
-    const asset = selectedAsset();
-    if (!asset) {
-      return;
-    }
-    addBookingDraftLine({
-      asset_id: asset.id,
-      location_id: asset.asset_type === 'stock' ? bookingForm.location_id : null,
-      quantity: asset.asset_type === 'stock' ? bookingForm.quantity : null,
-      notes: null
-    });
+    const added = await addBookingFormToBasket();
+    showReserveAsset = !added;
   }
 
   function openMoveDialog() {
@@ -758,7 +736,7 @@
               disabled={busy}
               onclick={openReserveDialog}
             >
-              Reserve
+              Add to basket
             </button>
           </div>
         </form>
@@ -984,14 +962,14 @@
       <div class="detail-header">
         <div>
           <p class="eyebrow">{selectedAsset()?.name}</p>
-          <h2>Add to booking</h2>
+          <h2>Add to basket</h2>
         </div>
         <button type="button" class="secondary compact" onclick={() => (showReserveAsset = false)}
           >Cancel</button
         >
       </div>
 
-      <label>Bundle title <input bind:value={bookingDraft.title} required /></label>
+      <label>Basket name <input bind:value={bookingDraft.title} required /></label>
       <div class="split-fields">
         <label>
           Start
@@ -1028,45 +1006,11 @@
         </div>
       {/if}
 
-      <div class="readonly-field">
-        <span>Bundle</span>
-        <strong>{bookingDraft.lines.length} item lines currently added</strong>
-      </div>
-
-      {#if availability}
-        <div class:availability-ok={availability.available} class="availability-result">
-          <strong>{availability.available ? 'Available' : 'Conflict'}</strong>
-          {#each availability.lines as line}
-            <span>
-              {line.available
-                ? `available${line.available_quantity === null ? '' : ` (${line.available_quantity})`}`
-                : line.reason}
-            </span>
-          {/each}
-        </div>
-      {/if}
-
       <div class="button-row">
         <button type="button" class="secondary" onclick={() => (showReserveAsset = false)}
           >Cancel</button
         >
-        <button
-          type="button"
-          class="secondary"
-          disabled={busy}
-          onclick={() => void previewBookingDraft()}
-        >
-          Check bundle
-        </button>
-        <button
-          type="button"
-          class="secondary"
-          disabled={busy}
-          onclick={addSelectedAssetToBookingDraft}
-        >
-          Add to bundle
-        </button>
-        <button type="submit" disabled={busy}>Create bundle</button>
+        <button type="submit" disabled={busy}>Add to basket</button>
       </div>
     </form>
   </div>

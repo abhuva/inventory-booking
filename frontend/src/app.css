@@ -45,6 +45,12 @@ select {
   min-height: 2.4rem;
 }
 
+.header-actions {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
 .eyebrow {
   margin: 0 0 0.25rem;
   color: #5e675d;
@@ -139,6 +145,54 @@ h3 {
 
 .account-modal .detail-header .secondary {
   width: auto;
+}
+
+.basket-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+}
+
+.basket-button strong {
+  position: absolute;
+  right: -0.25rem;
+  top: -0.25rem;
+  display: grid;
+  place-items: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  border: 1px solid #fbfaf4;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: #8a3b24;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
+.basket-icon {
+  position: relative;
+  width: 1.22rem;
+  height: 0.86rem;
+  border: 2px solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 0.2rem 0.2rem;
+}
+
+.basket-icon::before {
+  content: '';
+  position: absolute;
+  left: 0.22rem;
+  top: -0.48rem;
+  width: 0.58rem;
+  height: 0.42rem;
+  border: 2px solid currentColor;
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
 }
 
 .session-card form,
@@ -307,6 +361,7 @@ button.secondary {
 .forms-grid,
 .data-grid,
 .inventory-workspace,
+.basket-workspace,
 .booking-workspace {
   height: 100%;
   min-height: 0;
@@ -594,11 +649,25 @@ button.secondary {
 }
 
 .inventory-table-panel,
-.inventory-detail-panel {
+.inventory-detail-panel,
+.basket-table-panel,
+.basket-detail-panel {
   min-width: 0;
   min-height: 0;
   overflow: auto;
   padding: 0.75rem;
+}
+
+.basket-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(24rem, 1fr);
+  gap: 0.55rem;
+  margin-top: 0;
+  align-items: stretch;
+}
+
+.basket-line-detail {
+  margin-top: 0.75rem;
 }
 
 .inventory-toolbar {
@@ -1023,6 +1092,7 @@ button.secondary {
   .forms-grid,
   .data-grid,
   .inventory-workspace,
+  .basket-workspace,
   .booking-workspace,
   .booking-builder,
   .asset-info-layout,
