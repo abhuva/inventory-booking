@@ -267,6 +267,30 @@ button.secondary {
   flex: 1 1 12rem;
 }
 
+.compact-button-row {
+  justify-content: flex-start;
+}
+
+.compact-button-row button {
+  flex: 0 1 auto;
+}
+
+.readonly-field {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #d4d9d1;
+  border-radius: 8px;
+  background: #f7f6ee;
+}
+
+.readonly-field span,
+.readonly-field small {
+  color: #526358;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
 .availability-result {
   display: grid;
   gap: 0.25rem;

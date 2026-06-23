@@ -9,6 +9,8 @@
     ItemEvent,
     Location,
     StockLevel,
+    StockTransfer,
+    TrackedAssetTransfer,
     User
   } from '$lib/api';
 
@@ -26,9 +28,23 @@
   type AssetDetailTab = 'info' | 'unit' | 'stock' | 'extra' | 'history';
 
   let showAddAsset = $state(false);
+  let showMoveAsset = $state(false);
   let activeDetailTab = $state<AssetDetailTab>('info');
   let inventoryLocationFilter = $state('');
+  let moveError = $state('');
   let photoInput = $state<HTMLInputElement>();
+  let trackedMoveForm = $state<TrackedAssetTransfer>({
+    to_location_id: '',
+    to_holder_user_id: null,
+    notes: ''
+  });
+  let stockMoveForm = $state<StockTransfer>({
+    asset_id: '',
+    from_location_id: '',
+    to_location_id: '',
+    quantity: 1,
+    notes: ''
+  });
 
   let {
     assets,
@@ -46,6 +62,8 @@
     assetSearch = $bindable(),
     createAsset,
     updateSelectedAsset,
+    moveSelectedTrackedAsset,
+    moveSelectedStock,
     uploadSelectedAssetImage,
     deleteSelectedAssetImage,
     selectAssetDetail,
@@ -73,6 +91,8 @@
     assetSearch: string;
     createAsset: () => void;
     updateSelectedAsset: () => void;
+    moveSelectedTrackedAsset: (payload: TrackedAssetTransfer) => Promise<boolean>;
+    moveSelectedStock: (payload: StockTransfer) => Promise<boolean>;
     uploadSelectedAssetImage: (file: File) => void;
     deleteSelectedAssetImage: () => void;
     selectAssetDetail: (assetId: string) => void;
@@ -89,6 +109,72 @@
   function submitNewAsset() {
     createAsset();
     showAddAsset = false;
+  }
+
+  function openMoveDialog() {
+    const asset = selectedAsset();
+    if (!asset) {
+      return;
+    }
+    moveError = '';
+    if (asset.asset_type === 'tracked') {
+      trackedMoveForm = {
+        to_location_id: asset.current_location_id ?? '',
+        to_holder_user_id: null,
+        notes: ''
+      };
+    } else {
+      stockMoveForm = {
+        asset_id: asset.id,
+        from_location_id: defaultStockMoveSourceLocation(),
+        to_location_id: '',
+        quantity: 1,
+        notes: ''
+      };
+    }
+    showMoveAsset = true;
+  }
+
+  async function submitMove() {
+    const asset = selectedAsset();
+    if (!asset) {
+      return;
+    }
+    moveError = '';
+    if (asset.asset_type === 'tracked') {
+      if (!trackedMoveForm.to_location_id) {
+        moveError = 'Choose a destination.';
+        return;
+      }
+      const moved = await moveSelectedTrackedAsset(trackedMoveForm);
+      showMoveAsset = !moved;
+      return;
+    }
+
+    const availableQuantity = selectedStockMoveSourceAvailable();
+    if (!stockMoveForm.from_location_id) {
+      moveError = 'Choose a source location.';
+      return;
+    }
+    if (!stockMoveForm.to_location_id) {
+      moveError = 'Choose a destination.';
+      return;
+    }
+    if (stockMoveForm.from_location_id === stockMoveForm.to_location_id) {
+      moveError = 'Source and destination must differ.';
+      return;
+    }
+    if (!Number.isFinite(stockMoveForm.quantity) || stockMoveForm.quantity < 1) {
+      moveError = 'Quantity must be at least 1.';
+      return;
+    }
+    if (stockMoveForm.quantity > availableQuantity) {
+      moveError = `Only ${availableQuantity} available at the source.`;
+      return;
+    }
+
+    const moved = await moveSelectedStock(stockMoveForm);
+    showMoveAsset = !moved;
   }
 
   function availableHolderUsers(): User[] {
@@ -140,6 +226,12 @@
     return stockLevels.filter((level) => level.asset_id === assetId);
   }
 
+  function movableStockLevelsForAsset(assetId: string): StockLevel[] {
+    return stockLevelsForAsset(assetId).filter(
+      (level) => level.location_id !== null && stockLevelAvailable(level) > 0
+    );
+  }
+
   function visibleStockLevelsForAsset(assetId: string): StockLevel[] {
     const levels = stockLevelsForAsset(assetId);
     if (!inventoryLocationFilter) {
@@ -164,6 +256,29 @@
 
   function stockAvailableForAsset(assetId: string): number {
     return stockTotalForAsset(assetId) - stockCheckedOutForAsset(assetId);
+  }
+
+  function stockLevelAvailable(level: StockLevel): number {
+    return level.quantity_total - level.quantity_checked_out;
+  }
+
+  function defaultStockMoveSourceLocation(): string {
+    if (inventoryLocationFilter) {
+      return inventoryLocationFilter;
+    }
+    const movableLevels = movableStockLevelsForAsset(selectedAssetId);
+    return movableLevels.length === 1 ? (movableLevels[0].location_id ?? '') : '';
+  }
+
+  function selectedStockMoveSourceAvailable(): number {
+    const sourceLevel = movableStockLevelsForAsset(selectedAssetId).find(
+      (level) => level.location_id === stockMoveForm.from_location_id
+    );
+    return sourceLevel ? stockLevelAvailable(sourceLevel) : 0;
+  }
+
+  function showStockMoveSourceSelect(): boolean {
+    return !inventoryLocationFilter && movableStockLevelsForAsset(selectedAssetId).length !== 1;
   }
 
   function assetLocationSummary(asset: Asset): string {
@@ -204,6 +319,10 @@
 
   function stockDetailScopeLabel(): string {
     return inventoryLocationFilter ? locationName(inventoryLocationFilter) : 'All locations';
+  }
+
+  function moveDialogTitle(): string {
+    return selectedAsset()?.asset_type === 'stock' ? 'Move stock' : 'Move tracked item';
   }
 
   $effect(() => {
@@ -445,7 +564,17 @@
               {/each}
             </select>
           </label>
-          <button type="submit" class="compact" disabled={busy}>Update info</button>
+          <div class="button-row compact-button-row">
+            <button type="submit" class="compact" disabled={busy}>Update info</button>
+            <button
+              type="button"
+              class="secondary compact"
+              disabled={busy}
+              onclick={openMoveDialog}
+            >
+              {selectedAsset()?.asset_type === 'stock' ? 'Move' : 'Move tracked item'}
+            </button>
+          </div>
         </form>
       {/if}
 
@@ -633,6 +762,112 @@
     {/if}
   </aside>
 </section>
+
+{#if showMoveAsset && selectedAsset()}
+  <div class="modal-backdrop" role="presentation">
+    <form
+      class="panel modal-panel"
+      aria-label={moveDialogTitle()}
+      onsubmit={(event) => {
+        event.preventDefault();
+        void submitMove();
+      }}
+    >
+      <div class="detail-header">
+        <div>
+          <p class="eyebrow">{selectedAsset()?.name}</p>
+          <h2>{moveDialogTitle()}</h2>
+        </div>
+        <button
+          type="button"
+          class="secondary compact"
+          onclick={() => {
+            showMoveAsset = false;
+            moveError = '';
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+
+      {#if moveError}
+        <p class="notice error">{moveError}</p>
+      {/if}
+
+      {#if selectedAsset()?.asset_type === 'stock'}
+        {#if showStockMoveSourceSelect()}
+          <label>
+            Source
+            <select bind:value={stockMoveForm.from_location_id} required>
+              <option value="">Choose source</option>
+              {#each movableStockLevelsForAsset(selectedAssetId) as level}
+                <option value={level.location_id ?? ''}>
+                  {locationName(level.location_id)} ({stockLevelAvailable(level)} available)
+                </option>
+              {/each}
+            </select>
+          </label>
+        {:else}
+          <div class="readonly-field">
+            <span>Source</span>
+            <strong>{locationName(stockMoveForm.from_location_id)}</strong>
+            <small>{selectedStockMoveSourceAvailable()} available</small>
+          </div>
+        {/if}
+
+        <div class="split-fields">
+          <label>
+            Destination
+            <select bind:value={stockMoveForm.to_location_id} required>
+              <option value="">Choose destination</option>
+              {#each locations as location}
+                <option value={location.id}>{location.name}</option>
+              {/each}
+            </select>
+          </label>
+          <label>
+            Amount
+            <input
+              bind:value={stockMoveForm.quantity}
+              type="number"
+              min="1"
+              max={selectedStockMoveSourceAvailable() || undefined}
+              required
+            />
+          </label>
+        </div>
+        <label>Notes <textarea bind:value={stockMoveForm.notes}></textarea></label>
+      {:else}
+        <label>
+          Destination
+          <select bind:value={trackedMoveForm.to_location_id} required>
+            <option value="">Choose destination</option>
+            {#each locations as location}
+              <option value={location.id}>{location.name}</option>
+            {/each}
+          </select>
+        </label>
+        <label>Notes <textarea bind:value={trackedMoveForm.notes}></textarea></label>
+      {/if}
+
+      <div class="button-row">
+        <button
+          type="button"
+          class="secondary"
+          onclick={() => {
+            showMoveAsset = false;
+            moveError = '';
+          }}
+        >
+          Cancel
+        </button>
+        <button type="submit" disabled={busy}>
+          {selectedAsset()?.asset_type === 'stock' ? 'Move' : 'Move tracked item'}
+        </button>
+      </div>
+    </form>
+  </div>
+{/if}
 
 {#if showAddAsset}
   <div class="modal-backdrop" role="presentation">

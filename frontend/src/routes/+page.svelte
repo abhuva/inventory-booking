@@ -494,6 +494,19 @@
     });
   }
 
+  async function moveSelectedTrackedAsset(payload: TrackedAssetTransfer): Promise<boolean> {
+    const assetId = selectedAssetId;
+    return await runAction(async () => {
+      if (!assetId) {
+        throw new Error('Choose a tracked item first.');
+      }
+      await apiPost<Asset>(`/assets/${assetId}/transfer`, emptyStringsToNull(payload));
+      await loadInventory();
+      await selectAssetDetail(assetId);
+      message = 'Tracked item moved';
+    });
+  }
+
   async function transferStockAction() {
     await runAction(async () => {
       await apiPost<StockLevel[]>('/stock-levels/transfer', emptyStringsToNull(stockTransferForm));
@@ -506,6 +519,19 @@
       };
       await loadInventory();
       message = 'Stock transferred';
+    });
+  }
+
+  async function moveSelectedStock(payload: StockTransfer): Promise<boolean> {
+    const assetId = selectedAssetId;
+    return await runAction(async () => {
+      if (!assetId) {
+        throw new Error('Choose a stock item first.');
+      }
+      await apiPost<StockLevel[]>('/stock-levels/transfer', emptyStringsToNull(payload));
+      await loadInventory();
+      await selectAssetDetail(assetId);
+      message = 'Stock moved';
     });
   }
 
@@ -623,14 +649,16 @@
     };
   }
 
-  async function runAction(action: () => Promise<void>) {
+  async function runAction(action: () => Promise<void>): Promise<boolean> {
     busy = true;
     error = '';
     message = '';
     try {
       await action();
+      return true;
     } catch (caught) {
       error = caught instanceof Error ? caught.message : 'Unknown error';
+      return false;
     } finally {
       busy = false;
     }
@@ -1005,6 +1033,8 @@
           bind:assetSearch
           createAsset={() => void createAsset()}
           updateSelectedAsset={() => void updateSelectedAsset()}
+          {moveSelectedTrackedAsset}
+          {moveSelectedStock}
           uploadSelectedAssetImage={(file) => void uploadSelectedAssetImage(file)}
           deleteSelectedAssetImage={() => void deleteSelectedAssetImage()}
           selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
