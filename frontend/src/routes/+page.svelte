@@ -679,8 +679,10 @@
     return assets.find((asset) => asset.id === id)?.name ?? 'Unknown stock';
   }
 
-  function stockLocationName(id: string): string {
-    return locations.find((location) => location.id === id)?.name ?? 'Unknown location';
+  function stockLocationName(id: string | null): string {
+    return id === null
+      ? 'No location'
+      : (locations.find((location) => location.id === id)?.name ?? 'Unknown location');
   }
 
   function assetName(id: string): string {

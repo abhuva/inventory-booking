@@ -1,240 +1,80 @@
-﻿# Implementation Plan
+# Implementation Plan
+
+## Current Focus: Option C Inventory Refactor
+
+Goal: split catalog descriptions from physical inventory state.
+
+Target model:
+
+```text
+Asset / ItemDefinition
+  shared item description: name, category, description, photo, unit, tracking mode
+
+TrackedUnit
+  one exact physical object, quantity always 1
+
+StockBatch
+  physical quantity group, can split/merge/move/checkout partially
+```
 
 ## Principles
 
-- Build backend correctness before UI convenience.
-- Support both `tracked` and `stock` assets from the first database schema.
-- Keep modules small and domain-oriented for AI-agent maintainability.
-- Treat security review as part of every API/database task.
-- Prefer narrow vertical slices with tests over broad untested scaffolding.
+- Keep backend business rules authoritative.
+- Preserve audit/item event history for mutations.
+- Keep public routes stable where practical while the internals move to Option C.
+- Do not duplicate photos/descriptions per physical split.
+- Treat quantity movement, checkout, and return as high-risk logic with tests.
 
-## Dependency Map
+## Refactor Tasks
 
-```text
-Repository baseline
-  -> architecture/security docs
-  -> database foundation
-  -> user/auth foundation
-  -> locations/categories/assets
-  -> stock levels and asset events
-  -> bookings and availability
-  -> checkout/return/movement workflows
-  -> QR workflows
-  -> frontend screens
-  -> deployment hardening
-```
+### 1. Persistence
 
-## Phase 0: Repository And Architecture Baseline
+- [x] Add `tracked_units` table.
+- [x] Add `stock_batches` table.
+- [x] Migrate existing tracked `assets` rows into `tracked_units`.
+- [x] Migrate existing `stock_levels` rows into `stock_batches`.
+- [x] Keep existing `assets` rows as item definitions.
+- [x] Keep asset images attached to definitions.
 
-Status: complete
+### 2. Backend Inventory API
 
-- [x] Root docs and agent entry point
-- [x] FastAPI skeleton
-- [x] SvelteKit skeleton
-- [x] Local environment examples
-- [x] Docker Compose service topology
-- [x] Docker local startup validation
-- [x] Architecture update for tracked and stock assets
-- [x] ADRs for core decisions
-- [x] Security review workflow
-- [x] Auth direction ADR
+- [x] Make `/assets` operate as item definitions with derived physical summaries.
+- [x] Make tracked create create both definition and first unit.
+- [x] Make tracked update write physical fields to the tracked unit.
+- [x] Make stock create create definition only.
+- [x] Replace stock-level service logic with stock-batch logic behind compatible routes.
+- [x] Add explicit split/merge helpers for stock movement.
 
-Dependencies: none.
+### 3. Booking And Availability
 
-## Phase 1: Backend Foundation
+- [x] Keep booking lines definition-centered for stock.
+- [x] Treat tracked booking lines as the first tracked unit for the selected definition during this transition.
+- [x] Calculate stock availability from available stock batches.
+- [x] Prevent overbooking with batch quantities.
 
-Goal: database-backed backend with migrations, modular domains, and a security-aware base.
+### 4. Checkout And Return
 
-### 1.1 Database Foundation
+- [x] Tracked checkout updates `tracked_units`.
+- [x] Stock checkout splits available batches into checked-out batches.
+- [x] Stock return merges quantity back into available destination batches.
+- [x] Partial returns update checkout line progress.
 
-Dependencies: Phase 0.
+### 5. QR
 
-- [x] SQLAlchemy async engine and session dependency
-- [x] Alembic configuration
-- [x] initial migration path
-- [x] database health endpoint
-- [x] Docker-compatible migration command
-- [x] tests for settings/model metadata
+- [x] QR assignment targets tracked units conceptually.
+- [x] Maintain current API compatibility during transition.
 
-### 1.2 User And Auth Foundation
+### 6. Frontend
 
-Dependencies: 1.1.
+- [x] Keep current Inventory tab working with compatible API shapes.
+- [x] Show tracked state from tracked unit summaries.
+- [x] Show stock state from stock batch summaries.
+- [ ] Later: add dedicated `Units` and `Stock` right-panel tabs.
 
-- [x] `users` model with `admin` and `user` roles
-- [x] password hash storage fields
-- [x] active/disabled state
-- [x] session/auth architecture decision
-- [x] initial admin seed strategy
-- [x] temporary internal token authorization helper for mutation endpoints
-- [x] session-cookie login/logout/me endpoints
-- [x] password hashing with Argon2
-- [x] tests for authenticated mutation guard
-- [x] admin-only user management endpoints
-- [x] CSRF double-submit protection for session mutations
-- [x] tests for admin/user role enforcement
+### 7. Verification
 
-### 1.3 Locations And Categories
-
-Dependencies: 1.1, partial 1.2 for actor/audit later.
-
-- [x] `locations` model with location types
-- [x] `categories` model
-- [x] create/list/get/update APIs
-- [x] validation schemas
-- [x] service tests
-- [x] temporary write-token guard on mutation endpoints
-- [x] session-cookie guard on mutation endpoints
-
-### 1.4 Inventory Assets
-
-Dependencies: 1.1, 1.3.
-
-- [x] `assets` model with `tracked` and `stock` modes
-- [x] tracked asset fields: status, condition, home/current location, holder
-- [x] stock asset fields: unit name
-- [x] `stock_levels` model per asset/location
-- [ ] constraints preventing stock levels on tracked-only usage where practical
-- [x] create/list/get/update APIs
-- [x] event creation for asset mutations
-- [x] tests for tracked vs stock validation
-
-### 1.5 Audit And Events
-
-Dependencies: 1.1, 1.2, 1.4.
-
-- [x] `item_events` model
-- [x] `audit_logs` model
-- [x] event writer service
-- [x] audit writer service
-- [x] tests that inventory mutations write events/audit records
-- [x] initial event/audit writes for asset create/update
-- [x] actor-aware audit/event writer helpers
-- [x] actor-aware audit writes for category/location/stock mutations
-- [x] admin-only audit query endpoints
-
-## Phase 2: Booking And Availability Core
-
-Goal: reliable reservation logic before checkout/return UI.
-
-### 2.1 Booking Schema
-
-Dependencies: Phase 1.
-
-- [x] `bookings` model
-- [x] `booking_lines` model supporting tracked assets and stock quantities
-- [x] booking statuses
-- [x] date range validation
-- [x] tests for invalid ranges and invalid lines
-
-### 2.2 Availability Service
-
-Dependencies: 2.1.
-
-- [x] tracked asset overlap logic
-- [x] stock quantity overlap logic
-- [x] unavailable status handling
-- [x] admin override path design
-- [x] database-level concurrency hardening decision for local MVP
-- [x] red-team tests for conflict bypass attempts
-
-### 2.3 Booking API
-
-Dependencies: 2.2.
-
-- [x] create booking
-- [x] list bookings
-- [x] get booking detail
-- [x] cancel booking
-- [x] availability preview endpoint
-- [x] security review for all mutation endpoints
-
-## Phase 3: Operational Workflows
-
-Goal: support real equipment movement and accountability.
-
-### 3.1 Checkout
-
-Dependencies: Phase 2.
-
-- [x] checkout records
-- [x] checkout tracked assets
-- [x] checkout stock quantities
-- [x] condition-out fields
-- [x] event/audit writes
-- [x] tests for duplicate checkout and insufficient stock
-
-### 3.2 Return
-
-Dependencies: 3.1.
-
-- [x] return records
-- [x] partial returns
-- [x] condition-in fields
-- [x] damaged/missing handling
-- [x] event/audit writes
-- [x] tests for over-return and damaged return flows
-
-### 3.3 Transfers And Maintenance
-
-Dependencies: 1.4, 1.5.
-
-- [x] transfer tracked asset location/holder
-- [x] transfer stock between locations
-- [x] maintenance start/complete
-- [x] mark damaged/lost/retired
-- [x] tests for invalid state transitions
-
-## Phase 4: QR Workflows
-
-Goal: phone-friendly lookup and assignment.
-
-Dependencies: Phase 1 inventory, Phase 3 movement flows.
-
-- [x] `qr_codes` model
-- [x] generate opaque QR tokens
-- [x] assign QR to tracked asset
-- [x] resolve assigned QR
-- [x] handle unassigned/retired/lost QR labels
-- [x] QR scan frontend route
-- [x] red-team tests for QR enumeration and unauthorized assignment
-
-## Phase 5: Frontend MVP
-
-Goal: usable internal workflow over the backend.
-
-Dependencies: backend APIs for the target workflow.
-
-- [x] app shell and navigation
-- [x] login screen
-- [x] dashboard
-- [x] asset list/search
-- [x] asset detail with event history
-- [x] stock by location view
-- [x] location list/detail
-- [x] booking creation form
-- [x] availability feedback
-- [x] checkout screen
-- [x] return screen
-- [x] QR scan/assignment screens
-- [x] admin user/category screens
-- [x] desktop-first tabbed workspace grouping
-- [x] extract tab panels into frontend components
-
-## Phase 6: Reliability And Deployment
-
-Dependencies: stable MVP.
-
-- [ ] HTTPS reverse proxy setup
-- [ ] backup job
-- [ ] restore test documentation
-- [ ] dependency audit automation
-- [ ] security static analysis automation
-- [ ] production environment checklist
-- [ ] deployment runbook
-
-## Current Next Slice
-
-Continue operational workflow:
-
-- add multi-line booking editing if real usage needs it
-- add deployment hardening runbook
+- [x] Add migration tests/regression tests for description vs physical state.
+- [x] Add split/move/checkout/return stock-batch tests.
+- [x] Run `.\scripts\check.ps1`.
+- [x] Apply migration locally.
+- [x] Commit refactor.

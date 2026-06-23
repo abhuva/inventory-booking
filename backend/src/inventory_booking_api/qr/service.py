@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from inventory_booking_api.audit.enums import AuditAction, ItemEventType
 from inventory_booking_api.audit.service import write_audit_log, write_item_event
 from inventory_booking_api.inventory.enums import AssetStatus, AssetType
-from inventory_booking_api.inventory.models import Asset
+from inventory_booking_api.inventory.models import Asset, TrackedUnit
 from inventory_booking_api.qr.models import QrCode
 from inventory_booking_api.qr.schemas import QrAssign, QrCodeCreate, QrResolvedAsset, QrResolveRead
 from inventory_booking_api.users.models import User
@@ -53,10 +53,16 @@ async def assign_qr_code(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="QR labels can only be assigned to tracked assets.",
         )
-    if asset.status in (AssetStatus.RETIRED, AssetStatus.LOST):
+    unit = await get_primary_tracked_unit(session, asset.id)
+    if unit is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tracked asset has no physical unit.",
+        )
+    if unit.status in (AssetStatus.RETIRED, AssetStatus.LOST):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Asset in status {asset.status.value} cannot receive a QR label.",
+            detail=f"Asset in status {unit.status.value} cannot receive a QR label.",
         )
     existing_assignment = await get_qr_code_by_asset(session, asset.id)
     if existing_assignment is not None and existing_assignment.id != qr_code.id:
@@ -99,6 +105,12 @@ async def resolve_qr_code(session: AsyncSession, token: str) -> QrResolveRead:
     asset = await session.get(Asset, qr_code.asset_id)
     if asset is None:
         return QrResolveRead(token=qr_code.token, assigned=False, asset=None)
+    unit = await get_primary_tracked_unit(session, asset.id)
+    if unit is not None:
+        asset.status = unit.status
+        asset.condition = unit.condition
+        asset.current_location_id = unit.current_location_id
+        asset.current_holder_user_id = unit.current_holder_user_id
     return QrResolveRead(
         token=qr_code.token,
         assigned=True,
@@ -122,6 +134,13 @@ async def get_qr_code_by_token(session: AsyncSession, token: str) -> QrCode | No
 async def get_qr_code_by_asset(session: AsyncSession, asset_id: UUID) -> QrCode | None:
     result = await session.execute(select(QrCode).where(QrCode.asset_id == asset_id))
     return result.scalar_one_or_none()
+
+
+async def get_primary_tracked_unit(session: AsyncSession, asset_id: UUID) -> TrackedUnit | None:
+    result = await session.execute(
+        select(TrackedUnit).where(TrackedUnit.asset_id == asset_id).order_by(TrackedUnit.created_at)
+    )
+    return result.scalars().first()
 
 
 def raise_not_found_qr() -> None:

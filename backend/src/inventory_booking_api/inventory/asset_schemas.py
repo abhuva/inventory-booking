@@ -103,7 +103,7 @@ class StockLevelUpdate(BaseModel):
 class StockLevelRead(BaseModel):
     id: UUID
     asset_id: UUID
-    location_id: UUID
+    location_id: UUID | None
     quantity_total: int
     quantity_reserved: int
     quantity_checked_out: int

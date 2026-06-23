@@ -59,7 +59,7 @@
     totalStockAtLocation: (locationId: string) => number;
     responsibleLabel: (id: string | null) => string;
     stockAssetName: (id: string) => string;
-    stockLocationName: (id: string) => string;
+    stockLocationName: (id: string | null) => string;
     selectAssetDetail: (assetId: string) => void;
   } = $props();
 </script>

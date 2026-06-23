@@ -12,7 +12,7 @@ from inventory_booking_api.checkouts.enums import CheckoutStatus
 from inventory_booking_api.checkouts.models import Checkout, CheckoutLine
 from inventory_booking_api.checkouts.schemas import CheckoutCreate
 from inventory_booking_api.inventory.enums import AssetStatus, AssetType
-from inventory_booking_api.inventory.models import Asset, StockLevel
+from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
 from inventory_booking_api.users.models import User
 
 
@@ -118,16 +118,20 @@ async def checkout_booking_line(
     actor: User,
 ) -> CheckoutLine:
     if asset.asset_type == AssetType.TRACKED:
-        if asset.status != AssetStatus.AVAILABLE:
+        unit = await get_primary_tracked_unit(session, asset.id)
+        if unit is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tracked asset {asset.name} has no physical unit.",
+            )
+        if unit.status != AssetStatus.AVAILABLE:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Tracked asset {asset.name} is not available for checkout.",
             )
-        asset.status = AssetStatus.CHECKED_OUT
-        asset.condition = payload.condition_out
-        asset.current_holder_user_id = payload.checked_out_to_user_id
-    else:
-        await increment_stock_checkout(session, booking_line)
+        unit.status = AssetStatus.CHECKED_OUT
+        unit.condition = payload.condition_out
+        unit.current_holder_user_id = payload.checked_out_to_user_id
 
     checkout_line = CheckoutLine(
         checkout_id=checkout.id,
@@ -138,6 +142,9 @@ async def checkout_booking_line(
         notes=booking_line.notes,
     )
     session.add(checkout_line)
+    await session.flush()
+    if asset.asset_type == AssetType.STOCK:
+        await split_stock_checkout(session, booking_line, checkout_line, payload)
     await write_item_event(
         session,
         asset_id=booking_line.asset_id,
@@ -154,25 +161,42 @@ async def checkout_booking_line(
     return checkout_line
 
 
-async def increment_stock_checkout(session: AsyncSession, booking_line: BookingLine) -> None:
+async def split_stock_checkout(
+    session: AsyncSession,
+    booking_line: BookingLine,
+    checkout_line: CheckoutLine,
+    payload: CheckoutCreate,
+) -> None:
     if booking_line.location_id is None or booking_line.quantity is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Stock checkout lines require a location and quantity.",
         )
 
-    stock_level = await get_stock_level(session, booking_line.asset_id, booking_line.location_id)
-    if stock_level is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No stock level exists for this asset/location.",
-        )
-    if stock_level.quantity_total - stock_level.quantity_checked_out < booking_line.quantity:
+    source = await get_available_stock_batch(
+        session,
+        booking_line.asset_id,
+        booking_line.location_id,
+    )
+    if source is None or source.quantity < booking_line.quantity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Not enough stock is available for checkout.",
         )
-    stock_level.quantity_checked_out += booking_line.quantity
+    source.quantity -= booking_line.quantity
+    checked_out_batch = StockBatch(
+        asset_id=booking_line.asset_id,
+        location_id=booking_line.location_id,
+        holder_user_id=payload.checked_out_to_user_id,
+        checkout_line_id=checkout_line.id,
+        status=AssetStatus.CHECKED_OUT,
+        condition=payload.condition_out,
+        quantity=booking_line.quantity,
+        notes=booking_line.notes,
+    )
+    session.add(checked_out_batch)
+    if source.quantity == 0:
+        await session.delete(source)
 
 
 async def get_checkout_by_booking(session: AsyncSession, booking_id: UUID) -> Checkout | None:
@@ -185,15 +209,26 @@ async def get_booking_lines(session: AsyncSession, booking_id: UUID) -> list[Boo
     return list(result.scalars().all())
 
 
-async def get_stock_level(
+async def get_available_stock_batch(
     session: AsyncSession,
     asset_id: UUID,
     location_id: UUID,
-) -> StockLevel | None:
+) -> StockBatch | None:
     result = await session.execute(
-        select(StockLevel).where(
-            StockLevel.asset_id == asset_id,
-            StockLevel.location_id == location_id,
+        select(StockBatch)
+        .where(
+            StockBatch.asset_id == asset_id,
+            StockBatch.location_id == location_id,
+            StockBatch.holder_user_id.is_(None),
+            StockBatch.status == AssetStatus.AVAILABLE,
         )
+        .order_by(StockBatch.created_at)
     )
-    return result.scalar_one_or_none()
+    return result.scalars().first()
+
+
+async def get_primary_tracked_unit(session: AsyncSession, asset_id: UUID) -> TrackedUnit | None:
+    result = await session.execute(
+        select(TrackedUnit).where(TrackedUnit.asset_id == asset_id).order_by(TrackedUnit.created_at)
+    )
+    return result.scalars().first()

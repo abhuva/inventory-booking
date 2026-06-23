@@ -81,8 +81,91 @@ class Asset(IdMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class TrackedUnit(IdMixin, TimestampMixin, Base):
+    """One exact physical unit for a tracked item definition."""
+
+    __tablename__ = "tracked_units"
+
+    asset_id: Mapped[UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    label: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    status: Mapped[AssetStatus] = mapped_column(
+        Enum(
+            AssetStatus,
+            name="asset_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+        default=AssetStatus.AVAILABLE,
+    )
+    condition: Mapped[AssetCondition] = mapped_column(
+        Enum(
+            AssetCondition,
+            name="asset_condition",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+        default=AssetCondition.UNKNOWN,
+    )
+    current_location_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("locations.id"), nullable=True
+    )
+    current_holder_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    manufacturer: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    serial_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    asset_tag: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    replacement_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class StockBatch(IdMixin, TimestampMixin, Base):
+    """Physical quantity group for a stock item definition."""
+
+    __tablename__ = "stock_batches"
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="stock_batch_quantity_positive"),
+    )
+
+    asset_id: Mapped[UUID] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    location_id: Mapped[UUID | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
+    holder_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    checkout_line_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("checkout_lines.id"), nullable=True
+    )
+    status: Mapped[AssetStatus] = mapped_column(
+        Enum(
+            AssetStatus,
+            name="asset_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+        default=AssetStatus.AVAILABLE,
+    )
+    condition: Mapped[AssetCondition] = mapped_column(
+        Enum(
+            AssetCondition,
+            name="asset_condition",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+        default=AssetCondition.UNKNOWN,
+    )
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class StockLevel(IdMixin, TimestampMixin, Base):
-    """Quantity of a stock asset at a location."""
+    """Legacy aggregate quantity table kept during the Option C transition."""
 
     __tablename__ = "stock_levels"
     __table_args__ = (

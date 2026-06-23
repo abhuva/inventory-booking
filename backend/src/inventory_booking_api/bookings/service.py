@@ -15,7 +15,7 @@ from inventory_booking_api.bookings.schemas import (
     BookingLineCreate,
 )
 from inventory_booking_api.inventory.enums import AssetStatus, AssetType
-from inventory_booking_api.inventory.models import Asset, StockLevel
+from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
 from inventory_booking_api.users.models import User
 
 ACTIVE_BOOKING_STATUSES = (BookingStatus.RESERVED, BookingStatus.CHECKED_OUT)
@@ -153,12 +153,6 @@ async def validate_booking_lines(session: AsyncSession, payload: BookingCreate) 
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Booking line asset does not exist.",
             )
-        if asset.status != AssetStatus.AVAILABLE:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Asset {asset.name} is not available.",
-            )
-
         if asset.asset_type == AssetType.TRACKED:
             await validate_tracked_line(session, payload, line.asset_id, line.quantity)
         else:
@@ -177,6 +171,17 @@ async def validate_tracked_line(
     asset_id: UUID,
     quantity: int | None,
 ) -> None:
+    unit = await get_primary_tracked_unit(session, asset_id)
+    if unit is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tracked booking line has no physical unit.",
+        )
+    if unit.status != AssetStatus.AVAILABLE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tracked unit is not available.",
+        )
     if quantity not in (None, 1):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -219,35 +224,31 @@ async def validate_stock_line(
             detail="Stock booking lines require a quantity.",
         )
 
-    stock_level = await get_stock_level(session, asset_id, location_id)
-    if stock_level is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No stock level exists for this asset/location.",
-        )
-
+    stock_quantity = await get_available_stock_quantity(session, asset_id, location_id)
     overlapping_quantity = await get_overlapping_stock_quantity(
         session, payload, asset_id, location_id
     )
-    if stock_level.quantity_total - overlapping_quantity < quantity:
+    if stock_quantity - overlapping_quantity < quantity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Not enough stock is available for this time range.",
         )
 
 
-async def get_stock_level(
+async def get_available_stock_quantity(
     session: AsyncSession,
     asset_id: UUID,
     location_id: UUID,
-) -> StockLevel | None:
+) -> int:
     result = await session.execute(
-        select(StockLevel).where(
-            StockLevel.asset_id == asset_id,
-            StockLevel.location_id == location_id,
+        select(func.coalesce(func.sum(StockBatch.quantity), 0)).where(
+            StockBatch.asset_id == asset_id,
+            StockBatch.location_id == location_id,
+            StockBatch.holder_user_id.is_(None),
+            StockBatch.status == AssetStatus.AVAILABLE,
         )
     )
-    return result.scalar_one_or_none()
+    return int(result.scalar_one())
 
 
 async def get_overlapping_stock_quantity(
@@ -278,13 +279,6 @@ async def preview_line_availability(
     asset = await session.get(Asset, line.asset_id)
     if asset is None:
         return build_availability_line(line, available=False, reason="Asset does not exist.")
-    if asset.status != AssetStatus.AVAILABLE:
-        return build_availability_line(
-            line,
-            available=False,
-            reason=f"Asset {asset.name} is not available.",
-        )
-
     if asset.asset_type == AssetType.TRACKED:
         return await preview_tracked_line(session, payload, line)
     return await preview_stock_line(session, payload, line)
@@ -295,6 +289,21 @@ async def preview_tracked_line(
     payload: BookingCreate,
     line: BookingLineCreate,
 ) -> AvailabilityLineRead:
+    unit = await get_primary_tracked_unit(session, line.asset_id)
+    if unit is None:
+        return build_availability_line(
+            line,
+            available=False,
+            available_quantity=0,
+            reason="Tracked booking line has no physical unit.",
+        )
+    if unit.status != AssetStatus.AVAILABLE:
+        return build_availability_line(
+            line,
+            available=False,
+            available_quantity=0,
+            reason="Tracked unit is not available.",
+        )
     if line.quantity not in (None, 1):
         return build_availability_line(
             line,
@@ -342,21 +351,14 @@ async def preview_stock_line(
             reason="Stock booking lines require a quantity.",
         )
 
-    stock_level = await get_stock_level(session, line.asset_id, line.location_id)
-    if stock_level is None:
-        return build_availability_line(
-            line,
-            available=False,
-            reason="No stock level exists for this asset/location.",
-        )
-
+    stock_quantity = await get_available_stock_quantity(session, line.asset_id, line.location_id)
     overlapping_quantity = await get_overlapping_stock_quantity(
         session,
         payload,
         line.asset_id,
         line.location_id,
     )
-    available_quantity = stock_level.quantity_total - overlapping_quantity
+    available_quantity = stock_quantity - overlapping_quantity
     return build_availability_line(
         line,
         available=available_quantity >= line.quantity,
@@ -382,3 +384,10 @@ def build_availability_line(
         available=available,
         reason=reason,
     )
+
+
+async def get_primary_tracked_unit(session: AsyncSession, asset_id: UUID) -> TrackedUnit | None:
+    result = await session.execute(
+        select(TrackedUnit).where(TrackedUnit.asset_id == asset_id).order_by(TrackedUnit.created_at)
+    )
+    return result.scalars().first()

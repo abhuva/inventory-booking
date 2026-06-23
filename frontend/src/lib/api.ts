@@ -98,7 +98,7 @@ export type AssetImage = {
 export type StockLevel = {
   id: string;
   asset_id: string;
-  location_id: string;
+  location_id: string | null;
   quantity_total: number;
   quantity_reserved: number;
   quantity_checked_out: number;
