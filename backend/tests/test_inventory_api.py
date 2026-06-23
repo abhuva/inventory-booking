@@ -1424,3 +1424,93 @@ def test_confirm_basket_creates_booking_and_clears_active_basket(client: TestCli
     assert confirmed["lines"][0]["asset_id"] == tracked_asset["id"]
     assert active_response.status_code == 200
     assert active_response.json() is None
+
+def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Heatmap Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    booked_stock_asset = client.post(
+        "/assets",
+        json={"name": "Heatmap Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    held_stock_asset = client.post(
+        "/assets",
+        json={"name": "Heatmap Clubs", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": booked_stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 10,
+        },
+        headers=headers,
+    )
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": held_stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 8,
+        },
+        headers=headers,
+    )
+    client.post(
+        "/bookings",
+        json={
+            "title": "Heatmap booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": booked_stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 3,
+                }
+            ],
+        },
+        headers=headers,
+    )
+    basket = client.post(
+        "/basket",
+        json={
+            "title": "Heatmap basket",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+        },
+        headers=headers,
+    ).json()
+    client.post(
+        f"/basket/{basket['id']}/lines",
+        json={"asset_id": held_stock_asset["id"], "location_id": location["id"], "quantity": 2},
+        headers=headers,
+    )
+
+    response = client.get(
+        "/bookings/availability/heatmap",
+        params={
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": (BOOKING_START + timedelta(days=1)).isoformat(),
+            "bucket": "day",
+            "location_id": location["id"],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    items = {item["asset_id"]: item for item in response.json()["items"]}
+    booked_cell = items[booked_stock_asset["id"]]["cells"][0]
+    held_cell = items[held_stock_asset["id"]]["cells"][0]
+    assert booked_cell["total_quantity"] == 10
+    assert booked_cell["reserved_quantity"] == 3
+    assert booked_cell["held_quantity"] == 0
+    assert booked_cell["available_quantity"] == 7
+    assert held_cell["total_quantity"] == 8
+    assert held_cell["reserved_quantity"] == 0
+    assert held_cell["held_quantity"] == 2
+    assert held_cell["available_quantity"] == 6

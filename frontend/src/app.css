@@ -924,10 +924,30 @@ button.secondary {
 
 .booking-actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(8rem, 1fr)) auto;
+  grid-template-columns: repeat(5, minmax(7rem, 1fr)) auto;
   gap: 0.35rem;
   align-items: center;
-  min-width: min(100%, 54rem);
+  min-width: min(100%, 62rem);
+}
+
+.inline-check {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.inline-check input {
+  width: auto;
+}
+
+.heatmap-shell {
+  min-height: 34rem;
+  height: calc(100% - 4.8rem);
+}
+
+.hidden-panel {
+  display: none;
 }
 
 .booking-builder {

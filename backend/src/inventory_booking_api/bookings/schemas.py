@@ -79,3 +79,28 @@ class AvailabilityLineRead(BaseModel):
 class AvailabilityRead(BaseModel):
     available: bool
     lines: list[AvailabilityLineRead]
+
+
+class HeatmapCellRead(BaseModel):
+    bucket_start: datetime
+    bucket_end: datetime
+    total_quantity: int
+    reserved_quantity: int
+    held_quantity: int
+    available_quantity: int
+
+
+class HeatmapItemRead(BaseModel):
+    asset_id: UUID
+    name: str
+    unit_name: str | None
+    total_quantity: int
+    cells: list[HeatmapCellRead]
+
+
+class AvailabilityHeatmapRead(BaseModel):
+    starts_at: datetime
+    ends_at: datetime
+    bucket: str
+    location_id: UUID | None
+    items: list[HeatmapItemRead]

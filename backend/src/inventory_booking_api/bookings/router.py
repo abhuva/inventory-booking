@@ -1,11 +1,13 @@
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.bookings.schemas import (
+    AvailabilityHeatmapRead,
     AvailabilityRead,
     BookingCreate,
     BookingLineRead,
@@ -13,6 +15,7 @@ from inventory_booking_api.bookings.schemas import (
     BookingSummaryRead,
 )
 from inventory_booking_api.bookings.service import (
+    build_stock_availability_heatmap,
     cancel_booking,
     create_booking,
     get_booking,
@@ -52,6 +55,24 @@ async def preview_availability_endpoint(
     _: Annotated[User, Depends(get_current_user)],
 ) -> AvailabilityRead:
     return await preview_availability(session, payload)
+
+
+@router.get("/availability/heatmap", response_model=AvailabilityHeatmapRead)
+async def availability_heatmap_endpoint(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(get_current_user)],
+    starts_at: Annotated[datetime, Query()],
+    ends_at: Annotated[datetime, Query()],
+    bucket: Annotated[str, Query(pattern="^(day|week)$")] = "day",
+    location_id: Annotated[UUID | None, Query()] = None,
+) -> AvailabilityHeatmapRead:
+    return await build_stock_availability_heatmap(
+        session,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        bucket=bucket,
+        location_id=location_id,
+    )
 
 
 @router.get("/{booking_id}", response_model=BookingRead)

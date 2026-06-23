@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { apiGet, type AvailabilityHeatmap } from '$lib/api';
   import type {
     Asset,
     Availability,
@@ -9,15 +10,24 @@
     Location
   } from '$lib/api';
   import type { Calendar as FullCalendarInstance, EventInput } from '@fullcalendar/core';
+  import type { ECharts } from 'echarts';
 
   let calendarElement = $state<HTMLElement>();
+  let heatmapElement = $state<HTMLElement>();
   let calendar = $state<FullCalendarInstance | null>(null);
+  let heatmapChart = $state<ECharts | null>(null);
+  let heatmap = $state<AvailabilityHeatmap | null>(null);
   let selectedBookingId = $state('');
   let showNewBooking = $state(false);
   let statusFilter = $state('active');
   let assetFilter = $state('');
   let locationFilter = $state('');
   let calendarMode = $state<'bundle' | 'item'>('bundle');
+  let bookingView = $state<'calendar' | 'heatmap'>('calendar');
+  let heatmapRange = $state<'month' | 'year'>('month');
+  let heatmapMonth = $state(currentMonthValue());
+  let heatmapYear = $state(String(new Date().getFullYear()));
+  let showHeatmapNumbers = $state(false);
 
   let {
     assets,
@@ -110,6 +120,20 @@
     }
     calendar.removeAllEvents();
     calendar.addEventSource(calendarEvents());
+  });
+
+  $effect(() => {
+    if (bookingView !== 'heatmap') {
+      return;
+    }
+    void loadHeatmap();
+  });
+
+  $effect(() => {
+    if (bookingView !== 'heatmap' || !heatmapElement) {
+      return;
+    }
+    void renderHeatmap();
   });
 
   function calendarEvents(): EventInput[] {
@@ -213,6 +237,139 @@
     return '#254c37';
   }
 
+  async function loadHeatmap() {
+    const { start, end, bucket } = heatmapRangeBounds();
+    const params = new URLSearchParams({
+      starts_at: start.toISOString(),
+      ends_at: end.toISOString(),
+      bucket
+    });
+    if (locationFilter) {
+      params.set('location_id', locationFilter);
+    }
+    heatmap = await apiGet<AvailabilityHeatmap>(`/bookings/availability/heatmap?${params}`);
+    await renderHeatmap();
+  }
+
+  async function renderHeatmap() {
+    if (!heatmapElement || !heatmap) {
+      return;
+    }
+    if (!heatmapChart) {
+      const echarts = await import('echarts');
+      heatmapChart = echarts.init(heatmapElement, undefined, { renderer: 'canvas' });
+      window.addEventListener('resize', () => heatmapChart?.resize());
+    }
+
+    const visibleItems = heatmap.items.filter((item) =>
+      item.name.toLocaleLowerCase().includes(assetFilter.trim().toLocaleLowerCase())
+    );
+    const xLabels =
+      visibleItems[0]?.cells.map((cell) =>
+        heatmapBucketLabel(cell.bucket_start, heatmap?.bucket)
+      ) ?? [];
+    const yLabels = visibleItems.map((item) => item.name);
+    const values = visibleItems.flatMap((item, yIndex) =>
+      item.cells.map((cell, xIndex) => [xIndex, yIndex, cell.available_quantity])
+    );
+    const maxQuantity = Math.max(1, ...visibleItems.map((item) => item.total_quantity));
+
+    heatmapChart.setOption({
+      animation: false,
+      tooltip: {
+        position: 'top',
+        formatter(params: { data: [number, number, number] }) {
+          const [xIndex, yIndex] = params.data;
+          const item = visibleItems[yIndex];
+          const cell = item?.cells[xIndex];
+          if (!item || !cell) {
+            return '';
+          }
+          return [
+            `<strong>${item.name}</strong>`,
+            heatmapBucketLabel(cell.bucket_start, heatmap?.bucket),
+            `Available: ${cell.available_quantity} ${item.unit_name ?? 'units'}`,
+            `Reserved: ${cell.reserved_quantity}`,
+            `Basket holds: ${cell.held_quantity}`
+          ].join('<br />');
+        }
+      },
+      grid: { top: 24, right: 28, bottom: 72, left: 150 },
+      xAxis: {
+        type: 'category',
+        data: xLabels,
+        splitArea: { show: true },
+        axisLabel: { rotate: heatmapRange === 'month' ? 45 : 0 }
+      },
+      yAxis: {
+        type: 'category',
+        data: yLabels,
+        splitArea: { show: true }
+      },
+      visualMap: {
+        min: 0,
+        max: maxQuantity,
+        calculable: true,
+        orient: 'horizontal',
+        left: 'center',
+        bottom: 8,
+        inRange: { color: ['#a63d2f', '#e6c75e', '#5d8a4f'] }
+      },
+      series: [
+        {
+          type: 'heatmap',
+          data: values,
+          label: { show: showHeatmapNumbers },
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 8,
+              shadowColor: 'rgba(20, 33, 28, 0.22)'
+            }
+          }
+        }
+      ]
+    });
+  }
+
+  function heatmapRangeBounds(): { start: Date; end: Date; bucket: 'day' | 'week' } {
+    if (heatmapRange === 'year') {
+      const year = Number.parseInt(heatmapYear, 10) || new Date().getFullYear();
+      return {
+        start: new Date(year, 0, 1),
+        end: new Date(year + 1, 0, 1),
+        bucket: 'week'
+      };
+    }
+    const [yearText, monthText] = heatmapMonth.split('-');
+    const year = Number.parseInt(yearText, 10) || new Date().getFullYear();
+    const month = (Number.parseInt(monthText, 10) || 1) - 1;
+    return {
+      start: new Date(year, month, 1),
+      end: new Date(year, month + 1, 1),
+      bucket: 'day'
+    };
+  }
+
+  function heatmapBucketLabel(value: string, bucket: 'day' | 'week' | undefined): string {
+    const date = new Date(value);
+    if (bucket === 'week') {
+      return `W${weekNumber(date)}`;
+    }
+    return new Intl.DateTimeFormat(undefined, { day: '2-digit', month: '2-digit' }).format(date);
+  }
+
+  function weekNumber(date: Date): number {
+    const copiedDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    copiedDate.setUTCDate(copiedDate.getUTCDate() + 4 - (copiedDate.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(copiedDate.getUTCFullYear(), 0, 1));
+    return Math.ceil(((copiedDate.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  }
+
+  function currentMonthValue(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+
   function selectedBooking(): Booking | undefined {
     return bookings.find((booking) => booking.id === selectedBookingId);
   }
@@ -267,39 +424,95 @@
   <section class="panel booking-calendar-panel">
     <div class="booking-toolbar">
       <div>
-        <h2>Booking calendar</h2>
-        <p>{bookings.length} bookings</p>
+        <h2>{bookingView === 'heatmap' ? 'Availability heatmap' : 'Booking calendar'}</h2>
+        <p>
+          {#if bookingView === 'heatmap'}
+            {heatmap?.items.length ?? 0} stock items
+          {:else}
+            {bookings.length} bookings
+          {/if}
+        </p>
       </div>
       <div class="booking-actions">
-        <select bind:value={calendarMode} aria-label="Calendar display mode">
-          <option value="bundle">Bundle view</option>
-          <option value="item">Item view</option>
+        <select bind:value={bookingView} aria-label="Booking view">
+          <option value="calendar">Calendar</option>
+          <option value="heatmap">Heatmap</option>
         </select>
-        <select bind:value={statusFilter} aria-label="Filter bookings by status">
-          <option value="active">Active</option>
-          <option value="all">All statuses</option>
-          <option value="reserved">Reserved</option>
-          <option value="checked_out">Checked out</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-        <select bind:value={assetFilter} aria-label="Filter bookings by asset">
-          <option value="">All assets</option>
-          {#each assets as asset}
-            <option value={asset.id}>{asset.name}</option>
-          {/each}
-        </select>
+        {#if bookingView === 'calendar'}
+          <select bind:value={calendarMode} aria-label="Calendar display mode">
+            <option value="bundle">Bundle view</option>
+            <option value="item">Item view</option>
+          </select>
+          <select bind:value={statusFilter} aria-label="Filter bookings by status">
+            <option value="active">Active</option>
+            <option value="all">All statuses</option>
+            <option value="reserved">Reserved</option>
+            <option value="checked_out">Checked out</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <select bind:value={assetFilter} aria-label="Filter bookings by asset">
+            <option value="">All assets</option>
+            {#each assets as asset}
+              <option value={asset.id}>{asset.name}</option>
+            {/each}
+          </select>
+        {:else}
+          <select bind:value={heatmapRange} aria-label="Heatmap range">
+            <option value="month">Month</option>
+            <option value="year">Year</option>
+          </select>
+          {#if heatmapRange === 'month'}
+            <input bind:value={heatmapMonth} type="month" aria-label="Heatmap month" />
+          {:else}
+            <input
+              bind:value={heatmapYear}
+              type="number"
+              min="2020"
+              max="2100"
+              aria-label="Heatmap year"
+            />
+          {/if}
+          <input
+            bind:value={assetFilter}
+            type="search"
+            placeholder="Filter stock item..."
+            aria-label="Filter stock item"
+          />
+        {/if}
         <select bind:value={locationFilter} aria-label="Filter bookings by location">
           <option value="">All locations</option>
           {#each locations as location}
             <option value={location.id}>{location.name}</option>
           {/each}
         </select>
+        {#if bookingView === 'heatmap'}
+          <label class="inline-check">
+            <input bind:checked={showHeatmapNumbers} type="checkbox" />
+            Numbers
+          </label>
+        {/if}
         <button type="button" class="compact" onclick={openNewBooking}>+ New booking</button>
       </div>
     </div>
 
-    <div class="calendar-shell" bind:this={calendarElement}></div>
+    <div
+      class:hidden-panel={bookingView !== 'calendar'}
+      class="calendar-shell"
+      bind:this={calendarElement}
+    ></div>
+    <div
+      class:hidden-panel={bookingView !== 'heatmap'}
+      class="heatmap-shell"
+      bind:this={heatmapElement}
+    >
+      {#if heatmap && heatmap.items.length === 0}
+        <div class="empty-detail">
+          <h2>No stock data</h2>
+          <p>No stock items exist for the selected location/range.</p>
+        </div>
+      {/if}
+    </div>
   </section>
 
   <aside class="panel booking-detail-panel" aria-label="Selected booking detail">

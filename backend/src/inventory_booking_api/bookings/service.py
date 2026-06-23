@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -12,16 +12,20 @@ from inventory_booking_api.baskets.models import Basket, BasketLine
 from inventory_booking_api.bookings.enums import BookingStatus
 from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.bookings.schemas import (
+    AvailabilityHeatmapRead,
     AvailabilityLineRead,
     AvailabilityRead,
     BookingCreate,
     BookingLineCreate,
+    HeatmapCellRead,
+    HeatmapItemRead,
 )
 from inventory_booking_api.inventory.enums import AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
 from inventory_booking_api.users.models import User
 
 ACTIVE_BOOKING_STATUSES = (BookingStatus.RESERVED, BookingStatus.CHECKED_OUT)
+HEATMAP_MAX_BUCKETS = 370
 
 
 async def list_bookings(session: AsyncSession) -> list[Booking]:
@@ -152,6 +156,73 @@ async def preview_availability(
     return AvailabilityRead(
         available=all(line.available for line in line_results),
         lines=line_results,
+    )
+
+
+async def build_stock_availability_heatmap(
+    session: AsyncSession,
+    *,
+    starts_at: datetime,
+    ends_at: datetime,
+    bucket: str,
+    location_id: UUID | None = None,
+) -> AvailabilityHeatmapRead:
+    buckets = build_heatmap_buckets(starts_at, ends_at, bucket)
+    stock_assets = await list_heatmap_stock_assets(session)
+    items: list[HeatmapItemRead] = []
+
+    for asset in stock_assets:
+        total_quantity = await get_available_stock_quantity_for_heatmap(
+            session,
+            asset.id,
+            location_id,
+        )
+        if total_quantity <= 0:
+            continue
+
+        cells: list[HeatmapCellRead] = []
+        for bucket_start, bucket_end in buckets:
+            reserved_quantity = await get_overlapping_stock_quantity_for_range(
+                session,
+                asset.id,
+                location_id,
+                bucket_start,
+                bucket_end,
+            )
+            held_quantity = await get_overlapping_stock_basket_quantity_for_range(
+                session,
+                asset.id,
+                location_id,
+                bucket_start,
+                bucket_end,
+            )
+            cells.append(
+                HeatmapCellRead(
+                    bucket_start=bucket_start,
+                    bucket_end=bucket_end,
+                    total_quantity=total_quantity,
+                    reserved_quantity=reserved_quantity,
+                    held_quantity=held_quantity,
+                    available_quantity=max(0, total_quantity - reserved_quantity - held_quantity),
+                )
+            )
+
+        items.append(
+            HeatmapItemRead(
+                asset_id=asset.id,
+                name=asset.name,
+                unit_name=asset.unit_name,
+                total_quantity=total_quantity,
+                cells=cells,
+            )
+        )
+
+    return AvailabilityHeatmapRead(
+        starts_at=starts_at,
+        ends_at=ends_at,
+        bucket=bucket,
+        location_id=location_id,
+        items=items,
     )
 
 
@@ -299,6 +370,25 @@ async def get_available_stock_quantity(
             StockBatch.holder_user_id.is_(None),
             StockBatch.status == AssetStatus.AVAILABLE,
         )
+    )
+    return int(result.scalar_one())
+
+
+async def get_available_stock_quantity_for_heatmap(
+    session: AsyncSession,
+    asset_id: UUID,
+    location_id: UUID | None,
+) -> int:
+    filters = [
+        StockBatch.asset_id == asset_id,
+        StockBatch.holder_user_id.is_(None),
+        StockBatch.status == AssetStatus.AVAILABLE,
+    ]
+    if location_id is not None:
+        filters.append(StockBatch.location_id == location_id)
+
+    result = await session.execute(
+        select(func.coalesce(func.sum(StockBatch.quantity), 0)).where(*filters)
     )
     return int(result.scalar_one())
 
@@ -511,6 +601,96 @@ async def get_overlapping_stock_basket_quantity(
             BasketLine.asset_id == asset_id,
             BasketLine.location_id == location_id,
         )
+    )
+    return int(result.scalar_one())
+
+
+async def get_overlapping_stock_basket_quantity_for_range(
+    session: AsyncSession,
+    asset_id: UUID,
+    location_id: UUID | None,
+    starts_at: datetime,
+    ends_at: datetime,
+) -> int:
+    filters = [
+        BasketLine.asset_id == asset_id,
+        Basket.status == BasketStatus.ACTIVE,
+        Basket.expires_at > datetime.now(UTC),
+        Basket.starts_at < ends_at,
+        Basket.ends_at > starts_at,
+    ]
+    if location_id is not None:
+        filters.append(BasketLine.location_id == location_id)
+
+    result = await session.execute(
+        select(func.coalesce(func.sum(BasketLine.quantity), 0))
+        .join(Basket, BasketLine.basket_id == Basket.id)
+        .where(*filters)
+    )
+    return int(result.scalar_one())
+
+
+async def list_heatmap_stock_assets(session: AsyncSession) -> list[Asset]:
+    result = await session.execute(
+        select(Asset).where(Asset.asset_type == AssetType.STOCK).order_by(Asset.name)
+    )
+    return list(result.scalars().all())
+
+
+def build_heatmap_buckets(
+    starts_at: datetime,
+    ends_at: datetime,
+    bucket: str,
+) -> list[tuple[datetime, datetime]]:
+    if starts_at >= ends_at:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="starts_at must be before ends_at.",
+        )
+    if bucket == "day":
+        step = timedelta(days=1)
+    elif bucket == "week":
+        step = timedelta(weeks=1)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="bucket must be day or week.",
+        )
+
+    buckets: list[tuple[datetime, datetime]] = []
+    cursor = starts_at
+    while cursor < ends_at:
+        next_cursor = min(cursor + step, ends_at)
+        buckets.append((cursor, next_cursor))
+        cursor = next_cursor
+        if len(buckets) > HEATMAP_MAX_BUCKETS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Heatmap range is too large.",
+            )
+    return buckets
+
+
+async def get_overlapping_stock_quantity_for_range(
+    session: AsyncSession,
+    asset_id: UUID,
+    location_id: UUID | None,
+    starts_at: datetime,
+    ends_at: datetime,
+) -> int:
+    filters = [
+        BookingLine.asset_id == asset_id,
+        Booking.status.in_(ACTIVE_BOOKING_STATUSES),
+        Booking.starts_at < ends_at,
+        Booking.ends_at > starts_at,
+    ]
+    if location_id is not None:
+        filters.append(BookingLine.location_id == location_id)
+
+    result = await session.execute(
+        select(func.coalesce(func.sum(BookingLine.quantity), 0))
+        .join(Booking, BookingLine.booking_id == Booking.id)
+        .where(*filters)
     )
     return int(result.scalar_one())
 
