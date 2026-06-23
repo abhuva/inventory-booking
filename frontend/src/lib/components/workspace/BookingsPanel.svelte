@@ -107,15 +107,19 @@
       ) ?? [];
     const yLabels = visibleItems.map((item) => item.name);
     const values = visibleItems.flatMap((item, yIndex) =>
-      item.cells.map((cell, xIndex) => [xIndex, yIndex, cell.available_quantity])
+      item.cells.map((cell, xIndex) => [
+        xIndex,
+        yIndex,
+        normalizedAvailableQuantity(cell.available_quantity, maxQuantityForItem(item)),
+        cell.available_quantity
+      ])
     );
-    const maxQuantity = Math.max(1, ...visibleItems.map((item) => item.total_quantity));
 
     heatmapChart.setOption({
       animation: false,
       tooltip: {
         position: 'top',
-        formatter(params: { data: [number, number, number] }) {
+        formatter(params: { data: [number, number, number, number] }) {
           const [xIndex, yIndex] = params.data;
           const item = visibleItems[yIndex];
           const cell = item?.cells[xIndex];
@@ -145,19 +149,27 @@
       },
       visualMap: {
         min: 0,
-        max: maxQuantity,
+        max: 1,
         calculable: true,
         orient: 'horizontal',
         left: 'center',
         bottom: 0,
         itemHeight: 72,
-        inRange: { color: ['#a63d2f', '#e6c75e', '#5d8a4f'] }
+        inRange: { color: ['#a63d2f', '#e6c75e', '#5d8a4f'] },
+        formatter(value: number) {
+          return `${Math.round(value * 100)}%`;
+        }
       },
       series: [
         {
           type: 'heatmap',
           data: values,
-          label: { show: showHeatmapNumbers },
+          label: {
+            show: showHeatmapNumbers,
+            formatter(params: { data: [number, number, number, number] }) {
+              return String(params.data[3]);
+            }
+          },
           emphasis: {
             itemStyle: {
               shadowBlur: 8,
@@ -168,6 +180,19 @@
       ]
     });
     requestAnimationFrame(() => heatmapChart?.resize());
+  }
+
+  function maxQuantityForItem(item: AvailabilityHeatmap['items'][number]): number {
+    return Math.max(
+      1,
+      item.total_quantity,
+      ...item.cells.map((cell) => cell.total_quantity),
+      ...item.cells.map((cell) => cell.available_quantity)
+    );
+  }
+
+  function normalizedAvailableQuantity(availableQuantity: number, maxQuantity: number): number {
+    return Math.max(0, Math.min(1, availableQuantity / maxQuantity));
   }
 
   function heatmapRangeBounds(): { start: Date; end: Date; bucket: 'day' | 'week' } {
