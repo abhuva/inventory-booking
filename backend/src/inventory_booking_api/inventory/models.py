@@ -77,6 +77,7 @@ class Asset(IdMixin, TimestampMixin, Base):
     serial_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
     asset_tag: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
     replacement_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 

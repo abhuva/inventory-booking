@@ -80,6 +80,7 @@ export type Asset = {
   serial_number: string | null;
   asset_tag: string | null;
   replacement_value: string | null;
+  description: string | null;
   notes: string | null;
 };
 
@@ -248,6 +249,7 @@ export type AssetUpdate = {
   serial_number?: string | null;
   asset_tag?: string | null;
   replacement_value?: string | null;
+  description?: string | null;
   notes?: string | null;
 };
 

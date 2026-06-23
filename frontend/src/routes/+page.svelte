@@ -188,6 +188,7 @@
     serial_number: '',
     asset_tag: '',
     replacement_value: null,
+    description: '',
     notes: ''
   });
   let qrCreateForm = $state<QrCodeCreate>({ label: '', notes: '' });
@@ -594,6 +595,7 @@
       serial_number: '',
       asset_tag: '',
       replacement_value: null,
+      description: '',
       notes: ''
     };
   }
@@ -616,6 +618,7 @@
       serial_number: asset.serial_number ?? '',
       asset_tag: asset.asset_tag ?? '',
       replacement_value: asset.replacement_value,
+      description: asset.description ?? '',
       notes: asset.notes ?? ''
     };
   }
@@ -699,6 +702,7 @@
       asset.serial_number,
       asset.manufacturer,
       asset.model,
+      asset.description,
       asset.notes,
       categoryName(asset.category_id),
       locationName(asset.current_location_id),

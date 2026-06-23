@@ -232,6 +232,30 @@ def test_asset_mode_validation(client: TestClient) -> None:
     assert invalid_stock_response.status_code == 422
 
 
+def test_asset_description_is_separate_from_notes(client: TestClient) -> None:
+    headers = login(client)
+    asset = client.post(
+        "/assets",
+        json={
+            "name": "Described Rig",
+            "asset_type": "tracked",
+            "description": "Public recognition text.",
+            "notes": "Internal handling note.",
+        },
+        headers=headers,
+    ).json()
+
+    update_response = client.patch(
+        f"/assets/{asset['id']}",
+        json={"description": "Updated visible description.", "notes": "Updated private note."},
+        headers=headers,
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["description"] == "Updated visible description."
+    assert update_response.json()["notes"] == "Updated private note."
+
+
 def test_stock_level_requires_stock_asset(client: TestClient) -> None:
     headers = login(client)
 

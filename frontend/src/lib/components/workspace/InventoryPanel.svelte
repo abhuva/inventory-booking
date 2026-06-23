@@ -23,8 +23,10 @@
     'retired'
   ];
   const assetConditions: AssetCondition[] = ['unknown', 'good', 'worn', 'damaged', 'needs_repair'];
+  type AssetDetailTab = 'info' | 'extra' | 'history';
 
   let showAddAsset = $state(false);
+  let activeDetailTab = $state<AssetDetailTab>('info');
   let photoInput = $state<HTMLInputElement>();
 
   let {
@@ -185,88 +187,120 @@
 
   <aside class="panel inventory-detail-panel" aria-label="Selected asset details">
     {#if selectedAsset()}
-      <div class="detail-header">
+      <div class="detail-header asset-detail-header">
         <div>
           <p class="eyebrow">Asset detail</p>
           <h2>{selectedAsset()?.name}</h2>
         </div>
-        <button type="button" class="secondary compact" onclick={closeAssetDetail}>Close</button>
+        <button type="button" class="secondary micro-button" onclick={closeAssetDetail}
+          >Close</button
+        >
       </div>
 
-      <div class="asset-photo-panel">
-        {#if assetImageUrl(selectedAssetId)}
-          <img
-            src={assetImageUrl(selectedAssetId) ?? ''}
-            alt={`Photo of ${selectedAsset()?.name}`}
-            class="asset-photo"
-          />
-        {:else}
-          <div class="asset-photo-placeholder">
-            <strong>No photo</strong>
-            <span>Add a square reference photo for quick recognition.</span>
+      <div class="detail-tab-bar" aria-label="Asset detail sections">
+        <button
+          type="button"
+          class:active-detail-tab={activeDetailTab === 'info'}
+          onclick={() => (activeDetailTab = 'info')}
+        >
+          Info
+        </button>
+        <button
+          type="button"
+          class:active-detail-tab={activeDetailTab === 'extra'}
+          onclick={() => (activeDetailTab = 'extra')}
+        >
+          Extra
+        </button>
+        <button
+          type="button"
+          class:active-detail-tab={activeDetailTab === 'history'}
+          onclick={() => (activeDetailTab = 'history')}
+        >
+          History
+        </button>
+      </div>
+
+      {#if activeDetailTab === 'info'}
+        <form
+          class="asset-edit-form detail-tab-panel"
+          onsubmit={(event) => {
+            event.preventDefault();
+            updateSelectedAsset();
+          }}
+        >
+          <div class="asset-info-layout">
+            <div class="asset-photo-panel compact-photo-panel">
+              {#if assetImageUrl(selectedAssetId)}
+                <img
+                  src={assetImageUrl(selectedAssetId) ?? ''}
+                  alt={`Photo of ${selectedAsset()?.name}`}
+                  class="asset-photo"
+                />
+              {:else}
+                <div class="asset-photo-placeholder">
+                  <strong>No photo</strong>
+                  <span>Add a square reference photo.</span>
+                </div>
+              {/if}
+              <div class="asset-photo-actions">
+                <input
+                  bind:this={photoInput}
+                  class="visually-hidden"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  capture="environment"
+                  onchange={handlePhotoChange}
+                />
+                <button
+                  type="button"
+                  class="micro-button"
+                  disabled={busy}
+                  onclick={() => photoInput?.click()}
+                >
+                  {assetImageUrl(selectedAssetId) ? 'Replace photo' : 'Add photo'}
+                </button>
+                {#if assetImageUrl(selectedAssetId)}
+                  <button
+                    type="button"
+                    class="secondary micro-button"
+                    disabled={busy}
+                    onclick={deleteSelectedAssetImage}
+                  >
+                    Delete
+                  </button>
+                {/if}
+              </div>
+            </div>
+
+            <label class="description-field">
+              Description
+              <textarea
+                bind:value={assetEditForm.description}
+                placeholder="What is this item, what makes it recognizable, and what should people know first?"
+              ></textarea>
+            </label>
           </div>
-        {/if}
-        <div class="asset-photo-actions">
-          <input
-            bind:this={photoInput}
-            class="visually-hidden"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            capture="environment"
-            onchange={handlePhotoChange}
-          />
-          <button type="button" class="compact" disabled={busy} onclick={() => photoInput?.click()}>
-            {assetImageUrl(selectedAssetId) ? 'Replace photo' : 'Add photo'}
-          </button>
-          {#if assetImageUrl(selectedAssetId)}
-            <button
-              type="button"
-              class="secondary compact"
-              disabled={busy}
-              onclick={deleteSelectedAssetImage}
-            >
-              Delete photo
-            </button>
-          {/if}
-        </div>
-      </div>
 
-      <form
-        class="asset-edit-form"
-        onsubmit={(event) => {
-          event.preventDefault();
-          updateSelectedAsset();
-        }}
-      >
-        <label>Name <input bind:value={assetEditForm.name} required /></label>
-        <div class="split-fields">
-          <label>
-            Status
-            <select bind:value={assetEditForm.status}>
-              {#each assetStatuses as status}
-                <option value={status}>{status.replaceAll('_', ' ')}</option>
-              {/each}
-            </select>
-          </label>
-          <label>
-            Condition
-            <select bind:value={assetEditForm.condition}>
-              {#each assetConditions as condition}
-                <option value={condition}>{condition.replaceAll('_', ' ')}</option>
-              {/each}
-            </select>
-          </label>
-        </div>
-        <div class="split-fields">
-          <label>
-            Category
-            <select bind:value={assetEditForm.category_id}>
-              <option value={null}>No category</option>
-              {#each categories as category}
-                <option value={category.id}>{category.name}</option>
-              {/each}
-            </select>
-          </label>
+          <label>Name <input bind:value={assetEditForm.name} required /></label>
+          <div class="split-fields">
+            <label>
+              Status
+              <select bind:value={assetEditForm.status}>
+                {#each assetStatuses as status}
+                  <option value={status}>{status.replaceAll('_', ' ')}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              Condition
+              <select bind:value={assetEditForm.condition}>
+                {#each assetConditions as condition}
+                  <option value={condition}>{condition.replaceAll('_', ' ')}</option>
+                {/each}
+              </select>
+            </label>
+          </div>
           <label>
             Current location
             <select bind:value={assetEditForm.current_location_id}>
@@ -276,66 +310,99 @@
               {/each}
             </select>
           </label>
-        </div>
-        <label>
-          Holder
-          <select bind:value={assetEditForm.current_holder_user_id}>
-            <option value={null}>No holder</option>
-            {#each availableHolderUsers() as user}
-              <option value={user.id}>{user.display_name}</option>
-            {/each}
-          </select>
-        </label>
-        <div class="split-fields">
-          <label>Manufacturer <input bind:value={assetEditForm.manufacturer} /></label>
-          <label>Model <input bind:value={assetEditForm.model} /></label>
-        </div>
-        <div class="split-fields">
-          <label>Serial <input bind:value={assetEditForm.serial_number} /></label>
-          <label>Asset tag <input bind:value={assetEditForm.asset_tag} /></label>
-        </div>
-        <label>Replacement value <input bind:value={assetEditForm.replacement_value} /></label>
-        <label>Notes <textarea bind:value={assetEditForm.notes}></textarea></label>
-        <button type="submit" disabled={busy}>Update asset</button>
-      </form>
+          <button type="submit" class="compact" disabled={busy}>Update info</button>
+        </form>
+      {/if}
 
-      {#if selectedAsset()?.asset_type === 'stock'}
-        <div class="detail-grid">
-          <div>
-            <span>Unit</span>
-            <strong>{selectedAsset()?.unit_name ?? 'unit'}</strong>
+      {#if activeDetailTab === 'extra'}
+        <form
+          class="asset-edit-form detail-tab-panel"
+          onsubmit={(event) => {
+            event.preventDefault();
+            updateSelectedAsset();
+          }}
+        >
+          <div class="split-fields">
+            <label>
+              Category
+              <select bind:value={assetEditForm.category_id}>
+                <option value={null}>No category</option>
+                {#each categories as category}
+                  <option value={category.id}>{category.name}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              Holder
+              <select bind:value={assetEditForm.current_holder_user_id}>
+                <option value={null}>No holder</option>
+                {#each availableHolderUsers() as user}
+                  <option value={user.id}>{user.display_name}</option>
+                {/each}
+              </select>
+            </label>
           </div>
-          <div>
-            <span>Total stock</span>
-            <strong
-              >{stockLevels
-                .filter((level) => level.asset_id === selectedAssetId)
-                .reduce((sum, level) => sum + level.quantity_total, 0)}</strong
-            >
+          <div class="split-fields">
+            <label>Manufacturer <input bind:value={assetEditForm.manufacturer} /></label>
+            <label>Model <input bind:value={assetEditForm.model} /></label>
+          </div>
+          <div class="split-fields">
+            <label>Serial <input bind:value={assetEditForm.serial_number} /></label>
+            <label>Asset tag <input bind:value={assetEditForm.asset_tag} /></label>
+          </div>
+          <label>Replacement value <input bind:value={assetEditForm.replacement_value} /></label>
+          <label>
+            Internal notes
+            <textarea
+              bind:value={assetEditForm.notes}
+              placeholder="Operational notes, quirks, repair context, or admin-only reminders."
+            ></textarea>
+          </label>
+          <button type="submit" class="compact" disabled={busy}>Update extra</button>
+        </form>
+      {/if}
+
+      {#if activeDetailTab === 'history'}
+        <div class="detail-tab-panel history-panel">
+          {#if selectedAsset()?.asset_type === 'stock'}
+            <div class="detail-grid">
+              <div>
+                <span>Unit</span>
+                <strong>{selectedAsset()?.unit_name ?? 'unit'}</strong>
+              </div>
+              <div>
+                <span>Total stock</span>
+                <strong
+                  >{stockLevels
+                    .filter((level) => level.asset_id === selectedAssetId)
+                    .reduce((sum, level) => sum + level.quantity_total, 0)}</strong
+                >
+              </div>
+            </div>
+          {/if}
+
+          <div class="timeline">
+            <h3>History</h3>
+            {#each selectedAssetEvents as event}
+              <article class="timeline-entry">
+                <div>
+                  <strong>{event.event_type.replaceAll('_', ' ')}</strong>
+                  <span>{formatDateTime(event.created_at)} - {userLabel(event.actor_user_id)}</span>
+                </div>
+                <p>
+                  {#if event.from_location_id || event.to_location_id}
+                    {locationName(event.from_location_id)} -> {locationName(event.to_location_id)}
+                  {:else}
+                    {event.notes ?? 'No notes'}
+                  {/if}
+                </p>
+              </article>
+            {:else}
+              <p class="empty">No history recorded for this asset yet.</p>
+            {/each}
           </div>
         </div>
       {/if}
-
-      <div class="timeline">
-        <h3>History</h3>
-        {#each selectedAssetEvents as event}
-          <article class="timeline-entry">
-            <div>
-              <strong>{event.event_type.replaceAll('_', ' ')}</strong>
-              <span>{formatDateTime(event.created_at)} · {userLabel(event.actor_user_id)}</span>
-            </div>
-            <p>
-              {#if event.from_location_id || event.to_location_id}
-                {locationName(event.from_location_id)} -> {locationName(event.to_location_id)}
-              {:else}
-                {event.notes ?? 'No notes'}
-              {/if}
-            </p>
-          </article>
-        {:else}
-          <p class="empty">No history recorded for this asset yet.</p>
-        {/each}
-      </div>
     {:else}
       <div class="empty-detail">
         <h2>Select an asset</h2>

@@ -305,6 +305,37 @@ button.secondary {
   font-size: clamp(1.2rem, 2.2vw, 1.6rem);
 }
 
+.asset-detail-header {
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.detail-tab-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin-bottom: 0.65rem;
+}
+
+.detail-tab-bar button {
+  min-height: 1.95rem;
+  border: 1px solid #d4d9d1;
+  padding: 0 0.5rem;
+  color: #33443a;
+  background: #f2f3ee;
+  font-size: 0.75rem;
+}
+
+.detail-tab-bar button:hover,
+.detail-tab-bar .active-detail-tab {
+  border-color: #68765d;
+  background: #e4ebd7;
+}
+
+.detail-tab-panel {
+  margin-bottom: 0;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
@@ -410,6 +441,18 @@ button.secondary {
   justify-self: start;
   padding: 0.35rem 0.55rem;
   font-size: 0.76rem;
+}
+
+.micro-button {
+  min-height: 1.75rem;
+  justify-self: start;
+  border-radius: 6px;
+  padding: 0 0.5rem;
+  font-size: 0.7rem;
+}
+
+.micro-button.secondary {
+  width: auto;
 }
 
 .inventory-workspace {
@@ -539,6 +582,23 @@ button.secondary {
   margin-bottom: 0.75rem;
 }
 
+.asset-info-layout {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.compact-photo-panel {
+  grid-template-columns: 1fr;
+  gap: 0.4rem;
+  margin-bottom: 0;
+}
+
+.description-field textarea {
+  min-height: 9rem;
+}
+
 .asset-photo,
 .asset-photo-placeholder {
   width: 9rem;
@@ -571,6 +631,15 @@ button.secondary {
   gap: 0.4rem;
   align-content: end;
   align-items: end;
+}
+
+.asset-photo-actions .secondary {
+  width: auto;
+}
+
+.history-panel {
+  display: grid;
+  gap: 0.65rem;
 }
 
 .visually-hidden {
@@ -647,6 +716,7 @@ button.secondary {
   .forms-grid,
   .data-grid,
   .inventory-workspace,
+  .asset-info-layout,
   .split-detail {
     grid-template-columns: 1fr;
   }

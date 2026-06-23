@@ -22,6 +22,7 @@ class AssetCreate(BaseModel):
     serial_number: str | None = Field(default=None, max_length=120)
     asset_tag: str | None = Field(default=None, max_length=80)
     replacement_value: Decimal | None = None
+    description: str | None = None
     notes: str | None = None
 
     @model_validator(mode="after")
@@ -46,6 +47,7 @@ class AssetUpdate(BaseModel):
     serial_number: str | None = Field(default=None, max_length=120)
     asset_tag: str | None = Field(default=None, max_length=80)
     replacement_value: Decimal | None = None
+    description: str | None = None
     notes: str | None = None
 
 
@@ -65,6 +67,7 @@ class AssetRead(BaseModel):
     serial_number: str | None
     asset_tag: str | None
     replacement_value: Decimal | None
+    description: str | None
     notes: str | None
 
     model_config = ConfigDict(from_attributes=True)
