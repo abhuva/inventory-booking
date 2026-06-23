@@ -1,29 +1,14 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { apiGet, type AvailabilityHeatmap } from '$lib/api';
-  import type {
-    Asset,
-    Availability,
-    Booking,
-    BookingLine,
-    BookingLineCreate,
-    Location
-  } from '$lib/api';
-  import type { Calendar as FullCalendarInstance, EventInput } from '@fullcalendar/core';
+  import type { Asset, Availability, Booking, BookingLineCreate, Location } from '$lib/api';
   import type { ECharts } from 'echarts';
 
-  let calendarElement = $state<HTMLElement>();
   let heatmapElement = $state<HTMLElement>();
-  let calendar = $state<FullCalendarInstance | null>(null);
   let heatmapChart = $state<ECharts | null>(null);
   let heatmap = $state<AvailabilityHeatmap | null>(null);
-  let selectedBookingId = $state('');
   let showNewBooking = $state(false);
-  let statusFilter = $state('active');
   let assetFilter = $state('');
   let locationFilter = $state('');
-  let calendarMode = $state<'bundle' | 'item'>('bundle');
-  let bookingView = $state<'calendar' | 'heatmap'>('calendar');
   let heatmapRange = $state<'month' | 'year'>('month');
   let heatmapMonth = $state(currentMonthValue());
   let heatmapYear = $state(String(new Date().getFullYear()));
@@ -44,8 +29,7 @@
     addBookingDraftLineFromForm,
     removeBookingDraftLine,
     resetBookingDraft,
-    clearBookingAvailability,
-    formatDateTime
+    clearBookingAvailability
   }: {
     assets: Asset[];
     locations: Location[];
@@ -73,169 +57,22 @@
     removeBookingDraftLine: (clientId: string) => void;
     resetBookingDraft: () => void;
     clearBookingAvailability: () => void;
-    formatDateTime: (value: string) => string;
   } = $props();
 
-  onMount(() => {
-    let instance: FullCalendarInstance | null = null;
-    if (!calendarElement) {
-      return;
-    }
-    void (async () => {
-      if (!calendarElement) {
-        return;
-      }
-      const [{ Calendar }, dayGrid, timeGrid, list, interaction] = await Promise.all([
-        import('@fullcalendar/core'),
-        import('@fullcalendar/daygrid'),
-        import('@fullcalendar/timegrid'),
-        import('@fullcalendar/list'),
-        import('@fullcalendar/interaction')
-      ]);
-      instance = new Calendar(calendarElement, {
-        plugins: [dayGrid.default, timeGrid.default, list.default, interaction.default],
-        initialView: 'timeGridWeek',
-        nowIndicator: true,
-        height: 'auto',
-        firstDay: 1,
-        headerToolbar: {
-          left: 'prev,next today',
-          center: 'title',
-          right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
-        },
-        events: calendarEvents(),
-        eventClick(info) {
-          selectedBookingId = String(info.event.extendedProps.bookingId ?? '');
-        }
-      });
-      instance.render();
-      calendar = instance;
-    })();
-    return () => instance?.destroy();
-  });
-
   $effect(() => {
-    if (!calendar) {
-      return;
-    }
-    calendar.removeAllEvents();
-    calendar.addEventSource(calendarEvents());
-  });
-
-  $effect(() => {
-    if (bookingView !== 'heatmap') {
-      return;
-    }
+    const dependencyKey = `${heatmapRange}:${heatmapMonth}:${heatmapYear}:${locationFilter}`;
+    void dependencyKey;
     void loadHeatmap();
   });
 
   $effect(() => {
-    if (bookingView !== 'heatmap' || !heatmapElement) {
+    const renderKey = `${assetFilter}:${showHeatmapNumbers}:${heatmap?.starts_at ?? ''}`;
+    void renderKey;
+    if (!heatmapElement) {
       return;
     }
     void renderHeatmap();
   });
-
-  function calendarEvents(): EventInput[] {
-    if (calendarMode === 'bundle') {
-      return bookings
-        .map((booking) => bookingBundleEvent(booking))
-        .filter((event): event is EventInput => event !== null);
-    }
-    return bookings.flatMap((booking) =>
-      (booking.lines?.length ? booking.lines : [null])
-        .map((line) => bookingLineEvent(booking, line))
-        .filter((event): event is EventInput => event !== null)
-    );
-  }
-
-  function bookingBundleEvent(booking: Booking): EventInput | null {
-    if (!bookingMatchesFilters(booking, null)) {
-      return null;
-    }
-    const lineCount = booking.lines?.length ?? 0;
-    return {
-      id: booking.id,
-      title: `${booking.title} / ${lineCount} ${lineCount === 1 ? 'item' : 'items'}`,
-      start: booking.starts_at,
-      end: booking.ends_at,
-      backgroundColor: bookingColor(booking.status),
-      borderColor: bookingColor(booking.status),
-      extendedProps: {
-        bookingId: booking.id,
-        lineId: null
-      }
-    };
-  }
-
-  function bookingLineEvent(booking: Booking, line: BookingLine | null): EventInput | null {
-    if (!bookingMatchesFilters(booking, line)) {
-      return null;
-    }
-    const asset = line ? assets.find((entry) => entry.id === line.asset_id) : undefined;
-    const location = line?.location_id
-      ? locations.find((entry) => entry.id === line.location_id)
-      : undefined;
-    const titleParts = [asset?.name ?? booking.title];
-    if (line?.quantity) {
-      titleParts.push(`${line.quantity}x`);
-    }
-    if (location) {
-      titleParts.push(location.name);
-    }
-    return {
-      id: line ? `${booking.id}:${line.id}` : booking.id,
-      title: titleParts.join(' / '),
-      start: booking.starts_at,
-      end: booking.ends_at,
-      backgroundColor: bookingColor(booking.status),
-      borderColor: bookingColor(booking.status),
-      extendedProps: {
-        bookingId: booking.id,
-        lineId: line?.id ?? null
-      }
-    };
-  }
-
-  function bookingMatchesFilters(booking: Booking, line: BookingLine | null): boolean {
-    if (statusFilter === 'active' && !['reserved', 'checked_out'].includes(booking.status)) {
-      return false;
-    }
-    if (statusFilter !== 'all' && statusFilter !== 'active' && booking.status !== statusFilter) {
-      return false;
-    }
-    const lines = booking.lines ?? [];
-    if (assetFilter) {
-      const assetMatches = line
-        ? line.asset_id === assetFilter
-        : lines.some((entry) => entry.asset_id === assetFilter);
-      if (!assetMatches) {
-        return false;
-      }
-    }
-    if (locationFilter) {
-      const locationMatches = line
-        ? line.location_id === locationFilter
-        : lines.some((entry) => entry.location_id === locationFilter);
-      if (!locationMatches) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  function bookingColor(status: Booking['status']): string {
-    if (status === 'cancelled') {
-      return '#8b6f65';
-    }
-    if (status === 'checked_out') {
-      return '#b26d2e';
-    }
-    if (status === 'completed') {
-      return '#60735c';
-    }
-    return '#254c37';
-  }
 
   async function loadHeatmap() {
     const { start, end, bucket } = heatmapRangeBounds();
@@ -294,7 +131,7 @@
           ].join('<br />');
         }
       },
-      grid: { top: 24, right: 28, bottom: 72, left: 150 },
+      grid: { top: 10, right: 18, bottom: 48, left: 132, containLabel: false },
       xAxis: {
         type: 'category',
         data: xLabels,
@@ -312,7 +149,8 @@
         calculable: true,
         orient: 'horizontal',
         left: 'center',
-        bottom: 8,
+        bottom: 0,
+        itemHeight: 72,
         inRange: { color: ['#a63d2f', '#e6c75e', '#5d8a4f'] }
       },
       series: [
@@ -329,6 +167,7 @@
         }
       ]
     });
+    requestAnimationFrame(() => heatmapChart?.resize());
   }
 
   function heatmapRangeBounds(): { start: Date; end: Date; bucket: 'day' | 'week' } {
@@ -370,26 +209,6 @@
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  function selectedBooking(): Booking | undefined {
-    return bookings.find((booking) => booking.id === selectedBookingId);
-  }
-
-  function selectedBookingLines(): BookingLine[] {
-    return selectedBooking()?.lines ?? [];
-  }
-
-  function trackedBookingLines(): BookingLine[] {
-    return selectedBookingLines().filter((line) => assetType(line.asset_id) === 'tracked');
-  }
-
-  function stockBookingLines(): BookingLine[] {
-    return selectedBookingLines().filter((line) => assetType(line.asset_id) === 'stock');
-  }
-
-  function assetType(assetId: string): Asset['asset_type'] | 'unknown' {
-    return assets.find((asset) => asset.id === assetId)?.asset_type ?? 'unknown';
-  }
-
   function locationName(id: string | null): string {
     return id === null
       ? 'No location'
@@ -420,92 +239,53 @@
   }
 </script>
 
-<section class="booking-workspace" aria-label="Bookings calendar workspace">
-  <section class="panel booking-calendar-panel">
+<section
+  class="booking-workspace heatmap-only-workspace"
+  aria-label="Bookings availability workspace"
+>
+  <section class="panel booking-calendar-panel heatmap-panel">
     <div class="booking-toolbar">
       <div>
-        <h2>{bookingView === 'heatmap' ? 'Availability heatmap' : 'Booking calendar'}</h2>
-        <p>
-          {#if bookingView === 'heatmap'}
-            {heatmap?.items.length ?? 0} stock items
-          {:else}
-            {bookings.length} bookings
-          {/if}
-        </p>
+        <h2>Availability heatmap</h2>
+        <p>{heatmap?.items.length ?? 0} stock items / {bookings.length} bookings</p>
       </div>
       <div class="booking-actions">
-        <select bind:value={bookingView} aria-label="Booking view">
-          <option value="calendar">Calendar</option>
-          <option value="heatmap">Heatmap</option>
+        <select bind:value={heatmapRange} aria-label="Heatmap range">
+          <option value="month">Month</option>
+          <option value="year">Year</option>
         </select>
-        {#if bookingView === 'calendar'}
-          <select bind:value={calendarMode} aria-label="Calendar display mode">
-            <option value="bundle">Bundle view</option>
-            <option value="item">Item view</option>
-          </select>
-          <select bind:value={statusFilter} aria-label="Filter bookings by status">
-            <option value="active">Active</option>
-            <option value="all">All statuses</option>
-            <option value="reserved">Reserved</option>
-            <option value="checked_out">Checked out</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          <select bind:value={assetFilter} aria-label="Filter bookings by asset">
-            <option value="">All assets</option>
-            {#each assets as asset}
-              <option value={asset.id}>{asset.name}</option>
-            {/each}
-          </select>
+        {#if heatmapRange === 'month'}
+          <input bind:value={heatmapMonth} type="month" aria-label="Heatmap month" />
         {:else}
-          <select bind:value={heatmapRange} aria-label="Heatmap range">
-            <option value="month">Month</option>
-            <option value="year">Year</option>
-          </select>
-          {#if heatmapRange === 'month'}
-            <input bind:value={heatmapMonth} type="month" aria-label="Heatmap month" />
-          {:else}
-            <input
-              bind:value={heatmapYear}
-              type="number"
-              min="2020"
-              max="2100"
-              aria-label="Heatmap year"
-            />
-          {/if}
           <input
-            bind:value={assetFilter}
-            type="search"
-            placeholder="Filter stock item..."
-            aria-label="Filter stock item"
+            bind:value={heatmapYear}
+            type="number"
+            min="2020"
+            max="2100"
+            aria-label="Heatmap year"
           />
         {/if}
+        <input
+          bind:value={assetFilter}
+          type="search"
+          placeholder="Filter stock item..."
+          aria-label="Filter stock item"
+        />
         <select bind:value={locationFilter} aria-label="Filter bookings by location">
           <option value="">All locations</option>
           {#each locations as location}
             <option value={location.id}>{location.name}</option>
           {/each}
         </select>
-        {#if bookingView === 'heatmap'}
-          <label class="inline-check">
-            <input bind:checked={showHeatmapNumbers} type="checkbox" />
-            Numbers
-          </label>
-        {/if}
+        <label class="inline-check">
+          <input bind:checked={showHeatmapNumbers} type="checkbox" />
+          Numbers
+        </label>
         <button type="button" class="compact" onclick={openNewBooking}>+ New booking</button>
       </div>
     </div>
 
-    <div
-      class:hidden-panel={bookingView !== 'calendar'}
-      class="calendar-shell"
-      bind:this={calendarElement}
-    ></div>
-    <div
-      class:hidden-panel={bookingView !== 'heatmap'}
-      class="heatmap-shell"
-      bind:this={heatmapElement}
-    >
+    <div class="heatmap-shell" bind:this={heatmapElement}>
       {#if heatmap && heatmap.items.length === 0}
         <div class="empty-detail">
           <h2>No stock data</h2>
@@ -514,64 +294,6 @@
       {/if}
     </div>
   </section>
-
-  <aside class="panel booking-detail-panel" aria-label="Selected booking detail">
-    {#if selectedBooking()}
-      <div class="detail-header asset-detail-header">
-        <div>
-          <p class="eyebrow">Booking detail</p>
-          <h2>{selectedBooking()?.title}</h2>
-        </div>
-        <span class={`status-pill status-${selectedBooking()?.status}`}
-          >{selectedBooking()?.status.replaceAll('_', ' ')}</span
-        >
-      </div>
-
-      <div class="physical-summary-grid">
-        <article>
-          <span>Start</span>
-          <strong>{formatDateTime(selectedBooking()?.starts_at ?? '')}</strong>
-        </article>
-        <article>
-          <span>End</span>
-          <strong>{formatDateTime(selectedBooking()?.ends_at ?? '')}</strong>
-        </article>
-        <article>
-          <span>Lines</span>
-          <strong>{selectedBookingLines().length}</strong>
-        </article>
-      </div>
-
-      <article class="mini-list">
-        <h3>Tracked items</h3>
-        {#each trackedBookingLines() as line}
-          <div class="row-card">
-            <strong>{assetName(line.asset_id)}</strong>
-            <span>Exact item</span>
-          </div>
-        {:else}
-          <p class="empty">No tracked items in this booking.</p>
-        {/each}
-      </article>
-
-      <article class="mini-list">
-        <h3>Stock items</h3>
-        {#each stockBookingLines() as line}
-          <div class="row-card">
-            <strong>{assetName(line.asset_id)}</strong>
-            <span>{locationName(line.location_id)} / {line.quantity ?? 0} requested</span>
-          </div>
-        {:else}
-          <p class="empty">No stock items in this booking.</p>
-        {/each}
-      </article>
-    {:else}
-      <div class="empty-detail">
-        <h2>Select booking</h2>
-        <p>Click a calendar event to inspect the reservation.</p>
-      </div>
-    {/if}
-  </aside>
 </section>
 
 {#if showNewBooking}

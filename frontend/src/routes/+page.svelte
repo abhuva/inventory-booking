@@ -1314,7 +1314,6 @@
               {removeBookingDraftLine}
               {resetBookingDraft}
               {clearBookingAvailability}
-              {formatDateTime}
             />
           {/if}
 

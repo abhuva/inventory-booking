@@ -915,6 +915,10 @@ button.secondary {
   margin-top: 0;
 }
 
+.heatmap-only-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .booking-calendar-panel,
 .booking-detail-panel {
   min-width: 0;
@@ -923,12 +927,18 @@ button.secondary {
   padding: 0.75rem;
 }
 
+.heatmap-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
 .booking-toolbar {
   display: flex;
   gap: 0.55rem;
   align-items: start;
   justify-content: space-between;
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.35rem;
 }
 
 .booking-toolbar h2,
@@ -944,10 +954,12 @@ button.secondary {
 
 .booking-actions {
   display: grid;
-  grid-template-columns: repeat(5, minmax(7rem, 1fr)) auto;
+  grid-template-columns:
+    minmax(6.5rem, 0.8fr) minmax(8rem, 0.9fr) minmax(9rem, 1.1fr) minmax(9rem, 1.1fr)
+    auto auto;
   gap: 0.35rem;
   align-items: center;
-  min-width: min(100%, 62rem);
+  min-width: min(100%, 58rem);
 }
 
 .inline-check {
@@ -962,71 +974,16 @@ button.secondary {
 }
 
 .heatmap-shell {
-  min-height: 34rem;
-  height: calc(100% - 4.8rem);
-}
-
-.hidden-panel {
-  display: none;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .booking-builder {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
-}
-
-.calendar-shell {
-  overflow: hidden;
-  border: 1px solid #d4d9d1;
-  border-radius: 8px;
-  padding: 0.45rem;
-  background: #fffef8;
-}
-
-.calendar-shell .fc {
-  color: #33443a;
-  font-family: inherit;
-  font-size: 0.78rem;
-}
-
-.calendar-shell .fc-toolbar-title {
-  color: #14211c;
-  font-size: 1rem;
-  font-weight: 900;
-}
-
-.calendar-shell .fc-button {
-  min-height: 1.8rem;
-  border: 0;
-  border-radius: 6px;
-  padding: 0 0.55rem;
-  background: #254c37;
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: capitalize;
-}
-
-.calendar-shell .fc-button-primary:not(:disabled).fc-button-active,
-.calendar-shell .fc-button-primary:not(:disabled):active {
-  background: #61713e;
-}
-
-.calendar-shell .fc-scrollgrid,
-.calendar-shell td,
-.calendar-shell th {
-  border-color: #dfe3dc;
-}
-
-.calendar-shell .fc-col-header-cell,
-.calendar-shell .fc-list-day-cushion {
-  background: #f2f3ee;
-}
-
-.calendar-shell .fc-event {
-  border-radius: 5px;
-  padding: 0.08rem 0.16rem;
-  font-weight: 750;
 }
 
 .stock-batch-list h3 {
