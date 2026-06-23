@@ -96,8 +96,17 @@
               onclick={() => selectLocationDetail(location.id)}
             >
               <td>
-                <strong>{location.name}</strong>
-                <span>{location.is_active ? 'active' : 'inactive'}</span>
+                <div class="asset-name-cell">
+                  {#if locationImageUrl(location.id)}
+                    <img src={locationImageUrl(location.id) ?? ''} alt="" class="asset-thumb" />
+                  {:else}
+                    <span class="asset-thumb asset-thumb-empty">No photo</span>
+                  {/if}
+                  <div>
+                    <strong>{location.name}</strong>
+                    <span>{location.is_active ? 'active' : 'inactive'}</span>
+                  </div>
+                </div>
               </td>
               <td>{location.type.replaceAll('_', ' ')}</td>
               <td>{trackedAssetsAtLocation(location.id).length}</td>
