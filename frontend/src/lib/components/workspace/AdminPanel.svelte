@@ -44,6 +44,7 @@
 
   let activeAdminTab = $state<AdminTab>('users');
   let showCreateUser = $state(false);
+  let showCreateCategory = $state(false);
 
   function startCreateUser(): void {
     userCreateForm = {
@@ -80,6 +81,7 @@
   function startCreateCategory(): void {
     categoryForm = { name: '', description: '' };
     categoryUpdateForm = { category_id: '', name: '', description: '' };
+    showCreateCategory = true;
   }
 
   function selectCategory(category: Category): void {
@@ -262,30 +264,13 @@
             >
             <div class="button-row compact-button-row">
               <button type="submit" class="compact" disabled={busy}>Update category</button>
-              <button type="button" class="secondary compact" onclick={startCreateCategory}>
-                New category
-              </button>
             </div>
           </form>
         {:else}
-          <div class="detail-header asset-detail-header">
-            <div>
-              <h2>Create category</h2>
-              <p>Group assets into practical inventory sections.</p>
-            </div>
+          <div class="empty-detail">
+            <h2>No category selected</h2>
+            <p>Click a row in the table to view and edit category information.</p>
           </div>
-
-          <form
-            class="admin-detail-form"
-            onsubmit={(event) => {
-              event.preventDefault();
-              createCategory();
-            }}
-          >
-            <label>Name <input bind:value={categoryForm.name} required /></label>
-            <label>Description <textarea bind:value={categoryForm.description}></textarea></label>
-            <button type="submit" class="compact" disabled={busy}>Create category</button>
-          </form>
         {/if}
       </section>
     </div>
@@ -338,6 +323,47 @@
       <div class="button-row compact-button-row">
         <button type="submit" class="compact" disabled={busy}>Create user</button>
         <button type="button" class="secondary compact" onclick={() => (showCreateUser = false)}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+{/if}
+
+{#if showCreateCategory}
+  <div class="modal-backdrop" role="presentation">
+    <form
+      class="panel modal-panel"
+      aria-label="Create category"
+      onsubmit={(event) => {
+        event.preventDefault();
+        createCategory();
+        showCreateCategory = false;
+      }}
+    >
+      <div class="detail-header asset-detail-header">
+        <div>
+          <h2>Create category</h2>
+          <p>Group assets into practical inventory sections.</p>
+        </div>
+        <button
+          type="button"
+          class="secondary micro-button"
+          onclick={() => (showCreateCategory = false)}
+        >
+          Close
+        </button>
+      </div>
+
+      <label>Name <input bind:value={categoryForm.name} required /></label>
+      <label>Description <textarea bind:value={categoryForm.description}></textarea></label>
+      <div class="button-row compact-button-row">
+        <button type="submit" class="compact" disabled={busy}>Create category</button>
+        <button
+          type="button"
+          class="secondary compact"
+          onclick={() => (showCreateCategory = false)}
+        >
           Cancel
         </button>
       </div>
