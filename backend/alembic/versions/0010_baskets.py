@@ -1,7 +1,7 @@
 ﻿"""Add temporary reservation baskets.
 
 Revision ID: 0010_baskets
-Revises: 0009_inventory_option_c_physical_state
+Revises: 0009_inventory_option_c
 Create Date: 2026-06-23
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0010_baskets"
-down_revision: str | None = "0009_inventory_option_c_physical_state"
+down_revision: str | None = "0009_inventory_option_c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
