@@ -34,10 +34,7 @@
     type LocationUpdate,
     type MaintenanceComplete,
     type MaintenanceStart,
-    type QrAssign,
     type QrCode,
-    type QrCodeCreate,
-    type QrResolve,
     type ReturnCreate,
     type ReturnRecord,
     type StockLevel,
@@ -54,7 +51,6 @@
   import BookingListPanel from '$lib/components/workspace/BookingListPanel.svelte';
   import BookingsPanel from '$lib/components/workspace/BookingsPanel.svelte';
   import DashboardPanel from '$lib/components/workspace/DashboardPanel.svelte';
-  import FieldQrPanel from '$lib/components/workspace/FieldQrPanel.svelte';
   import InventoryPanel from '$lib/components/workspace/InventoryPanel.svelte';
   import LocationsPanel from '$lib/components/workspace/LocationsPanel.svelte';
   import { prepareAssetImage, prepareInventoryImage } from '$lib/image';
@@ -79,7 +75,6 @@
     { id: 'locations', label: 'Locations', description: 'Spaces, stock, and movement' },
     { id: 'stock', label: 'Stock', description: 'Stock availability heatmap' },
     { id: 'bookings', label: 'Bookings', description: 'Reservation list and details' },
-    { id: 'field', label: 'Field / QR', description: 'QR labels and quick lookup' },
     { id: 'admin', label: 'Admin', description: 'Users and categories' }
   ];
 
@@ -112,7 +107,6 @@
   let selectedAssetId = $state('');
   let selectedAssetEvents = $state<ItemEvent[]>([]);
   let selectedLocationId = $state('');
-  let resolvedQr = $state<QrResolve | null>(null);
   let availability = $state<Availability | null>(null);
   let email = $state('admin@example.org');
   let password = $state('change-this-password');
@@ -225,13 +219,6 @@
     description: '',
     notes: ''
   });
-  let qrCreateForm = $state<QrCodeCreate>({ label: '', notes: '' });
-  let qrAssignForm = $state<QrAssign & { token: string }>({
-    token: '',
-    asset_id: '',
-    notes: ''
-  });
-  let qrResolveToken = $state('');
 
   const trackedAssets = $derived(assets.filter((asset) => asset.asset_type === 'tracked'));
   const stockAssets = $derived(assets.filter((asset) => asset.asset_type === 'stock'));
@@ -893,33 +880,6 @@
     });
   }
 
-  async function createQrCode() {
-    await runAction(async () => {
-      const qrCode = await apiPost<QrCode>('/qr-codes', emptyStringsToNull(qrCreateForm));
-      qrCreateForm = { label: '', notes: '' };
-      qrAssignForm.token = qrCode.token;
-      await loadInventory();
-      message = 'QR label created';
-    });
-  }
-
-  async function assignQrCode() {
-    await runAction(async () => {
-      const { token, ...payload } = qrAssignForm;
-      await apiPost<QrCode>(`/qr-codes/${token}/assign`, emptyStringsToNull(payload));
-      qrAssignForm = { token: '', asset_id: '', notes: '' };
-      await loadInventory();
-      message = 'QR label assigned';
-    });
-  }
-
-  async function resolveQrCode() {
-    await runAction(async () => {
-      resolvedQr = await apiGet<QrResolve>(`/qr-codes/${qrResolveToken}/resolve`);
-      message = resolvedQr.assigned ? 'QR label resolved' : 'QR label is unassigned';
-    });
-  }
-
   async function selectAssetDetail(assetId: string) {
     await runAction(async () => {
       selectedAssetId = assetId;
@@ -1425,22 +1385,6 @@
               {assetName}
               {locationName}
               {formatDateTime}
-            />
-          {/if}
-
-          {#if activeTab === 'field'}
-            <FieldQrPanel
-              {qrCodes}
-              {trackedAssets}
-              {resolvedQr}
-              {busy}
-              bind:qrCreateForm
-              bind:qrAssignForm
-              bind:qrResolveToken
-              createQrCode={() => void createQrCode()}
-              assignQrCode={() => void assignQrCode()}
-              resolveQrCode={() => void resolveQrCode()}
-              {assetName}
             />
           {/if}
 
