@@ -24,6 +24,7 @@ def upgrade() -> None:
         "cancelled",
         "expired",
         name="basket_status",
+        create_type=False,
     )
     basket_status.create(op.get_bind(), checkfirst=True)
 
