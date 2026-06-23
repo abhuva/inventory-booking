@@ -224,6 +224,22 @@ export type AssetCreate = {
   current_location_id?: string | null;
 };
 
+export type AssetUpdate = {
+  name?: string | null;
+  category_id?: string | null;
+  status?: AssetStatus | null;
+  condition?: AssetCondition | null;
+  home_location_id?: string | null;
+  current_location_id?: string | null;
+  current_holder_user_id?: string | null;
+  manufacturer?: string | null;
+  model?: string | null;
+  serial_number?: string | null;
+  asset_tag?: string | null;
+  replacement_value?: string | null;
+  notes?: string | null;
+};
+
 export type StockLevelCreate = {
   asset_id: string;
   location_id: string;

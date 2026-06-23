@@ -26,9 +26,9 @@ select {
 }
 
 .app-shell {
-  width: min(1440px, calc(100% - 1.25rem));
+  width: 100%;
   margin: 0 auto;
-  padding: 0.75rem 0 1.25rem;
+  padding: 0.5rem;
 }
 
 .masthead {
@@ -412,11 +412,168 @@ button.secondary {
   font-size: 0.76rem;
 }
 
+.inventory-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(24rem, 1fr);
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+  align-items: start;
+}
+
+.inventory-table-panel,
+.inventory-detail-panel {
+  min-height: calc(100vh - 9rem);
+  padding: 0.75rem;
+}
+
+.inventory-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: start;
+  justify-content: space-between;
+  margin-bottom: 0.55rem;
+}
+
+.inventory-toolbar h2,
+.inventory-toolbar p {
+  margin: 0;
+}
+
+.inventory-toolbar p {
+  color: #526358;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.inventory-actions {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto auto;
+  gap: 0.35rem;
+  align-items: center;
+  min-width: min(100%, 30rem);
+}
+
+.asset-table-wrap {
+  overflow: auto;
+  border: 1px solid #d4d9d1;
+  border-radius: 8px;
+  background: #fffef8;
+}
+
+.asset-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.asset-table th,
+.asset-table td {
+  border-bottom: 1px solid #e3e6df;
+  padding: 0.48rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.asset-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #526358;
+  background: #f2f3ee;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.asset-table tbody tr {
+  cursor: pointer;
+}
+
+.asset-table tbody tr:hover,
+.asset-table .selected-row {
+  background: #e8eedc;
+}
+
+.asset-table td strong,
+.asset-table td span {
+  display: block;
+}
+
+.asset-table td span {
+  color: #526358;
+  font-size: 0.76rem;
+}
+
+.status-pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.16rem 0.45rem;
+  color: #253328;
+  background: #dde4d4;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.status-available {
+  background: #dbeacb;
+}
+
+.status-damaged,
+.status-lost {
+  background: #f9d7cf;
+}
+
+.status-maintenance,
+.status-in_transfer {
+  background: #f1e5be;
+}
+
+.asset-edit-form {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+.empty-detail {
+  display: grid;
+  place-content: center;
+  min-height: 22rem;
+  color: #526358;
+  text-align: center;
+}
+
+.empty-detail h2,
+.empty-detail p {
+  margin: 0;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(29, 37, 32, 0.38);
+}
+
+.modal-panel {
+  display: grid;
+  gap: 0.65rem;
+  width: min(36rem, 100%);
+  padding: 0.9rem;
+}
+
 @media (max-width: 960px) {
   .masthead,
   .forms-grid,
   .data-grid,
+  .inventory-workspace,
   .split-detail {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-actions {
     grid-template-columns: 1fr;
   }
 

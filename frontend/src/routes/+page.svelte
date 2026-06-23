@@ -9,6 +9,7 @@
     type AssetCreate,
     type AssetStateChange,
     type AssetType,
+    type AssetUpdate,
     type Booking,
     type BookingCreate,
     type Category,
@@ -168,6 +169,21 @@
     condition: 'unknown',
     notes: ''
   });
+  let assetEditForm = $state<AssetUpdate>({
+    name: '',
+    category_id: null,
+    status: 'available',
+    condition: 'unknown',
+    home_location_id: null,
+    current_location_id: null,
+    current_holder_user_id: null,
+    manufacturer: '',
+    model: '',
+    serial_number: '',
+    asset_tag: '',
+    replacement_value: null,
+    notes: ''
+  });
   let qrCreateForm = $state<QrCodeCreate>({ label: '', notes: '' });
   let qrAssignForm = $state<QrAssign & { token: string }>({
     token: '',
@@ -241,6 +257,7 @@
       users = [];
       selectedAssetId = '';
       selectedAssetEvents = [];
+      resetAssetEditForm();
       selectedLocationId = '';
       activeTab = 'dashboard';
       message = 'Logged out';
@@ -323,6 +340,18 @@
       };
       await loadInventory();
       message = 'Asset created';
+    });
+  }
+
+  async function updateSelectedAsset() {
+    await runAction(async () => {
+      if (!selectedAssetId) {
+        throw new Error('Choose an asset first.');
+      }
+      await apiPatch<Asset>(`/assets/${selectedAssetId}`, emptyStringsToNull(assetEditForm));
+      await loadInventory();
+      await selectAssetDetail(selectedAssetId);
+      message = 'Asset updated';
     });
   }
 
@@ -496,6 +525,7 @@
   async function selectAssetDetail(assetId: string) {
     await runAction(async () => {
       selectedAssetId = assetId;
+      syncAssetEditForm(assets.find((asset) => asset.id === assetId));
       selectedAssetEvents = currentUser
         ? await apiGet<ItemEvent[]>(
             `/audit/item-events?asset_id=${encodeURIComponent(assetId)}&limit=50`
@@ -503,6 +533,46 @@
         : [];
       message = 'Asset detail loaded';
     });
+  }
+
+  function resetAssetEditForm() {
+    assetEditForm = {
+      name: '',
+      category_id: null,
+      status: 'available',
+      condition: 'unknown',
+      home_location_id: null,
+      current_location_id: null,
+      current_holder_user_id: null,
+      manufacturer: '',
+      model: '',
+      serial_number: '',
+      asset_tag: '',
+      replacement_value: null,
+      notes: ''
+    };
+  }
+
+  function syncAssetEditForm(asset: Asset | undefined) {
+    if (!asset) {
+      resetAssetEditForm();
+      return;
+    }
+    assetEditForm = {
+      name: asset.name,
+      category_id: asset.category_id,
+      status: asset.status,
+      condition: asset.condition,
+      home_location_id: asset.home_location_id,
+      current_location_id: asset.current_location_id,
+      current_holder_user_id: asset.current_holder_user_id,
+      manufacturer: asset.manufacturer ?? '',
+      model: asset.model ?? '',
+      serial_number: asset.serial_number ?? '',
+      asset_tag: asset.asset_tag ?? '',
+      replacement_value: asset.replacement_value,
+      notes: asset.notes ?? ''
+    };
   }
 
   async function runAction(action: () => Promise<void>) {
@@ -858,21 +928,23 @@
           {assets}
           {categories}
           {locations}
-          {trackedAssets}
+          {users}
+          {currentUser}
           {stockLevels}
           {filteredAssets}
           {selectedAssetEvents}
           {selectedAssetId}
           {busy}
           bind:assetForm
-          bind:assetStateForm
+          bind:assetEditForm
           bind:assetSearch
           createAsset={() => void createAsset()}
-          changeAssetOperationalState={() => void changeAssetOperationalState()}
+          updateSelectedAsset={() => void updateSelectedAsset()}
           selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
           closeAssetDetail={() => {
             selectedAssetId = '';
             selectedAssetEvents = [];
+            resetAssetEditForm();
           }}
           {selectedAsset}
           {categoryName}
