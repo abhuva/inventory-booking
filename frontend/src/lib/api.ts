@@ -160,6 +160,27 @@ export type Availability = {
   lines: AvailabilityLine[];
 };
 
+export type AvailabilityDay = {
+  bucket_start: string;
+  bucket_end: string;
+  total_quantity: number;
+  reserved_quantity: number;
+  held_quantity: number;
+  available_quantity: number;
+  requested_quantity: number;
+  available: boolean;
+  reason: string | null;
+};
+
+export type AvailabilityDays = {
+  asset_id: string;
+  location_id: string | null;
+  quantity: number;
+  starts_at: string;
+  ends_at: string;
+  days: AvailabilityDay[];
+};
+
 export type HeatmapCell = {
   bucket_start: string;
   bucket_end: string;

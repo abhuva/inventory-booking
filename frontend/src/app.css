@@ -1034,6 +1034,120 @@ button.secondary {
   margin: 0;
 }
 
+.date-pick-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: end;
+}
+
+.date-pick-row .secondary {
+  width: auto;
+}
+
+.availability-picker {
+  display: grid;
+  gap: 0.65rem;
+  border: 1px solid #cbd4c4;
+  border-radius: 9px;
+  padding: 0.75rem;
+  background: #f7f6ee;
+}
+
+.availability-picker-header,
+.availability-picker-footer {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.availability-picker-header h2,
+.availability-picker-header p,
+.availability-picker-header span,
+.availability-picker-footer p {
+  margin: 0;
+}
+
+.availability-picker-header span,
+.availability-picker-footer p {
+  color: #526358;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.availability-month-controls {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.availability-month-controls .secondary {
+  width: auto;
+}
+
+.availability-weekdays,
+.availability-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.availability-weekdays span {
+  color: #526358;
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.availability-day {
+  display: grid;
+  align-content: center;
+  gap: 0.12rem;
+  min-height: 3.15rem;
+  border: 1px solid #cbd4c4;
+  border-radius: 7px;
+  padding: 0.25rem;
+  color: #1d2520;
+  background: #dbeacb;
+}
+
+.availability-day strong,
+.availability-day span {
+  display: block;
+  text-align: center;
+}
+
+.availability-day span {
+  font-size: 0.68rem;
+}
+
+.availability-day.outside-month {
+  opacity: 0.32;
+}
+
+.availability-day.unavailable-day {
+  background: #f2c2b8;
+}
+
+.availability-day.selected-day {
+  border-color: #1f6f9a;
+  background: #8fd4ff;
+  box-shadow: inset 0 0 0 2px #1f6f9a;
+}
+
+.availability-day.selected-conflict-day {
+  border-color: #a12219;
+  background: #ff624f;
+  color: #fffaf0;
+  box-shadow: inset 0 0 0 2px #a12219;
+}
+
+.error-text {
+  color: #8a271f !important;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

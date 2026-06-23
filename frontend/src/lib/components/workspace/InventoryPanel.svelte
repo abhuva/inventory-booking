@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AvailabilityDatePicker from './AvailabilityDatePicker.svelte';
   import type {
     Asset,
     AssetCondition,
@@ -32,6 +33,8 @@
   let showMoveAsset = $state(false);
   let showStockAdjust = $state(false);
   let showReserveAsset = $state(false);
+  let showDatePicker = $state(false);
+  let dateSelectionAccepted = $state(false);
   let activeDetailTab = $state<AssetDetailTab>('info');
   let inventoryLocationFilter = $state('');
   let moveError = $state('');
@@ -176,12 +179,22 @@
       bookingDraft.ends_at = bookingForm.ends_at;
     }
     clearBookingAvailability();
+    dateSelectionAccepted = false;
     showReserveAsset = true;
   }
 
   async function submitReserve() {
     const added = await addBookingFormToBasket();
     showReserveAsset = !added;
+  }
+
+  function acceptBookingDates(startsAt: string, endsAt: string) {
+    bookingDraft.starts_at = startsAt;
+    bookingDraft.ends_at = endsAt;
+    bookingForm.starts_at = startsAt;
+    bookingForm.ends_at = endsAt;
+    showDatePicker = false;
+    dateSelectionAccepted = true;
   }
 
   function openMoveDialog() {
@@ -479,6 +492,21 @@
   function toDateTimeLocalValue(date: Date): string {
     const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
     return offsetDate.toISOString().slice(0, 16);
+  }
+
+  function bookingDateLabel(): string {
+    if (!bookingDraft.starts_at || !bookingDraft.ends_at) {
+      return 'Choose dates';
+    }
+    const start = bookingDraft.starts_at.slice(0, 10);
+    const end = inclusiveEndDateLabel(bookingDraft.ends_at);
+    return `${start} - ${end}`;
+  }
+
+  function inclusiveEndDateLabel(value: string): string {
+    const date = new Date(`${value.slice(0, 10)}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - 1);
+    return date.toISOString().slice(0, 10);
   }
 
   $effect(() => {
@@ -970,22 +998,33 @@
       </div>
 
       <label>Basket name <input bind:value={bookingDraft.title} required /></label>
-      <div class="split-fields">
-        <label>
-          Start
-          <input bind:value={bookingDraft.starts_at} type="datetime-local" required />
-        </label>
-        <label>
-          End
-          <input bind:value={bookingDraft.ends_at} type="datetime-local" required />
-        </label>
+      <div class="date-pick-row">
+        <div class="readonly-field">
+          <span>Dates</span>
+          <strong>{bookingDateLabel()}</strong>
+        </div>
+        <button
+          type="button"
+          class="secondary compact"
+          disabled={selectedAsset()?.asset_type === 'stock' && !bookingForm.location_id}
+          onclick={() => (showDatePicker = true)}
+        >
+          Choose dates
+        </button>
       </div>
 
       {#if selectedAsset()?.asset_type === 'stock'}
         <div class="split-fields">
           <label>
             Location
-            <select bind:value={bookingForm.location_id} required>
+            <select
+              bind:value={bookingForm.location_id}
+              required
+              onchange={() => {
+                dateSelectionAccepted = false;
+                showDatePicker = false;
+              }}
+            >
               <option value="">Choose location</option>
               {#each bookableStockLevelsForAsset(selectedAssetId) as level}
                 <option value={level.location_id ?? ''}>
@@ -996,7 +1035,16 @@
           </label>
           <label>
             Quantity
-            <input bind:value={bookingForm.quantity} type="number" min="1" required />
+            <input
+              bind:value={bookingForm.quantity}
+              type="number"
+              min="1"
+              required
+              onchange={() => {
+                dateSelectionAccepted = false;
+                showDatePicker = false;
+              }}
+            />
           </label>
         </div>
       {:else}
@@ -1006,11 +1054,24 @@
         </div>
       {/if}
 
+      {#if showDatePicker && selectedAsset()}
+        <AvailabilityDatePicker
+          assetId={selectedAssetId}
+          locationId={selectedAsset()?.asset_type === 'stock' ? bookingForm.location_id : null}
+          quantity={selectedAsset()?.asset_type === 'stock' ? bookingForm.quantity : 1}
+          initialStart={bookingDraft.starts_at}
+          initialEnd={bookingDraft.ends_at}
+          assetLabel={selectedAsset()?.name ?? 'Asset'}
+          onAccept={acceptBookingDates}
+          onCancel={() => (showDatePicker = false)}
+        />
+      {/if}
+
       <div class="button-row">
         <button type="button" class="secondary" onclick={() => (showReserveAsset = false)}
           >Cancel</button
         >
-        <button type="submit" disabled={busy}>Add to basket</button>
+        <button type="submit" disabled={busy || !dateSelectionAccepted}>Add to basket</button>
       </div>
     </form>
   </div>

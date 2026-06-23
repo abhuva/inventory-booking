@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.bookings.schemas import (
+    AvailabilityDaysRead,
     AvailabilityHeatmapRead,
     AvailabilityRead,
     BookingCreate,
@@ -15,6 +16,7 @@ from inventory_booking_api.bookings.schemas import (
     BookingSummaryRead,
 )
 from inventory_booking_api.bookings.service import (
+    build_asset_availability_days,
     build_stock_availability_heatmap,
     cancel_booking,
     create_booking,
@@ -72,6 +74,27 @@ async def availability_heatmap_endpoint(
         ends_at=ends_at,
         bucket=bucket,
         location_id=location_id,
+    )
+
+
+@router.get("/availability/days", response_model=AvailabilityDaysRead)
+async def availability_days_endpoint(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    asset_id: Annotated[UUID, Query()],
+    starts_at: Annotated[datetime, Query()],
+    ends_at: Annotated[datetime, Query()],
+    quantity: Annotated[int, Query(ge=1)] = 1,
+    location_id: Annotated[UUID | None, Query()] = None,
+) -> AvailabilityDaysRead:
+    return await build_asset_availability_days(
+        session,
+        asset_id=asset_id,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        quantity=quantity,
+        location_id=location_id,
+        actor=current_user,
     )
 
 

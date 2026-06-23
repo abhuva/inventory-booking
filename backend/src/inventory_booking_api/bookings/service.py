@@ -12,6 +12,8 @@ from inventory_booking_api.baskets.models import Basket, BasketLine
 from inventory_booking_api.bookings.enums import BookingStatus
 from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.bookings.schemas import (
+    AvailabilityDayRead,
+    AvailabilityDaysRead,
     AvailabilityHeatmapRead,
     AvailabilityLineRead,
     AvailabilityRead,
@@ -223,6 +225,60 @@ async def build_stock_availability_heatmap(
         bucket=bucket,
         location_id=location_id,
         items=items,
+    )
+
+
+async def build_asset_availability_days(
+    session: AsyncSession,
+    *,
+    asset_id: UUID,
+    starts_at: datetime,
+    ends_at: datetime,
+    quantity: int,
+    location_id: UUID | None,
+    actor: User,
+) -> AvailabilityDaysRead:
+    if quantity < 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="quantity must be at least 1.",
+        )
+    asset = await session.get(Asset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found.")
+
+    buckets = build_heatmap_buckets(starts_at, ends_at, "day")
+    excluded_basket_id = await get_active_basket_id_for_user(session, actor.id)
+    days: list[AvailabilityDayRead] = []
+    for bucket_start, bucket_end in buckets:
+        if asset.asset_type == AssetType.STOCK:
+            day = await build_stock_availability_day(
+                session,
+                asset_id=asset.id,
+                location_id=location_id,
+                quantity=quantity,
+                bucket_start=bucket_start,
+                bucket_end=bucket_end,
+                excluded_basket_id=excluded_basket_id,
+            )
+        else:
+            day = await build_tracked_availability_day(
+                session,
+                asset_id=asset.id,
+                quantity=quantity,
+                bucket_start=bucket_start,
+                bucket_end=bucket_end,
+                excluded_basket_id=excluded_basket_id,
+            )
+        days.append(day)
+
+    return AvailabilityDaysRead(
+        asset_id=asset.id,
+        location_id=location_id,
+        quantity=quantity,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        days=days,
     )
 
 
@@ -611,6 +667,7 @@ async def get_overlapping_stock_basket_quantity_for_range(
     location_id: UUID | None,
     starts_at: datetime,
     ends_at: datetime,
+    excluded_basket_id: UUID | None = None,
 ) -> int:
     filters = [
         BasketLine.asset_id == asset_id,
@@ -621,6 +678,8 @@ async def get_overlapping_stock_basket_quantity_for_range(
     ]
     if location_id is not None:
         filters.append(BasketLine.location_id == location_id)
+    if excluded_basket_id is not None:
+        filters.append(Basket.id != excluded_basket_id)
 
     result = await session.execute(
         select(func.coalesce(func.sum(BasketLine.quantity), 0))
@@ -628,6 +687,145 @@ async def get_overlapping_stock_basket_quantity_for_range(
         .where(*filters)
     )
     return int(result.scalar_one())
+
+
+async def build_stock_availability_day(
+    session: AsyncSession,
+    *,
+    asset_id: UUID,
+    location_id: UUID | None,
+    quantity: int,
+    bucket_start: datetime,
+    bucket_end: datetime,
+    excluded_basket_id: UUID | None,
+) -> AvailabilityDayRead:
+    total_quantity = await get_available_stock_quantity_for_heatmap(session, asset_id, location_id)
+    reserved_quantity = await get_overlapping_stock_quantity_for_range(
+        session,
+        asset_id,
+        location_id,
+        bucket_start,
+        bucket_end,
+    )
+    held_quantity = await get_overlapping_stock_basket_quantity_for_range(
+        session,
+        asset_id,
+        location_id,
+        bucket_start,
+        bucket_end,
+        excluded_basket_id=excluded_basket_id,
+    )
+    available_quantity = max(0, total_quantity - reserved_quantity - held_quantity)
+    return AvailabilityDayRead(
+        bucket_start=bucket_start,
+        bucket_end=bucket_end,
+        total_quantity=total_quantity,
+        reserved_quantity=reserved_quantity,
+        held_quantity=held_quantity,
+        available_quantity=available_quantity,
+        requested_quantity=quantity,
+        available=available_quantity >= quantity,
+        reason=None if available_quantity >= quantity else "Not enough stock available.",
+    )
+
+
+async def build_tracked_availability_day(
+    session: AsyncSession,
+    *,
+    asset_id: UUID,
+    quantity: int,
+    bucket_start: datetime,
+    bucket_end: datetime,
+    excluded_basket_id: UUID | None,
+) -> AvailabilityDayRead:
+    unit = await get_primary_tracked_unit(session, asset_id)
+    physical_available = 1 if unit is not None and unit.status == AssetStatus.AVAILABLE else 0
+    reserved_quantity = await get_overlapping_tracked_quantity_for_range(
+        session,
+        asset_id,
+        bucket_start,
+        bucket_end,
+    )
+    held_quantity = await get_overlapping_tracked_basket_quantity_for_range(
+        session,
+        asset_id,
+        bucket_start,
+        bucket_end,
+        excluded_basket_id=excluded_basket_id,
+    )
+    available_quantity = max(0, physical_available - reserved_quantity - held_quantity)
+    return AvailabilityDayRead(
+        bucket_start=bucket_start,
+        bucket_end=bucket_end,
+        total_quantity=physical_available,
+        reserved_quantity=reserved_quantity,
+        held_quantity=held_quantity,
+        available_quantity=available_quantity,
+        requested_quantity=quantity,
+        available=quantity == 1 and available_quantity >= 1,
+        reason=None if quantity == 1 and available_quantity >= 1 else "Tracked item unavailable.",
+    )
+
+
+async def get_overlapping_tracked_quantity_for_range(
+    session: AsyncSession,
+    asset_id: UUID,
+    starts_at: datetime,
+    ends_at: datetime,
+) -> int:
+    result = await session.execute(
+        select(BookingLine.id)
+        .join(Booking, BookingLine.booking_id == Booking.id)
+        .where(
+            BookingLine.asset_id == asset_id,
+            Booking.status.in_(ACTIVE_BOOKING_STATUSES),
+            Booking.starts_at < ends_at,
+            Booking.ends_at > starts_at,
+        )
+        .limit(1)
+    )
+    return 1 if result.scalar_one_or_none() is not None else 0
+
+
+async def get_overlapping_tracked_basket_quantity_for_range(
+    session: AsyncSession,
+    asset_id: UUID,
+    starts_at: datetime,
+    ends_at: datetime,
+    *,
+    excluded_basket_id: UUID | None = None,
+) -> int:
+    filters = [
+        BasketLine.asset_id == asset_id,
+        Basket.status == BasketStatus.ACTIVE,
+        Basket.expires_at > datetime.now(UTC),
+        Basket.starts_at < ends_at,
+        Basket.ends_at > starts_at,
+    ]
+    if excluded_basket_id is not None:
+        filters.append(Basket.id != excluded_basket_id)
+
+    result = await session.execute(
+        select(BasketLine.id)
+        .join(Basket, BasketLine.basket_id == Basket.id)
+        .where(*filters)
+        .limit(1)
+    )
+    return 1 if result.scalar_one_or_none() is not None else 0
+
+
+async def get_active_basket_id_for_user(session: AsyncSession, user_id: UUID) -> UUID | None:
+    result = await session.execute(
+        select(Basket.id)
+        .where(
+            Basket.user_id == user_id,
+            Basket.status == BasketStatus.ACTIVE,
+            Basket.expires_at > datetime.now(UTC),
+        )
+        .order_by(Basket.updated_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 async def list_heatmap_stock_assets(session: AsyncSession) -> list[Asset]:

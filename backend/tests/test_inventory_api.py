@@ -1514,3 +1514,92 @@ def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: Te
     assert held_cell["reserved_quantity"] == 0
     assert held_cell["held_quantity"] == 2
     assert held_cell["available_quantity"] == 6
+
+def test_availability_days_reports_stock_conflicts(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Date Picker Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Date Picker Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 4,
+        },
+        headers=headers,
+    )
+    client.post(
+        "/bookings",
+        json={
+            "title": "Date picker booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {"asset_id": stock_asset["id"], "location_id": location["id"], "quantity": 3}
+            ],
+        },
+        headers=headers,
+    )
+
+    response = client.get(
+        "/bookings/availability/days",
+        params={
+            "asset_id": stock_asset["id"],
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": (BOOKING_START + timedelta(days=1)).isoformat(),
+            "quantity": 2,
+            "location_id": location["id"],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    day = response.json()["days"][0]
+    assert day["available_quantity"] == 1
+    assert day["requested_quantity"] == 2
+    assert day["available"] is False
+
+
+def test_availability_days_reports_tracked_asset_conflict(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Date Picker Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/bookings",
+        json={
+            "title": "Tracked date picker booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    )
+
+    response = client.get(
+        "/bookings/availability/days",
+        params={
+            "asset_id": tracked_asset["id"],
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": (BOOKING_START + timedelta(days=1)).isoformat(),
+            "quantity": 1,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    day = response.json()["days"][0]
+    assert day["total_quantity"] == 1
+    assert day["reserved_quantity"] == 1
+    assert day["available_quantity"] == 0
+    assert day["available"] is False
