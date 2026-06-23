@@ -1,6 +1,7 @@
 ﻿import { PUBLIC_API_BASE_URL } from '$env/static/public';
 
 export type UserRole = 'admin' | 'user';
+export type PersonType = 'team' | 'external' | 'organization' | 'unknown';
 export type AssetType = 'tracked' | 'stock';
 export type AssetStatus =
   | 'available'
@@ -49,6 +50,37 @@ export type UserUpdate = {
   is_active?: boolean | null;
 };
 
+export type Person = {
+  id: string;
+  display_name: string;
+  person_type: PersonType;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  user_id: string | null;
+  is_active: boolean;
+};
+
+export type PersonCreate = {
+  display_name: string;
+  person_type: PersonType;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  user_id?: string | null;
+  is_active: boolean;
+};
+
+export type PersonUpdate = {
+  display_name?: string | null;
+  person_type?: PersonType | null;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+  user_id?: string | null;
+  is_active?: boolean | null;
+};
+
 export type Category = {
   id: string;
   name: string;
@@ -61,6 +93,7 @@ export type Location = {
   type: LocationType;
   address: string | null;
   responsible_user_id: string | null;
+  responsible_person_id: string | null;
   notes: string | null;
   is_active: boolean;
 };
@@ -305,6 +338,7 @@ export type CategoryUpdate = {
 export type LocationCreate = {
   name: string;
   type: LocationType;
+  responsible_person_id?: string | null;
 };
 
 export type LocationUpdate = {
@@ -312,6 +346,7 @@ export type LocationUpdate = {
   type?: LocationType | null;
   address?: string | null;
   responsible_user_id?: string | null;
+  responsible_person_id?: string | null;
   notes?: string | null;
   is_active?: boolean | null;
 };

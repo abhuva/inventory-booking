@@ -1,5 +1,12 @@
 <script lang="ts">
-  import type { Asset, Location, LocationCreate, LocationUpdate, StockLevel } from '$lib/api';
+  import type {
+    Asset,
+    Location,
+    LocationCreate,
+    LocationUpdate,
+    Person,
+    StockLevel
+  } from '$lib/api';
 
   let showAddLocation = $state(false);
   let activeLocationDetailTab = $state<'info' | 'extra'>('info');
@@ -7,6 +14,7 @@
 
   let {
     locationTypes,
+    persons,
     locations,
     selectedLocationId,
     busy,
@@ -28,6 +36,7 @@
     selectAssetDetail
   }: {
     locationTypes: string[];
+    persons: Person[];
     locations: Location[];
     selectedLocationId: string;
     busy: boolean;
@@ -248,13 +257,46 @@
             </article>
             <article>
               <span>Responsible</span>
-              <strong>{responsibleLabel(selectedLocation()?.responsible_user_id ?? null)}</strong>
+              <strong>{responsibleLabel(selectedLocation()?.responsible_person_id ?? null)}</strong>
             </article>
             <article>
               <span>State</span>
               <strong>{selectedLocation()?.is_active ? 'active' : 'inactive'}</strong>
             </article>
           </div>
+
+          <form
+            class="asset-edit-form detail-tab-panel"
+            onsubmit={(event) => {
+              event.preventDefault();
+              updateSelectedLocation();
+            }}
+          >
+            <label class="compact-field-row">
+              Responsible person
+              <select bind:value={locationEditForm.responsible_person_id}>
+                <option value={null}>No responsible person</option>
+                {#each persons as person}
+                  <option value={person.id}>
+                    {person.display_name} · {person.person_type.replaceAll('_', ' ')}
+                  </option>
+                {/each}
+              </select>
+            </label>
+            <label class="compact-field-row">
+              Type
+              <select bind:value={locationEditForm.type}>
+                {#each locationTypes as type}
+                  <option value={type}>{type.replaceAll('_', ' ')}</option>
+                {/each}
+              </select>
+            </label>
+            <label class="checkbox-label">
+              <input bind:checked={locationEditForm.is_active} type="checkbox" />
+              Active
+            </label>
+            <button type="submit" class="compact" disabled={busy}>Update extra</button>
+          </form>
 
           <div class="split-detail location-detail-lists">
             <article class="mini-list">

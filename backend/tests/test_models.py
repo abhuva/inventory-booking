@@ -8,6 +8,7 @@ def test_initial_domain_tables_are_registered() -> None:
         "categories",
         "item_events",
         "locations",
+        "persons",
         "stock_levels",
         "users",
     }

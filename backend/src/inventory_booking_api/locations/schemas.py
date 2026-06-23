@@ -11,6 +11,7 @@ class LocationCreate(BaseModel):
     type: LocationType
     address: str | None = None
     responsible_user_id: UUID | None = None
+    responsible_person_id: UUID | None = None
     notes: str | None = None
     is_active: bool = True
 
@@ -20,6 +21,7 @@ class LocationUpdate(BaseModel):
     type: LocationType | None = None
     address: str | None = None
     responsible_user_id: UUID | None = None
+    responsible_person_id: UUID | None = None
     notes: str | None = None
     is_active: bool | None = None
 
@@ -30,6 +32,7 @@ class LocationRead(BaseModel):
     type: LocationType
     address: str | None
     responsible_user_id: UUID | None
+    responsible_person_id: UUID | None
     notes: str | None
     is_active: bool
 

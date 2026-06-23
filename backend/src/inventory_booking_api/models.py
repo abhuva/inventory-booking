@@ -12,6 +12,7 @@ from inventory_booking_api.inventory.models import (
     TrackedUnit,
 )
 from inventory_booking_api.locations.models import Location, LocationImage
+from inventory_booking_api.persons.models import Person
 from inventory_booking_api.qr.models import QrCode
 from inventory_booking_api.returns.models import Return, ReturnLine
 from inventory_booking_api.users.models import User
@@ -32,6 +33,7 @@ __all__ = [
     "ItemEvent",
     "Location",
     "LocationImage",
+    "Person",
     "QrCode",
     "Return",
     "ReturnLine",

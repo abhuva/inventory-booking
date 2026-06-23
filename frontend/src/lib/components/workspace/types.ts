@@ -3,6 +3,7 @@ export type WorkspaceTab =
   | 'inventory'
   | 'basket'
   | 'locations'
+  | 'persons'
   | 'stock'
   | 'bookings'
   | 'admin';

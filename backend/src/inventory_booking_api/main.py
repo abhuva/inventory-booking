@@ -15,6 +15,7 @@ from inventory_booking_api.core.database import get_session
 from inventory_booking_api.inventory.asset_router import asset_router, stock_router
 from inventory_booking_api.inventory.category_router import router as category_router
 from inventory_booking_api.locations.router import router as location_router
+from inventory_booking_api.persons.router import router as person_router
 from inventory_booking_api.qr.router import router as qr_router
 from inventory_booking_api.returns.router import router as return_router
 from inventory_booking_api.settings import get_settings
@@ -38,6 +39,7 @@ app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(audit_router)
 app.include_router(category_router)
+app.include_router(person_router)
 app.include_router(location_router)
 app.include_router(asset_router)
 app.include_router(stock_router)

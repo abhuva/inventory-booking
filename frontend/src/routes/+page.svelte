@@ -34,6 +34,9 @@
     type LocationUpdate,
     type MaintenanceComplete,
     type MaintenanceStart,
+    type Person,
+    type PersonCreate,
+    type PersonUpdate,
     type QrCode,
     type ReturnCreate,
     type ReturnRecord,
@@ -53,6 +56,7 @@
   import DashboardPanel from '$lib/components/workspace/DashboardPanel.svelte';
   import InventoryPanel from '$lib/components/workspace/InventoryPanel.svelte';
   import LocationsPanel from '$lib/components/workspace/LocationsPanel.svelte';
+  import PersonsPanel from '$lib/components/workspace/PersonsPanel.svelte';
   import { prepareAssetImage, prepareInventoryImage } from '$lib/image';
   import WorkspaceTabs from '$lib/components/workspace/WorkspaceTabs.svelte';
   import type { WorkspaceTab, WorkspaceTabDefinition } from '$lib/components/workspace/types';
@@ -73,6 +77,7 @@
     { id: 'inventory', label: 'Inventory', description: 'Assets, state, and history' },
     { id: 'basket', label: 'Basket', description: 'Temporary held items' },
     { id: 'locations', label: 'Locations', description: 'Spaces, stock, and movement' },
+    { id: 'persons', label: 'Persons', description: 'Contacts, team, and borrowers' },
     { id: 'stock', label: 'Stock', description: 'Stock availability heatmap' },
     { id: 'bookings', label: 'Bookings', description: 'Reservation list and details' },
     { id: 'admin', label: 'Admin', description: 'Users and categories' }
@@ -92,6 +97,7 @@
 
   let currentUser = $state<User | null>(null);
   let categories = $state<Category[]>([]);
+  let persons = $state<Person[]>([]);
   let locations = $state<Location[]>([]);
   let locationImages = $state<LocationImage[]>([]);
   let assets = $state<Asset[]>([]);
@@ -107,6 +113,7 @@
   let selectedAssetId = $state('');
   let selectedAssetEvents = $state<ItemEvent[]>([]);
   let selectedLocationId = $state('');
+  let selectedPersonId = $state('');
   let availability = $state<Availability | null>(null);
   let email = $state('admin@example.org');
   let password = $state('change-this-password');
@@ -149,7 +156,26 @@
     type: 'storage',
     address: '',
     responsible_user_id: null,
+    responsible_person_id: null,
     notes: '',
+    is_active: true
+  });
+  let personForm = $state<PersonCreate>({
+    display_name: '',
+    person_type: 'unknown',
+    email: null,
+    phone: '',
+    notes: '',
+    user_id: null,
+    is_active: true
+  });
+  let personEditForm = $state<PersonUpdate>({
+    display_name: '',
+    person_type: 'unknown',
+    email: null,
+    phone: '',
+    notes: '',
+    user_id: null,
     is_active: true
   });
   let assetForm = $state<AssetCreate>({
@@ -257,6 +283,7 @@
   async function loadInventory() {
     const [
       loadedCategories,
+      loadedPersons,
       loadedLocations,
       loadedLocationImages,
       loadedAssets,
@@ -270,6 +297,7 @@
       loadedUsers
     ] = await Promise.all([
       apiGet<Category[]>('/categories'),
+      currentUser ? apiGet<Person[]>('/persons') : Promise.resolve([]),
       apiGet<Location[]>('/locations'),
       currentUser ? apiGet<LocationImage[]>('/locations/images') : Promise.resolve([]),
       apiGet<Asset[]>('/assets'),
@@ -283,6 +311,7 @@
       currentUser?.role === 'admin' ? apiGet<User[]>('/users') : Promise.resolve([])
     ]);
     categories = loadedCategories;
+    persons = loadedPersons;
     locations = loadedLocations;
     locationImages = loadedLocationImages;
     assets = loadedAssets;
@@ -318,8 +347,11 @@
       basketNotes = '';
       qrCodes = [];
       users = [];
+      persons = [];
       selectedAssetId = '';
       selectedAssetEvents = [];
+      selectedLocationId = '';
+      selectedPersonId = '';
       resetAssetEditForm();
       selectedLocationId = '';
       resetLocationEditForm('');
@@ -376,6 +408,35 @@
       userUpdateForm.password = '';
       await loadInventory();
       message = 'User updated';
+    });
+  }
+
+  async function createPerson() {
+    await runAction(async () => {
+      await apiPost<Person>('/persons', emptyStringsToNull(personForm));
+      personForm = {
+        display_name: '',
+        person_type: 'unknown',
+        email: null,
+        phone: '',
+        notes: '',
+        user_id: null,
+        is_active: true
+      };
+      await loadInventory();
+      message = 'Person created';
+    });
+  }
+
+  async function updateSelectedPerson() {
+    await runAction(async () => {
+      if (!selectedPersonId) {
+        throw new Error('Choose a person first.');
+      }
+      await apiPatch<Person>(`/persons/${selectedPersonId}`, emptyStringsToNull(personEditForm));
+      await loadInventory();
+      resetPersonEditForm(selectedPersonId);
+      message = 'Person updated';
     });
   }
 
@@ -1113,8 +1174,31 @@
       type: location?.type ?? 'storage',
       address: location?.address ?? '',
       responsible_user_id: location?.responsible_user_id ?? null,
+      responsible_person_id: location?.responsible_person_id ?? null,
       notes: location?.notes ?? '',
       is_active: location?.is_active ?? true
+    };
+  }
+
+  function selectedPerson(): Person | undefined {
+    return persons.find((person) => person.id === selectedPersonId);
+  }
+
+  function selectPersonDetail(personId: string): void {
+    selectedPersonId = personId;
+    resetPersonEditForm(personId);
+  }
+
+  function resetPersonEditForm(personId: string): void {
+    const person = persons.find((entry) => entry.id === personId);
+    personEditForm = {
+      display_name: person?.display_name ?? '',
+      person_type: person?.person_type ?? 'unknown',
+      email: person?.email ?? null,
+      phone: person?.phone ?? '',
+      notes: person?.notes ?? '',
+      user_id: person?.user_id ?? null,
+      is_active: person?.is_active ?? true
     };
   }
 
@@ -1149,7 +1233,10 @@
   }
 
   function responsibleLabel(id: string | null): string {
-    return id === null ? 'No responsible person' : userLabel(id);
+    if (id === null) {
+      return 'No responsible person';
+    }
+    return persons.find((person) => person.id === id)?.display_name ?? 'Unknown person';
   }
 
   function formatDateTime(value: string): string {
@@ -1285,6 +1372,7 @@
           {#if activeTab === 'locations'}
             <LocationsPanel
               {locationTypes}
+              {persons}
               {locations}
               {selectedLocationId}
               {busy}
@@ -1307,6 +1395,26 @@
               uploadSelectedLocationImage={(file) => void uploadSelectedLocationImage(file)}
               deleteSelectedLocationImage={() => void deleteSelectedLocationImage()}
               selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
+            />
+          {/if}
+
+          {#if activeTab === 'persons'}
+            <PersonsPanel
+              {persons}
+              {users}
+              {selectedPersonId}
+              {busy}
+              bind:personForm
+              bind:personEditForm
+              createPerson={() => void createPerson()}
+              updateSelectedPerson={() => void updateSelectedPerson()}
+              {selectPersonDetail}
+              closePersonDetail={() => {
+                selectedPersonId = '';
+                resetPersonEditForm('');
+              }}
+              {selectedPerson}
+              {userLabel}
             />
           {/if}
 

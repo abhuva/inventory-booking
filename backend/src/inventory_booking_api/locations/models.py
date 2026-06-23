@@ -23,6 +23,9 @@ class Location(IdMixin, TimestampMixin, Base):
     )
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     responsible_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    responsible_person_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("persons.id"), nullable=True
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 

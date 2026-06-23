@@ -216,6 +216,59 @@ def test_create_location(client: TestClient) -> None:
     assert audit_response.json()[0]["entity_type"] == "location"
 
 
+def test_create_and_update_person(client: TestClient) -> None:
+    headers = login(client)
+
+    create_response = client.post(
+        "/persons",
+        json={
+            "display_name": "External Trainer",
+            "person_type": "external",
+            "email": "TRAINER@example.org",
+            "phone": "12345",
+            "notes": "Rents juggling material.",
+        },
+        headers=headers,
+    )
+    created = create_response.json()
+    update_response = client.patch(
+        f"/persons/{created['id']}",
+        json={"display_name": "External Trainer Updated", "person_type": "organization"},
+        headers=headers,
+    )
+    list_response = client.get("/persons", headers=headers)
+
+    assert create_response.status_code == 200
+    assert created["email"] == "trainer@example.org"
+    assert update_response.status_code == 200
+    assert update_response.json()["display_name"] == "External Trainer Updated"
+    assert update_response.json()["person_type"] == "organization"
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["id"] == created["id"]
+
+
+def test_location_can_reference_responsible_person(client: TestClient) -> None:
+    headers = login(client)
+    person = client.post(
+        "/persons",
+        json={"display_name": "Storage Responsible", "person_type": "team"},
+        headers=headers,
+    ).json()
+
+    location_response = client.post(
+        "/locations",
+        json={
+            "name": "Responsible Storage",
+            "type": "storage",
+            "responsible_person_id": person["id"],
+        },
+        headers=headers,
+    )
+
+    assert location_response.status_code == 200
+    assert location_response.json()["responsible_person_id"] == person["id"]
+
+
 def test_asset_mode_validation(client: TestClient) -> None:
     headers = login(client)
 
