@@ -112,6 +112,7 @@
   let message = $state('');
   let error = $state('');
   let activeTab = $state<WorkspaceTab>('dashboard');
+  let showAccountPanel = $state(false);
 
   let categoryForm = $state<CategoryCreate>({ name: '', description: '' });
   let categoryUpdateForm = $state<CategoryUpdate & { category_id: string }>({
@@ -1036,208 +1037,247 @@
 
 <main class="app-shell">
   <section class="masthead">
-    <div>
-      <p class="eyebrow">Circus pedagogy inventory</p>
-      <h1>Inventory workspace</h1>
-    </div>
-    <div class="session-card">
-      {#if currentUser}
-        <p class="session-label">Signed in</p>
-        <strong>{currentUser.display_name}</strong>
-        <span>{currentUser.email} · {currentUser.role}</span>
-        <button type="button" class="secondary" onclick={logout} disabled={busy}>Logout</button>
-      {:else}
-        <form
-          onsubmit={(event) => {
-            event.preventDefault();
-            void login();
-          }}
-        >
-          <label>
-            Email
-            <input bind:value={email} type="email" autocomplete="username" />
-          </label>
-          <label>
-            Password
-            <input bind:value={password} type="password" autocomplete="current-password" />
-          </label>
-          <button type="submit" disabled={busy}>Login</button>
-        </form>
-      {/if}
-    </div>
+    <h1>NICA e.V. Inventar</h1>
+    <button
+      type="button"
+      class="account-button"
+      aria-label={currentUser ? 'Account' : 'Login'}
+      onclick={() => (showAccountPanel = true)}
+    >
+      <span class="account-avatar" aria-hidden="true">
+        {currentUser ? currentUser.display_name.slice(0, 1).toUpperCase() : ''}
+      </span>
+    </button>
   </section>
 
-  {#if error}
-    <p class="notice error">{error}</p>
+  {#if showAccountPanel}
+    <div class="modal-backdrop" role="presentation">
+      <div class="panel session-card account-modal">
+        <div class="detail-header">
+          <div>
+            <p class="eyebrow">{currentUser ? 'Account' : 'Login'}</p>
+            <h2>{currentUser ? currentUser.display_name : 'Sign in'}</h2>
+          </div>
+          <button type="button" class="secondary compact" onclick={() => (showAccountPanel = false)}
+            >Close</button
+          >
+        </div>
+        {#if currentUser}
+          <p class="session-label">Signed in</p>
+          <strong>{currentUser.display_name}</strong>
+          <span>{currentUser.email} · {currentUser.role}</span>
+          <button
+            type="button"
+            class="secondary"
+            onclick={() => {
+              void logout();
+              showAccountPanel = false;
+            }}
+            disabled={busy}
+          >
+            Logout
+          </button>
+        {:else}
+          <form
+            onsubmit={(event) => {
+              event.preventDefault();
+              void login();
+            }}
+          >
+            <label>
+              Email
+              <input bind:value={email} type="email" autocomplete="username" />
+            </label>
+            <label>
+              Password
+              <input bind:value={password} type="password" autocomplete="current-password" />
+            </label>
+            <button type="submit" disabled={busy}>Login</button>
+          </form>
+        {/if}
+      </div>
+    </div>
   {/if}
-  {#if message}
-    <p class="notice success">{message}</p>
-  {/if}
 
-  {#if loading}
-    <section class="panel loading-panel">Loading inventory workspace...</section>
-  {:else}
-    <WorkspaceTabs tabs={visibleTabs()} {activeTab} onSwitch={switchTab} />
+  <section class="workspace-frame">
+    {#if loading}
+      <section class="panel loading-panel">Loading inventory workspace...</section>
+    {:else}
+      <WorkspaceTabs tabs={visibleTabs()} {activeTab} onSwitch={switchTab} />
 
-    {#if activeTab === 'dashboard'}
-      <DashboardPanel
-        trackedAssetCount={trackedAssets.length}
-        stockAssetCount={stockAssets.length}
-        locationCount={locations.length}
-        stockUnitCount={stockLevels.reduce((sum, level) => sum + level.quantity_total, 0)}
-        bookingCount={bookings.length}
-        checkoutCount={checkouts.length}
-        returnCount={returns.length}
-        qrCodeCount={qrCodes.length}
-      />
+      <section class="workspace-content">
+        {#if activeTab === 'dashboard'}
+          <DashboardPanel
+            trackedAssetCount={trackedAssets.length}
+            stockAssetCount={stockAssets.length}
+            locationCount={locations.length}
+            stockUnitCount={stockLevels.reduce((sum, level) => sum + level.quantity_total, 0)}
+            bookingCount={bookings.length}
+            checkoutCount={checkouts.length}
+            returnCount={returns.length}
+            qrCodeCount={qrCodes.length}
+          />
+        {/if}
+
+        {#if currentUser && activeTab !== 'dashboard'}
+          {#if activeTab === 'admin' && currentUser.role === 'admin'}
+            <AdminPanel
+              {categories}
+              {users}
+              {busy}
+              bind:categoryForm
+              bind:categoryUpdateForm
+              bind:userCreateForm
+              bind:userUpdateForm
+              createCategory={() => void createCategory()}
+              updateCategory={() => void updateCategory()}
+              createUser={() => void createUser()}
+              updateUser={() => void updateUser()}
+              {selectCategoryForEdit}
+              {selectUserForEdit}
+            />
+          {/if}
+
+          {#if activeTab === 'locations'}
+            <LocationsPanel
+              {locationTypes}
+              {locations}
+              {selectedLocationId}
+              {busy}
+              bind:locationForm
+              createLocation={() => void createLocation()}
+              selectLocation={(locationId) => {
+                selectedLocationId = locationId;
+              }}
+              closeLocationDetail={() => {
+                selectedLocationId = '';
+              }}
+              {selectedLocation}
+              {stockLevelsAtLocation}
+              {trackedAssetsAtLocation}
+              {totalStockAtLocation}
+              {responsibleLabel}
+              {stockAssetName}
+              selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
+            />
+          {/if}
+
+          {#if activeTab === 'bookings'}
+            <BookingsPanel
+              {assets}
+              {locations}
+              {bookings}
+              {availability}
+              {busy}
+              bind:bookingDraft
+              bind:bookingDraftLineForm
+              {selectedBookingDraftAsset}
+              {assetName}
+              {createBookingDraft}
+              {previewBookingDraft}
+              {addBookingDraftLineFromForm}
+              {removeBookingDraftLine}
+              {resetBookingDraft}
+              {clearBookingAvailability}
+              {formatDateTime}
+            />
+          {/if}
+
+          {#if activeTab === 'checkout'}
+            <CheckoutPanel
+              {bookings}
+              {checkouts}
+              {returns}
+              {busy}
+              bind:checkoutForm
+              bind:returnForm
+              {selectedReturnCheckout}
+              createCheckout={() => void createCheckout()}
+              createReturn={() => void createReturn()}
+              loadCheckoutForReturn={() => void loadCheckoutForReturn()}
+              {selectedReturnLine}
+              {checkoutLabel}
+              {returnLineLabel}
+              {bookingTitle}
+            />
+          {/if}
+
+          {#if activeTab === 'field'}
+            <FieldQrPanel
+              {qrCodes}
+              {trackedAssets}
+              {resolvedQr}
+              {busy}
+              bind:qrCreateForm
+              bind:qrAssignForm
+              bind:qrResolveToken
+              createQrCode={() => void createQrCode()}
+              assignQrCode={() => void assignQrCode()}
+              resolveQrCode={() => void resolveQrCode()}
+              {assetName}
+            />
+          {/if}
+
+          {#if activeTab === 'inventory'}
+            <InventoryPanel
+              {assets}
+              {categories}
+              {locations}
+              {users}
+              {currentUser}
+              {stockLevels}
+              {filteredAssets}
+              {selectedAssetEvents}
+              {selectedAssetId}
+              {availability}
+              {busy}
+              bind:assetForm
+              bind:assetEditForm
+              bind:assetSearch
+              bind:bookingForm
+              bind:bookingDraft
+              createAsset={() => void createAsset()}
+              updateSelectedAsset={() => void updateSelectedAsset()}
+              {moveSelectedTrackedAsset}
+              {moveSelectedStock}
+              {addSelectedStock}
+              {removeSelectedStock}
+              {previewBooking}
+              {createBooking}
+              {addBookingDraftLine}
+              {previewBookingDraft}
+              {createBookingDraft}
+              {clearBookingAvailability}
+              uploadSelectedAssetImage={(file) => void uploadSelectedAssetImage(file)}
+              deleteSelectedAssetImage={() => void deleteSelectedAssetImage()}
+              selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
+              closeAssetDetail={() => {
+                selectedAssetId = '';
+                selectedAssetEvents = [];
+                resetAssetEditForm();
+              }}
+              {selectedAsset}
+              {categoryName}
+              {locationName}
+              {holderLabel}
+              {userLabel}
+              {assetImageUrl}
+              {formatDateTime}
+            />
+          {/if}
+        {/if}
+      </section>
     {/if}
+  </section>
 
-    {#if currentUser && activeTab !== 'dashboard'}
-      {#if activeTab === 'admin' && currentUser.role === 'admin'}
-        <AdminPanel
-          {categories}
-          {users}
-          {busy}
-          bind:categoryForm
-          bind:categoryUpdateForm
-          bind:userCreateForm
-          bind:userUpdateForm
-          createCategory={() => void createCategory()}
-          updateCategory={() => void updateCategory()}
-          createUser={() => void createUser()}
-          updateUser={() => void updateUser()}
-          {selectCategoryForEdit}
-          {selectUserForEdit}
-        />
+  {#if error || message}
+    <section class="notice-dock" aria-live="polite">
+      {#if error}
+        <p class="notice error">{error}</p>
       {/if}
-
-      {#if activeTab === 'locations'}
-        <LocationsPanel
-          {locationTypes}
-          {locations}
-          {selectedLocationId}
-          {busy}
-          bind:locationForm
-          createLocation={() => void createLocation()}
-          selectLocation={(locationId) => {
-            selectedLocationId = locationId;
-          }}
-          closeLocationDetail={() => {
-            selectedLocationId = '';
-          }}
-          {selectedLocation}
-          {stockLevelsAtLocation}
-          {trackedAssetsAtLocation}
-          {totalStockAtLocation}
-          {responsibleLabel}
-          {stockAssetName}
-          selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
-        />
+      {#if message}
+        <p class="notice success">{message}</p>
       {/if}
-
-      {#if activeTab === 'bookings'}
-        <BookingsPanel
-          {assets}
-          {locations}
-          {bookings}
-          {availability}
-          {busy}
-          bind:bookingDraft
-          bind:bookingDraftLineForm
-          {selectedBookingDraftAsset}
-          {assetName}
-          {createBookingDraft}
-          {previewBookingDraft}
-          {addBookingDraftLineFromForm}
-          {removeBookingDraftLine}
-          {resetBookingDraft}
-          {clearBookingAvailability}
-          {formatDateTime}
-        />
-      {/if}
-
-      {#if activeTab === 'checkout'}
-        <CheckoutPanel
-          {bookings}
-          {checkouts}
-          {returns}
-          {busy}
-          bind:checkoutForm
-          bind:returnForm
-          {selectedReturnCheckout}
-          createCheckout={() => void createCheckout()}
-          createReturn={() => void createReturn()}
-          loadCheckoutForReturn={() => void loadCheckoutForReturn()}
-          {selectedReturnLine}
-          {checkoutLabel}
-          {returnLineLabel}
-          {bookingTitle}
-        />
-      {/if}
-
-      {#if activeTab === 'field'}
-        <FieldQrPanel
-          {qrCodes}
-          {trackedAssets}
-          {resolvedQr}
-          {busy}
-          bind:qrCreateForm
-          bind:qrAssignForm
-          bind:qrResolveToken
-          createQrCode={() => void createQrCode()}
-          assignQrCode={() => void assignQrCode()}
-          resolveQrCode={() => void resolveQrCode()}
-          {assetName}
-        />
-      {/if}
-
-      {#if activeTab === 'inventory'}
-        <InventoryPanel
-          {assets}
-          {categories}
-          {locations}
-          {users}
-          {currentUser}
-          {stockLevels}
-          {filteredAssets}
-          {selectedAssetEvents}
-          {selectedAssetId}
-          {availability}
-          {busy}
-          bind:assetForm
-          bind:assetEditForm
-          bind:assetSearch
-          bind:bookingForm
-          bind:bookingDraft
-          createAsset={() => void createAsset()}
-          updateSelectedAsset={() => void updateSelectedAsset()}
-          {moveSelectedTrackedAsset}
-          {moveSelectedStock}
-          {addSelectedStock}
-          {removeSelectedStock}
-          {previewBooking}
-          {createBooking}
-          {addBookingDraftLine}
-          {previewBookingDraft}
-          {createBookingDraft}
-          {clearBookingAvailability}
-          uploadSelectedAssetImage={(file) => void uploadSelectedAssetImage(file)}
-          deleteSelectedAssetImage={() => void deleteSelectedAssetImage()}
-          selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
-          closeAssetDetail={() => {
-            selectedAssetId = '';
-            selectedAssetEvents = [];
-            resetAssetEditForm();
-          }}
-          {selectedAsset}
-          {categoryName}
-          {locationName}
-          {holderLabel}
-          {userLabel}
-          {assetImageUrl}
-          {formatDateTime}
-        />
-      {/if}
-    {/if}
+    </section>
   {/if}
 </main>
