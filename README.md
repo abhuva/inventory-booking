@@ -14,8 +14,9 @@ Internal inventory and equipment booking system for small teams managing physica
 - `frontend/`: SvelteKit application.
 - `frontend/src/lib/components/workspace/`: desktop workspace tab components.
 - `docs/`: project notes, workflow docs, and task tracking.
+- `docs/server-deployment-notes.md`: first-pass notes for discussing server hosting with IT.
 - `docker-compose.yml`: local service topology for PostgreSQL, API, and web app.
-- `asset-uploads` Docker volume: processed asset photos stored outside Postgres.
+- upload Docker volumes: processed asset/location photos stored outside Postgres.
 - `inventory-booking-tool-proposal.md`: original product and architecture proposal.
 
 ## Prerequisites
@@ -72,9 +73,7 @@ Apply database migrations after the containers are running:
 .\scripts\migrate.ps1
 ```
 
-Asset photos are stored as processed derivatives only. The frontend crops/resizes/compresses
-camera or file input before upload, and the backend stores the result in the Docker
-`asset-uploads` volume while keeping metadata in PostgreSQL.
+Asset and location photos are stored as processed derivatives only. The frontend crops/resizes/compresses camera or file input before upload, and the backend stores the result in Docker upload volumes while keeping metadata in PostgreSQL.
 
 Seed the first admin account:
 
@@ -116,10 +115,12 @@ The frontend is currently a desktop-first tabbed workspace:
 - `Dashboard`: high-level counts.
 - `Inventory`: assets, asset search, asset detail/history, and asset state changes.
 - `Locations`: spaces, stock by location, and movement workflows.
-- `Bookings`: booking creation and availability feedback.
-- `Checkout`: checkout and return workflows.
+- `Stock`: stock availability heatmap.
+- `Bookings`: reservation list, booking details, check-out, and check-in workflows.
 - `Field / QR`: QR label creation, assignment, and lookup.
 - `Admin`: users and categories.
+
+For initial server hosting discussion, see `docs/server-deployment-notes.md`.
 
 ## API
 
@@ -190,5 +191,5 @@ Current endpoints:
 ## Next Implementation Steps
 
 1. Add multi-line booking editing if real usage needs it.
-2. Add deployment hardening runbook.
+2. Turn `docs/server-deployment-notes.md` into a production deployment runbook after IT confirms the server setup.
 3. Add backup and restore documentation.
