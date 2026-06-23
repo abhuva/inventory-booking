@@ -977,19 +977,10 @@
         <LocationsPanel
           {locationTypes}
           {locations}
-          {stockAssets}
-          {trackedAssets}
-          {stockLevels}
           {selectedLocationId}
           {busy}
           bind:locationForm
-          bind:stockForm
-          bind:trackedTransferForm
-          bind:stockTransferForm
           createLocation={() => void createLocation()}
-          createStockLevel={() => void createStockLevel()}
-          transferTrackedAssetAction={() => void transferTrackedAssetAction()}
-          transferStockAction={() => void transferStockAction()}
           selectLocation={(locationId) => {
             selectedLocationId = locationId;
           }}
@@ -1002,7 +993,6 @@
           {totalStockAtLocation}
           {responsibleLabel}
           {stockAssetName}
-          {stockLocationName}
           selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
         />
       {/if}
