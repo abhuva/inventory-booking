@@ -10,10 +10,24 @@ from inventory_booking_api.inventory.enums import AssetType
 class BookingLineCreate(BaseModel):
     asset_id: UUID
     location_id: UUID | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
     quantity: int | None = Field(default=None, gt=0)
     notes: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> "BookingLineCreate":
+        if (self.starts_at is None) != (self.ends_at is None):
+            raise ValueError("Booking line starts_at and ends_at must be provided together.")
+        if (
+            self.starts_at is not None
+            and self.ends_at is not None
+            and self.starts_at >= self.ends_at
+        ):
+            raise ValueError("Booking line starts_at must be before ends_at.")
+        return self
 
 
 class BookingCreate(BaseModel):
@@ -47,6 +61,8 @@ class BookingLineRead(BaseModel):
     booking_id: UUID
     asset_id: UUID
     location_id: UUID | None
+    starts_at: datetime
+    ends_at: datetime
     quantity: int | None
     notes: str | None
 

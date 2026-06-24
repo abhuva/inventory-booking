@@ -17,6 +17,7 @@
     type AssetUpdate,
     type Basket,
     type BasketCreate,
+    type BasketLineUpdate,
     type BasketUpdate,
     type Booking,
     type BookingCreate,
@@ -716,6 +717,8 @@
       activeBasket = await apiPost<Basket>(`/basket/${basket.id}/lines`, {
         asset_id: bookingForm.asset_id,
         location_id: asset.asset_type === 'stock' ? bookingForm.location_id : null,
+        starts_at: new Date(bookingForm.starts_at).toISOString(),
+        ends_at: new Date(bookingForm.ends_at).toISOString(),
         quantity: asset.asset_type === 'stock' ? bookingForm.quantity : null,
         notes: null
       });
@@ -757,6 +760,20 @@
         activeTab = 'inventory';
       }
       message = 'Basket item removed';
+    });
+  }
+
+  async function updateBasketLine(lineId: string, payload: BasketLineUpdate): Promise<boolean> {
+    return await runAction(async () => {
+      if (!activeBasket) {
+        throw new Error('No active basket.');
+      }
+      activeBasket = await apiPatch<Basket>(
+        `/basket/${activeBasket.id}/lines/${lineId}`,
+        emptyStringsToNull<BasketLineUpdate>(payload)
+      );
+      syncBasketForm();
+      message = 'Basket item updated';
     });
   }
 
@@ -831,6 +848,8 @@
     addBookingDraftLine({
       asset_id: bookingDraftLineForm.asset_id,
       location_id: asset.asset_type === 'stock' ? bookingDraftLineForm.location_id : null,
+      starts_at: new Date(bookingDraft.starts_at).toISOString(),
+      ends_at: new Date(bookingDraft.ends_at).toISOString(),
       quantity: asset.asset_type === 'stock' ? bookingDraftLineForm.quantity : null,
       notes: bookingDraftLineForm.notes || null
     });
@@ -1118,6 +1137,8 @@
         {
           asset_id: bookingForm.asset_id,
           location_id: isStock ? bookingForm.location_id : null,
+          starts_at: new Date(bookingForm.starts_at).toISOString(),
+          ends_at: new Date(bookingForm.ends_at).toISOString(),
           quantity: isStock ? bookingForm.quantity : null
         }
       ]
@@ -1337,6 +1358,11 @@
     };
   }
 
+  function closeNotice(): void {
+    error = '';
+    message = '';
+  }
+
   function formatDateTime(value: string): string {
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: 'medium',
@@ -1421,6 +1447,7 @@
             bind:basketTitle
             bind:basketNotes
             {updateBasket}
+            {updateBasketLine}
             {removeBasketLine}
             {confirmBasket}
             {cancelBasket}
@@ -1600,12 +1627,22 @@
 
   {#if error || message}
     <section class="notice-dock" aria-live="polite">
-      {#if error}
-        <p class="notice error">{error}</p>
-      {/if}
-      {#if message}
-        <p class="notice success">{message}</p>
-      {/if}
+      <div class="notice-stack">
+        <button
+          type="button"
+          class="notice-close"
+          aria-label="Close notification"
+          onclick={closeNotice}
+        >
+          x
+        </button>
+        {#if error}
+          <p class="notice error">{error}</p>
+        {/if}
+        {#if message}
+          <p class="notice success">{message}</p>
+        {/if}
+      </div>
     </section>
   {/if}
 </main>

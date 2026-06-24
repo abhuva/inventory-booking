@@ -1880,6 +1880,286 @@ def test_confirm_basket_creates_booking_and_clears_active_basket(client: TestCli
     assert active_response.json() is None
 
 
+def test_basket_lines_keep_independent_dates(client: TestClient) -> None:
+    headers = login(client)
+    person = client.post(
+        "/persons",
+        json={"display_name": "Mixed Date Person", "person_type": "external"},
+        headers=headers,
+    ).json()
+    location = client.post(
+        "/locations",
+        json={"name": "Mixed Date Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Mixed Date Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 9,
+        },
+        headers=headers,
+    )
+    first_start = BOOKING_START
+    first_end = BOOKING_START + timedelta(days=2)
+    second_start = BOOKING_START + timedelta(days=10)
+    second_end = second_start + timedelta(days=3)
+    basket = client.post(
+        "/basket",
+        json={
+            "title": "Mixed date basket",
+            "person_id": person["id"],
+            "starts_at": first_start.isoformat(),
+            "ends_at": first_end.isoformat(),
+        },
+        headers=headers,
+    ).json()
+
+    first_line_response = client.post(
+        f"/basket/{basket['id']}/lines",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "starts_at": first_start.isoformat(),
+            "ends_at": first_end.isoformat(),
+            "quantity": 4,
+        },
+        headers=headers,
+    )
+    second_line_response = client.post(
+        f"/basket/{basket['id']}/lines",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "starts_at": second_start.isoformat(),
+            "ends_at": second_end.isoformat(),
+            "quantity": 4,
+        },
+        headers=headers,
+    )
+    confirm_response = client.post(f"/basket/{basket['id']}/confirm", headers=headers)
+
+    assert first_line_response.status_code == 200
+    assert len(first_line_response.json()["lines"]) == 1
+    assert second_line_response.status_code == 200
+    assert len(second_line_response.json()["lines"]) == 2
+    basket_payload = second_line_response.json()
+    assert basket_payload["starts_at"].startswith(first_start.strftime("%Y-%m-%dT%H:%M:%S"))
+    assert basket_payload["ends_at"].startswith(second_end.strftime("%Y-%m-%dT%H:%M:%S"))
+    assert confirm_response.status_code == 200
+    confirmed = confirm_response.json()
+    assert len(confirmed["lines"]) == 2
+    assert {line["starts_at"][:19] for line in confirmed["lines"]} == {
+        first_start.strftime("%Y-%m-%dT%H:%M:%S"),
+        second_start.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+
+
+def test_stock_availability_uses_max_concurrent_overlap(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Concurrent Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Concurrent Props", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 9,
+        },
+        headers=headers,
+    )
+    first_start = BOOKING_START
+    first_end = BOOKING_START + timedelta(days=2)
+    second_start = first_end
+    second_end = second_start + timedelta(days=2)
+    for index, (starts_at, ends_at) in enumerate(
+        ((first_start, first_end), (second_start, second_end)),
+        start=1,
+    ):
+        response = client.post(
+            "/bookings",
+            json={
+                "title": f"Non-overlapping stock booking {index}",
+                "starts_at": starts_at.isoformat(),
+                "ends_at": ends_at.isoformat(),
+                "lines": [
+                    {
+                        "asset_id": stock_asset["id"],
+                        "location_id": location["id"],
+                        "quantity": 5,
+                    }
+                ],
+            },
+            headers=headers,
+        )
+        assert response.status_code == 200
+
+    preview_response = client.post(
+        "/bookings/availability",
+        json={
+            "title": "Full range request",
+            "starts_at": first_start.isoformat(),
+            "ends_at": second_end.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 4,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert preview_response.status_code == 200
+    preview = preview_response.json()
+    assert preview["available"] is True
+    assert preview["lines"][0]["available_quantity"] == 4
+
+
+def test_update_basket_line_changes_dates_and_quantity(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Editable Basket Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Editable Basket Props", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 9,
+        },
+        headers=headers,
+    )
+    basket = client.post(
+        "/basket",
+        json={
+            "title": "Editable basket",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+        },
+        headers=headers,
+    ).json()
+    line = client.post(
+        f"/basket/{basket['id']}/lines",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity": 2,
+        },
+        headers=headers,
+    ).json()["lines"][0]
+    next_start = BOOKING_START + timedelta(days=5)
+    next_end = next_start + timedelta(days=2)
+
+    response = client.patch(
+        f"/basket/{basket['id']}/lines/{line['id']}",
+        json={
+            "starts_at": next_start.isoformat(),
+            "ends_at": next_end.isoformat(),
+            "quantity": 4,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    updated_line = response.json()["lines"][0]
+    assert updated_line["quantity"] == 4
+    assert updated_line["starts_at"].startswith(next_start.strftime("%Y-%m-%dT%H:%M:%S"))
+    assert updated_line["ends_at"].startswith(next_end.strftime("%Y-%m-%dT%H:%M:%S"))
+    assert response.json()["starts_at"].startswith(next_start.strftime("%Y-%m-%dT%H:%M:%S"))
+    assert response.json()["ends_at"].startswith(next_end.strftime("%Y-%m-%dT%H:%M:%S"))
+
+
+def test_update_basket_line_rejects_unavailable_quantity(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Rejected Basket Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Rejected Basket Props", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 9,
+        },
+        headers=headers,
+    )
+    basket = client.post(
+        "/basket",
+        json={
+            "title": "Rejected basket",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+        },
+        headers=headers,
+    ).json()
+    first_line = client.post(
+        f"/basket/{basket['id']}/lines",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "quantity": 6,
+        },
+        headers=headers,
+    ).json()["lines"][0]
+    second_line = client.post(
+        f"/basket/{basket['id']}/lines",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "starts_at": (BOOKING_START + timedelta(days=5)).isoformat(),
+            "ends_at": (BOOKING_END + timedelta(days=5)).isoformat(),
+            "quantity": 4,
+        },
+        headers=headers,
+    ).json()["lines"][1]
+
+    response = client.patch(
+        f"/basket/{basket['id']}/lines/{second_line['id']}",
+        json={
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "quantity": 4,
+        },
+        headers=headers,
+    )
+
+    assert first_line["quantity"] == 6
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Not enough stock is available for this time range."
+
+
 def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: TestClient) -> None:
     headers = login(client)
     person = client.post(

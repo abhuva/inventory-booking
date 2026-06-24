@@ -2,14 +2,19 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.audit.enums import AuditAction
 from inventory_booking_api.audit.service import write_audit_log
 from inventory_booking_api.baskets.enums import BasketStatus
 from inventory_booking_api.baskets.models import Basket, BasketLine
-from inventory_booking_api.baskets.schemas import BasketCreate, BasketLineCreate, BasketUpdate
+from inventory_booking_api.baskets.schemas import (
+    BasketCreate,
+    BasketLineCreate,
+    BasketLineUpdate,
+    BasketUpdate,
+)
 from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.bookings.schemas import BookingCreate, BookingLineCreate
 from inventory_booking_api.bookings.service import create_booking, preview_availability
@@ -78,8 +83,6 @@ async def create_or_update_active_basket(
     else:
         basket.person_id = payload.person_id
         basket.title = payload.title
-        basket.starts_at = payload.starts_at
-        basket.ends_at = payload.ends_at
         basket.notes = payload.notes
         basket.expires_at = basket_expiry()
         await validate_basket_lines(session, basket)
@@ -130,17 +133,32 @@ async def add_or_update_basket_line(
 
     ensure_basket_owner(basket, actor)
     ensure_active_basket(basket)
-    existing = await find_basket_line(session, basket.id, payload.asset_id, payload.location_id)
+    line_starts_at = payload.starts_at if payload.starts_at is not None else basket.starts_at
+    line_ends_at = payload.ends_at if payload.ends_at is not None else basket.ends_at
+    existing = await find_basket_line(
+        session,
+        basket.id,
+        payload.asset_id,
+        payload.location_id,
+        line_starts_at,
+        line_ends_at,
+    )
     if existing is None:
-        line = BasketLine(basket_id=basket.id, **payload.model_dump())
+        line = BasketLine(
+            basket_id=basket.id,
+            **basket_line_values(basket, payload),
+        )
         session.add(line)
     else:
         line = existing
+        line.starts_at = line_starts_at
+        line.ends_at = line_ends_at
         line.quantity = payload.quantity
         line.notes = payload.notes
 
     basket.expires_at = basket_expiry()
     await session.flush()
+    await refresh_basket_time_range(session, basket)
     await validate_basket_lines(session, basket)
     await session.commit()
     await session.refresh(line)
@@ -165,6 +183,55 @@ async def remove_basket_line(
     await session.commit()
     await session.refresh(basket)
     return basket
+
+
+async def update_basket_line(
+    session: AsyncSession,
+    basket: Basket,
+    line_id: UUID,
+    payload: BasketLineUpdate,
+    actor: User,
+) -> BasketLine:
+    """Update one active basket line and revalidate the whole basket."""
+
+    ensure_basket_owner(basket, actor)
+    ensure_active_basket(basket)
+    line = await session.get(BasketLine, line_id)
+    if line is None or line.basket_id != basket.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Basket line not found.")
+    next_starts_at = payload.starts_at if payload.starts_at is not None else line.starts_at
+    next_ends_at = payload.ends_at if payload.ends_at is not None else line.ends_at
+    next_quantity = payload.quantity if payload.quantity is not None else line.quantity
+    duplicate = await find_basket_line(
+        session,
+        basket.id,
+        line.asset_id,
+        line.location_id,
+        next_starts_at,
+        next_ends_at,
+    )
+    if duplicate is not None and duplicate.id != line.id:
+        if duplicate.quantity is None or next_quantity is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Duplicate tracked basket line for the same date range.",
+            )
+        duplicate.quantity += next_quantity
+        duplicate.notes = payload.notes if payload.notes is not None else duplicate.notes
+        await session.delete(line)
+        line = duplicate
+    else:
+        line.starts_at = next_starts_at
+        line.ends_at = next_ends_at
+        line.quantity = next_quantity
+        line.notes = payload.notes
+    basket.expires_at = basket_expiry()
+    await session.flush()
+    await refresh_basket_time_range(session, basket)
+    await validate_basket_lines(session, basket)
+    await session.commit()
+    await session.refresh(line)
+    return line
 
 
 async def cancel_basket(session: AsyncSession, basket: Basket, actor: User) -> Basket:
@@ -289,14 +356,18 @@ async def find_basket_line(
     basket_id: UUID,
     asset_id: UUID,
     location_id: UUID | None,
+    starts_at: datetime,
+    ends_at: datetime,
 ) -> BasketLine | None:
-    """Return an existing line for the same basket/asset/location scope."""
+    """Return an existing line for the same basket/asset/location/date scope."""
 
     result = await session.execute(
         select(BasketLine).where(
             BasketLine.basket_id == basket_id,
             BasketLine.asset_id == asset_id,
             BasketLine.location_id == location_id,
+            BasketLine.starts_at == starts_at,
+            BasketLine.ends_at == ends_at,
         )
     )
     return result.scalar_one_or_none()
@@ -315,12 +386,37 @@ def basket_to_booking_payload(basket: Basket, lines: list[BasketLine]) -> Bookin
             BookingLineCreate(
                 asset_id=line.asset_id,
                 location_id=line.location_id,
+                starts_at=line.starts_at,
+                ends_at=line.ends_at,
                 quantity=line.quantity,
                 notes=line.notes,
             )
             for line in lines
         ],
     )
+
+
+def basket_line_values(basket: Basket, line: BasketLineCreate) -> dict[str, object]:
+    return {
+        "asset_id": line.asset_id,
+        "location_id": line.location_id,
+        "starts_at": line.starts_at if line.starts_at is not None else basket.starts_at,
+        "ends_at": line.ends_at if line.ends_at is not None else basket.ends_at,
+        "quantity": line.quantity,
+        "notes": line.notes,
+    }
+
+
+async def refresh_basket_time_range(session: AsyncSession, basket: Basket) -> None:
+    result = await session.execute(
+        select(func.min(BasketLine.starts_at), func.max(BasketLine.ends_at)).where(
+            BasketLine.basket_id == basket.id
+        )
+    )
+    starts_at, ends_at = result.one()
+    if starts_at is not None and ends_at is not None:
+        basket.starts_at = starts_at
+        basket.ends_at = ends_at
 
 
 def ensure_basket_owner(basket: Basket, actor: User) -> None:

@@ -273,7 +273,7 @@
 
   function compactBookingLine(line: BookingLine): string {
     const quantity = line.quantity === null ? '1' : String(line.quantity);
-    return `${quantity} x ${assetName(line.asset_id)} from ${locationName(line.location_id)}`;
+    return `${quantity} x ${assetName(line.asset_id)} from ${locationName(line.location_id)} (${lineDateRange(line)})`;
   }
 
   function checkoutLineQuantity(line: NonNullable<Checkout['lines']>[number]): string {
@@ -287,6 +287,10 @@
   function bookingLineMode(line: BookingLine): string {
     const asset = assets.find((entry) => entry.id === line.asset_id);
     return asset?.asset_type === 'stock' ? 'stock' : 'tracked';
+  }
+
+  function lineDateRange(line: BookingLine): string {
+    return `${formatDateTime(line.starts_at)} - ${formatDateTime(line.ends_at)}`;
   }
 
   function requestedByName(booking: Booking | undefined): string {
@@ -645,6 +649,7 @@
                   {bookingLineMode(line)} / {locationName(line.location_id)} /
                   {bookingLineQuantity(line)}
                 </span>
+                <span>{lineDateRange(line)}</span>
                 {#if line.notes}
                   <small>{line.notes}</small>
                 {/if}

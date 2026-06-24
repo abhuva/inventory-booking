@@ -39,12 +39,22 @@ class BasketLine(IdMixin, TimestampMixin, Base):
 
     __tablename__ = "basket_lines"
     __table_args__ = (
-        UniqueConstraint("basket_id", "asset_id", "location_id", name="uq_basket_line_scope"),
+        UniqueConstraint(
+            "basket_id",
+            "asset_id",
+            "location_id",
+            "starts_at",
+            "ends_at",
+            name="uq_basket_lines_basket_id",
+        ),
         CheckConstraint("quantity IS NULL OR quantity > 0", name="basket_line_positive_quantity"),
+        CheckConstraint("starts_at < ends_at", name="basket_line_valid_time_range"),
     )
 
     basket_id: Mapped[UUID] = mapped_column(ForeignKey("baskets.id"), nullable=False)
     asset_id: Mapped[UUID] = mapped_column(ForeignKey("assets.id"), nullable=False)
     location_id: Mapped[UUID | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     quantity: Mapped[int | None] = mapped_column(nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

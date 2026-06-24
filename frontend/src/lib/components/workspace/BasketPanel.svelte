@@ -1,7 +1,10 @@
 ﻿<script lang="ts">
-  import type { Asset, Basket, BasketLine } from '$lib/api';
+  import type { Asset, Basket, BasketLine, BasketLineUpdate } from '$lib/api';
+  import AvailabilityDatePicker from './AvailabilityDatePicker.svelte';
 
   let selectedLineId = $state('');
+  let selectedQuantity = $state('1');
+  let showDatePicker = $state(false);
 
   let {
     basket,
@@ -10,6 +13,7 @@
     basketTitle = $bindable(),
     basketNotes = $bindable(),
     updateBasket,
+    updateBasketLine,
     removeBasketLine,
     confirmBasket,
     cancelBasket,
@@ -24,6 +28,7 @@
     basketTitle: string;
     basketNotes: string;
     updateBasket: () => Promise<boolean>;
+    updateBasketLine: (lineId: string, payload: BasketLineUpdate) => Promise<boolean>;
     removeBasketLine: (lineId: string) => Promise<boolean>;
     confirmBasket: () => Promise<boolean>;
     cancelBasket: () => Promise<boolean>;
@@ -36,6 +41,10 @@
   const selectedLine = $derived(
     basket?.lines.find((line) => line.id === selectedLineId) ?? basket?.lines[0]
   );
+
+  $effect(() => {
+    selectedQuantity = String(selectedLine?.quantity ?? 1);
+  });
 
   function selectedAsset(): Asset | undefined {
     return assets.find((asset) => asset.id === selectedLine?.asset_id);
@@ -51,6 +60,36 @@
       return '1 exact item';
     }
     return `${line.quantity} ${asset?.unit_name ?? 'units'}`;
+  }
+
+  function selectedLineQuantity(): number {
+    const parsed = Number.parseInt(selectedQuantity, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  }
+
+  async function submitLineQuantity(): Promise<void> {
+    if (!selectedLine || selectedLine.quantity === null) {
+      return;
+    }
+    await updateBasketLine(selectedLine.id, {
+      starts_at: selectedLine.starts_at,
+      ends_at: selectedLine.ends_at,
+      quantity: selectedLineQuantity(),
+      notes: selectedLine.notes
+    });
+  }
+
+  async function acceptLineDates(startsAt: string, endsAt: string): Promise<void> {
+    if (!selectedLine) {
+      return;
+    }
+    const updated = await updateBasketLine(selectedLine.id, {
+      starts_at: new Date(startsAt).toISOString(),
+      ends_at: new Date(endsAt).toISOString(),
+      quantity: selectedLine.quantity,
+      notes: selectedLine.notes
+    });
+    showDatePicker = !updated;
   }
 </script>
 
@@ -71,6 +110,7 @@
               <th>Item</th>
               <th>Quantity</th>
               <th>Location</th>
+              <th>Dates</th>
             </tr>
           </thead>
           <tbody>
@@ -85,6 +125,7 @@
                 </td>
                 <td>{lineQuantity(line)}</td>
                 <td>{locationName(line.location_id)}</td>
+                <td>{formatDateTime(line.starts_at)} - {formatDateTime(line.ends_at)}</td>
               </tr>
             {/each}
           </tbody>
@@ -119,6 +160,7 @@
           <span>Person</span>
           <strong>{personName(basket.person_id)}</strong>
         </div>
+        <p class="form-help">Basket range is derived from the earliest and latest item line.</p>
         <div class="split-fields">
           <label>
             Start
@@ -174,7 +216,40 @@
               <span>Type</span>
               <strong>{selectedAsset()?.asset_type ?? 'unknown'}</strong>
             </article>
+            <article>
+              <span>Reserved from</span>
+              <strong>{formatDateTime(selectedLine.starts_at)}</strong>
+            </article>
+            <article>
+              <span>Reserved until</span>
+              <strong>{formatDateTime(selectedLine.ends_at)}</strong>
+            </article>
           </div>
+          <div class="button-row compact-button-row">
+            <button
+              type="button"
+              class="compact"
+              disabled={busy}
+              onclick={() => (showDatePicker = true)}
+            >
+              Choose date
+            </button>
+          </div>
+          {#if selectedAsset()?.asset_type === 'stock'}
+            <form
+              class="compact-field-row"
+              onsubmit={(event) => {
+                event.preventDefault();
+                void submitLineQuantity();
+              }}
+            >
+              <label>
+                Amount
+                <input bind:value={selectedQuantity} min="1" type="number" required />
+              </label>
+              <button type="submit" class="compact" disabled={busy}>Update amount</button>
+            </form>
+          {/if}
           <label>
             Notes
             <textarea value={selectedLine.notes ?? ''} disabled></textarea>
@@ -193,4 +268,21 @@
       </div>
     {/if}
   </aside>
+
+  {#if showDatePicker && selectedLine}
+    <div class="modal-backdrop">
+      <div class="panel modal-panel">
+        <AvailabilityDatePicker
+          assetId={selectedLine.asset_id}
+          locationId={selectedLine.location_id}
+          quantity={selectedLine.quantity ?? 1}
+          initialStart={selectedLine.starts_at}
+          initialEnd={selectedLine.ends_at}
+          assetLabel={assetName(selectedLine.asset_id)}
+          onAccept={(startsAt, endsAt) => void acceptLineDates(startsAt, endsAt)}
+          onCancel={() => (showDatePicker = false)}
+        />
+      </div>
+    </div>
+  {/if}
 </section>

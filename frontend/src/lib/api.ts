@@ -154,6 +154,8 @@ export type BookingLine = {
   booking_id: string;
   asset_id: string;
   location_id: string | null;
+  starts_at: string;
+  ends_at: string;
   quantity: number | null;
   notes: string | null;
 };
@@ -176,6 +178,8 @@ export type BasketLine = {
   basket_id: string;
   asset_id: string;
   location_id: string | null;
+  starts_at: string;
+  ends_at: string;
   quantity: number | null;
   notes: string | null;
 };
@@ -389,6 +393,8 @@ export type StockLevelCreate = {
 export type BookingLineCreate = {
   asset_id: string;
   location_id?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
   quantity?: number | null;
   notes?: string | null;
 };
@@ -422,6 +428,13 @@ export type BasketUpdate = {
   person_id?: string | null;
   starts_at?: string | null;
   ends_at?: string | null;
+  notes?: string | null;
+};
+
+export type BasketLineUpdate = {
+  starts_at?: string | null;
+  ends_at?: string | null;
+  quantity?: number | null;
   notes?: string | null;
 };
 

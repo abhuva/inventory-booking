@@ -276,7 +276,7 @@ button.danger {
 .notice {
   margin: 0.5rem 0;
   border-radius: 8px;
-  padding: 0.55rem 0.75rem;
+  padding: 0.55rem 2.2rem 0.55rem 0.75rem;
   font-weight: 750;
 }
 
@@ -291,11 +291,35 @@ button.danger {
   pointer-events: none;
 }
 
-.notice-dock .notice {
+.notice-stack {
+  position: relative;
   justify-self: center;
   max-width: min(58rem, 100%);
+  pointer-events: auto;
+}
+
+.notice-dock .notice {
   margin: 0;
   box-shadow: 0 8px 28px rgba(20, 33, 28, 0.16);
+}
+
+.notice-close {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 1.35rem;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  min-height: 1.35rem;
+  border-radius: 999px;
+  padding: 0;
+  color: #254c37;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.86rem;
+  line-height: 1;
 }
 
 .workspace-frame {

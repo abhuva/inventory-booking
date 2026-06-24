@@ -9,6 +9,7 @@ from inventory_booking_api.baskets.schemas import (
     BasketCreate,
     BasketLineCreate,
     BasketLineRead,
+    BasketLineUpdate,
     BasketRead,
     BasketUpdate,
 )
@@ -22,6 +23,7 @@ from inventory_booking_api.baskets.service import (
     list_basket_lines,
     remove_basket_line,
     update_basket,
+    update_basket_line,
 )
 from inventory_booking_api.bookings.router import build_booking_read
 from inventory_booking_api.bookings.schemas import BookingRead
@@ -92,6 +94,20 @@ async def remove_basket_line_endpoint(
     basket = await get_owned_basket(session, basket_id, current_user)
     await remove_basket_line(session, basket, line_id, current_user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/{basket_id}/lines/{line_id}", response_model=BasketRead)
+async def update_basket_line_endpoint(
+    basket_id: UUID,
+    line_id: UUID,
+    payload: BasketLineUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BasketRead:
+    basket = await get_owned_basket(session, basket_id, current_user)
+    await update_basket_line(session, basket, line_id, payload, current_user)
+    lines = await list_basket_lines(session, basket.id)
+    return build_basket_read(basket, lines)
 
 
 @router.post("/{basket_id}/cancel", response_model=BasketRead)
