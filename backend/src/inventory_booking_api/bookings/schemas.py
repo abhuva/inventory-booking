@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from inventory_booking_api.bookings.enums import BookingStatus
+from inventory_booking_api.inventory.enums import AssetType
 
 
 class BookingLineCreate(BaseModel):
@@ -17,6 +18,7 @@ class BookingLineCreate(BaseModel):
 
 class BookingCreate(BaseModel):
     title: str = Field(min_length=1, max_length=180)
+    person_id: UUID | None = None
     starts_at: datetime
     ends_at: datetime
     notes: str | None = None
@@ -29,6 +31,15 @@ class BookingCreate(BaseModel):
         if self.starts_at >= self.ends_at:
             raise ValueError("Booking starts_at must be before ends_at.")
         return self
+
+
+class BookingUpdate(BaseModel):
+    status: BookingStatus | None = None
+    person_id: UUID | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class BookingLineRead(BaseModel):
@@ -45,10 +56,12 @@ class BookingLineRead(BaseModel):
 class BookingRead(BaseModel):
     id: UUID
     requested_by_user_id: UUID
+    person_id: UUID | None
     title: str
     status: BookingStatus
     starts_at: datetime
     ends_at: datetime
+    created_at: datetime
     notes: str | None
     lines: list[BookingLineRead] = []
 
@@ -58,10 +71,12 @@ class BookingRead(BaseModel):
 class BookingSummaryRead(BaseModel):
     id: UUID
     requested_by_user_id: UUID
+    person_id: UUID | None
     title: str
     status: BookingStatus
     starts_at: datetime
     ends_at: datetime
+    created_at: datetime
     notes: str | None
 
     model_config = ConfigDict(from_attributes=True)
@@ -114,6 +129,7 @@ class HeatmapCellRead(BaseModel):
 class HeatmapItemRead(BaseModel):
     asset_id: UUID
     name: str
+    asset_type: AssetType
     unit_name: str | None
     total_quantity: int
     cells: list[HeatmapCellRead]

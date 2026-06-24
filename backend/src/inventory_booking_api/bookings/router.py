@@ -3,6 +3,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.bookings.models import Booking, BookingLine
@@ -14,16 +15,19 @@ from inventory_booking_api.bookings.schemas import (
     BookingLineRead,
     BookingRead,
     BookingSummaryRead,
+    BookingUpdate,
 )
 from inventory_booking_api.bookings.service import (
     build_asset_availability_days,
     build_stock_availability_heatmap,
     cancel_booking,
     create_booking,
+    delete_booking,
     get_booking,
     list_booking_lines,
     list_bookings,
     preview_availability,
+    update_booking,
 )
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.errors import raise_not_found
@@ -110,6 +114,21 @@ async def get_booking_endpoint(
     return build_booking_read(booking, lines)
 
 
+@router.patch("/{booking_id}", response_model=BookingRead)
+async def update_booking_endpoint(
+    booking_id: UUID,
+    payload: BookingUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> BookingRead:
+    booking = await get_booking(session, booking_id)
+    if booking is None:
+        raise_not_found("Booking")
+    updated = await update_booking(session, booking, payload, current_user)
+    lines = await list_booking_lines(session, updated.id)
+    return build_booking_read(updated, lines)
+
+
 @router.post("/{booking_id}/cancel", response_model=BookingRead)
 async def cancel_booking_endpoint(
     booking_id: UUID,
@@ -124,14 +143,29 @@ async def cancel_booking_endpoint(
     return build_booking_read(cancelled, lines)
 
 
+@router.delete("/{booking_id}", status_code=204)
+async def delete_booking_endpoint(
+    booking_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    booking = await get_booking(session, booking_id)
+    if booking is None:
+        raise_not_found("Booking")
+    await delete_booking(session, booking, current_user)
+    return Response(status_code=204)
+
+
 def build_booking_read(booking: Booking, lines: list[BookingLine]) -> BookingRead:
     return BookingRead(
         id=booking.id,
         requested_by_user_id=booking.requested_by_user_id,
+        person_id=booking.person_id,
         title=booking.title,
         status=booking.status,
         starts_at=booking.starts_at,
         ends_at=booking.ends_at,
+        created_at=booking.created_at,
         notes=booking.notes,
         lines=[BookingLineRead.model_validate(line) for line in lines],
     )

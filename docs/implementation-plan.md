@@ -85,3 +85,29 @@ StockBatch
 - [x] Show tracked items by current unit location.
 - [x] Show stock items when a stock batch exists at the selected location.
 - [x] Summarize stock rows by logical asset/location stock levels.
+
+### 9. Workspace Booking And Availability UX
+
+- [x] Add persons as booking/contact entities with `admin`, `user`, `team`, and `external` types.
+- [x] Add explicit booking person assignment in the basket and booking pipeline.
+- [x] Show created/requested-by/person metadata on bookings.
+- [x] Add booking table filters and sortable headers.
+- [x] Make booking status, person, start date, and end date editable through backend availability checks.
+- [x] Add persistent filter/tab UI settings where needed.
+- [x] Add always-visible Basket and Account tabs.
+- [x] Add editable current-account name, email, and password.
+
+### 10. Destructive Operations
+
+- [x] Add confirmed delete actions for assets, locations, persons, and bookings.
+- [x] Repair nullable references when deleting locations and persons.
+- [x] Block asset deletion when booking/checkout/return history would be broken.
+- [x] Add regression tests for destructive operations.
+
+### 11. Availability Heatmap
+
+- [x] Cache heatmap results by range, bucket, location, and inventory/booking state fingerprint.
+- [x] Add progress feedback during heatmap recalculation.
+- [x] Add daily/weekly bucket toggle and client-side date-range zoom.
+- [x] Avoid recalculation when only visual color thresholds change.
+- [x] Include tracked unique items as binary 100%/0% availability rows.

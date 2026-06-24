@@ -1,5 +1,6 @@
 <script lang="ts">
   import AvailabilityDatePicker from './AvailabilityDatePicker.svelte';
+  import { readStoredString, writeStoredValue } from '$lib/persisted';
   import { downloadSvg, renderQrSvg, safeFilename } from '$lib/qr';
   import type {
     Asset,
@@ -7,10 +8,14 @@
     AssetCreate,
     AssetStatus,
     AssetUpdate,
+    Booking,
     Category,
+    Checkout,
     ItemEvent,
     Location,
+    Person,
     QrCode,
+    ReturnRecord,
     StockLevel,
     StockTransfer,
     TrackedAssetTransfer,
@@ -40,7 +45,7 @@
   let activeDetailTab = $state<AssetDetailTab>('info');
   let qrSvg = $state('');
   let qrError = $state('');
-  let inventoryLocationFilter = $state('');
+  let inventoryLocationFilter = $state(readStoredString('inventory.locationFilter'));
   let moveError = $state('');
   let stockAdjustMode = $state<StockAdjustMode>('add');
   let stockAdjustLocationId = $state('');
@@ -64,9 +69,13 @@
     assets,
     categories,
     locations,
+    persons,
     users,
     currentUser,
     stockLevels,
+    bookings,
+    checkouts,
+    returns,
     filteredAssets,
     selectedAssetEvents,
     selectedAssetId,
@@ -79,6 +88,7 @@
     bookingDraft = $bindable(),
     createAsset,
     updateSelectedAsset,
+    deleteSelectedAsset,
     moveSelectedTrackedAsset,
     moveSelectedStock,
     addSelectedStock,
@@ -103,9 +113,13 @@
     assets: Asset[];
     categories: Category[];
     locations: Location[];
+    persons: Person[];
     users: User[];
     currentUser: User | null;
     stockLevels: StockLevel[];
+    bookings: Booking[];
+    checkouts: Checkout[];
+    returns: ReturnRecord[];
     filteredAssets: Asset[];
     selectedAssetEvents: ItemEvent[];
     selectedAssetId: string;
@@ -124,6 +138,7 @@
     };
     bookingDraft: {
       title: string;
+      person_id: string;
       starts_at: string;
       ends_at: string;
       notes: string;
@@ -137,6 +152,7 @@
     };
     createAsset: () => void;
     updateSelectedAsset: () => void;
+    deleteSelectedAsset: () => Promise<boolean>;
     moveSelectedTrackedAsset: (payload: TrackedAssetTransfer) => Promise<boolean>;
     moveSelectedStock: (payload: StockTransfer) => Promise<boolean>;
     addSelectedStock: (locationId: string, quantity: number) => Promise<boolean>;
@@ -158,6 +174,10 @@
     qrScanUrl: (token: string) => string;
     formatDateTime: (value: string) => string;
   } = $props();
+
+  $effect(() => {
+    writeStoredValue('inventory.locationFilter', inventoryLocationFilter);
+  });
 
   function submitNewAsset() {
     createAsset();
@@ -513,6 +533,45 @@
     downloadSvg(`qr-${safeFilename(asset.name) || 'asset'}.svg`, qrSvg);
   }
 
+  async function confirmDeleteAsset(): Promise<void> {
+    const asset = selectedAsset();
+    if (!asset) {
+      return;
+    }
+    const bookingLineCount = bookings.reduce(
+      (sum, booking) =>
+        sum + (booking.lines ?? []).filter((line) => line.asset_id === asset.id).length,
+      0
+    );
+    const checkoutLineCount = checkouts.reduce(
+      (sum, checkout) =>
+        sum + (checkout.lines ?? []).filter((line) => line.asset_id === asset.id).length,
+      0
+    );
+    const returnLineCount = returns.reduce(
+      (sum, returnRecord) =>
+        sum + (returnRecord.lines ?? []).filter((line) => line.asset_id === asset.id).length,
+      0
+    );
+    const stockCount = stockLevelsForAsset(asset.id).length;
+    const historyCount = selectedAssetEvents.length;
+    const qrCount = selectedAssetQr() ? 1 : 0;
+    const confirmed = window.confirm(
+      [
+        `Delete asset "${asset.name}"?`,
+        '',
+        `${stockCount} stock/location rows, ${qrCount} QR assignment, and current basket references can be removed.`,
+        `${bookingLineCount} booking lines, ${checkoutLineCount} checkout lines, ${returnLineCount} return lines, and ${historyCount} history events reference this asset.`,
+        'If historical references exist, the backend will refuse deletion to preserve history.',
+        '',
+        'This cannot be undone.'
+      ].join('\n')
+    );
+    if (confirmed) {
+      await deleteSelectedAsset();
+    }
+  }
+
   function toDateTimeLocalValue(date: Date): string {
     const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
     return offsetDate.toISOString().slice(0, 16);
@@ -662,9 +721,18 @@
           <p class="eyebrow">Asset detail</p>
           <h2>{selectedAsset()?.name}</h2>
         </div>
-        <button type="button" class="secondary micro-button" onclick={closeAssetDetail}
-          >Close</button
-        >
+        <div class="button-row compact-button-row">
+          <button
+            type="button"
+            class="danger micro-button"
+            onclick={() => void confirmDeleteAsset()}
+          >
+            Delete
+          </button>
+          <button type="button" class="secondary micro-button" onclick={closeAssetDetail}>
+            Close
+          </button>
+        </div>
       </div>
 
       <div class="detail-tab-bar" aria-label="Asset detail sections">
@@ -1097,6 +1165,15 @@
       </div>
 
       <label>Basket name <input bind:value={bookingDraft.title} required /></label>
+      <label>
+        Person
+        <select bind:value={bookingDraft.person_id} required>
+          <option value="">Choose person</option>
+          {#each persons as person}
+            <option value={person.id}>{person.display_name} / {person.person_type}</option>
+          {/each}
+        </select>
+      </label>
       <div class="date-pick-row">
         <div class="readonly-field">
           <span>Dates</span>
@@ -1170,7 +1247,9 @@
         <button type="button" class="secondary" onclick={() => (showReserveAsset = false)}
           >Cancel</button
         >
-        <button type="submit" disabled={busy || !dateSelectionAccepted}>Add to basket</button>
+        <button type="submit" disabled={busy || !dateSelectionAccepted || !bookingDraft.person_id}
+          >Add to basket</button
+        >
       </div>
     </form>
   </div>

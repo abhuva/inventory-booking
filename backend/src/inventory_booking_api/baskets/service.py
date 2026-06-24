@@ -13,6 +13,7 @@ from inventory_booking_api.baskets.schemas import BasketCreate, BasketLineCreate
 from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.bookings.schemas import BookingCreate, BookingLineCreate
 from inventory_booking_api.bookings.service import create_booking, preview_availability
+from inventory_booking_api.persons.models import Person
 from inventory_booking_api.settings import get_settings
 from inventory_booking_api.users.models import User
 
@@ -60,10 +61,12 @@ async def create_or_update_active_basket(
 ) -> Basket:
     """Create a basket or update the user's current active basket shell."""
 
+    await validate_basket_person(session, payload.person_id)
     basket = await get_active_basket(session, actor)
     if basket is None:
         basket = Basket(
             user_id=actor.id,
+            person_id=payload.person_id,
             title=payload.title,
             starts_at=payload.starts_at,
             ends_at=payload.ends_at,
@@ -73,6 +76,7 @@ async def create_or_update_active_basket(
         )
         session.add(basket)
     else:
+        basket.person_id = payload.person_id
         basket.title = payload.title
         basket.starts_at = payload.starts_at
         basket.ends_at = payload.ends_at
@@ -94,6 +98,9 @@ async def update_basket(
 
     ensure_basket_owner(basket, actor)
     ensure_active_basket(basket)
+    if payload.person_id is not None:
+        await validate_basket_person(session, payload.person_id)
+        basket.person_id = payload.person_id
     if payload.title is not None:
         basket.title = payload.title
     if payload.starts_at is not None:
@@ -194,6 +201,11 @@ async def confirm_basket(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Basket must contain at least one item before confirmation.",
         )
+    if basket.person_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Choose a person before confirming the basket.",
+        )
 
     booking_payload = basket_to_booking_payload(basket, lines)
     booking, booking_lines = await create_booking(
@@ -218,6 +230,19 @@ async def confirm_basket(
     for line in booking_lines:
         await session.refresh(line)
     return basket, booking, booking_lines
+
+
+async def validate_basket_person(session: AsyncSession, person_id: UUID | None) -> None:
+    """Reject a basket person reference that does not exist."""
+
+    if person_id is None:
+        return
+    person = await session.get(Person, person_id)
+    if person is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Person does not exist.",
+        )
 
 
 async def validate_basket_lines(session: AsyncSession, basket: Basket) -> None:
@@ -282,6 +307,7 @@ def basket_to_booking_payload(basket: Basket, lines: list[BasketLine]) -> Bookin
 
     return BookingCreate(
         title=basket.title,
+        person_id=basket.person_id,
         starts_at=basket.starts_at,
         ends_at=basket.ends_at,
         notes=basket.notes,

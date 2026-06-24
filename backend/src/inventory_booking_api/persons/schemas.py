@@ -7,7 +7,7 @@ from inventory_booking_api.persons.enums import PersonType
 
 class PersonCreate(BaseModel):
     display_name: str = Field(min_length=1, max_length=160)
-    person_type: PersonType = PersonType.UNKNOWN
+    person_type: PersonType = PersonType.USER
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=80)
     notes: str | None = None

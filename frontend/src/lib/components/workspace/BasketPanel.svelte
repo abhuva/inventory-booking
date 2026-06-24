@@ -15,6 +15,7 @@
     cancelBasket,
     assetName,
     locationName,
+    personName,
     formatDateTime
   }: {
     basket: Basket | null;
@@ -28,6 +29,7 @@
     cancelBasket: () => Promise<boolean>;
     assetName: (id: string) => string;
     locationName: (id: string | null) => string;
+    personName: (id: string | null) => string;
     formatDateTime: (value: string) => string;
   } = $props();
 
@@ -113,6 +115,10 @@
         </div>
 
         <label>Basket name <input bind:value={basketTitle} required /></label>
+        <div class="readonly-field">
+          <span>Person</span>
+          <strong>{personName(basket.person_id)}</strong>
+        </div>
         <div class="split-fields">
           <label>
             Start

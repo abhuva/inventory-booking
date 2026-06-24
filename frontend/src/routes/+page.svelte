@@ -21,6 +21,7 @@
     type Booking,
     type BookingCreate,
     type BookingLineCreate,
+    type BookingUpdate,
     type Category,
     type CategoryCreate,
     type CategoryUpdate,
@@ -49,6 +50,7 @@
     type UserRole,
     type UserUpdate
   } from '$lib/api';
+  import AccountPanel from '$lib/components/workspace/AccountPanel.svelte';
   import AdminPanel from '$lib/components/workspace/AdminPanel.svelte';
   import BasketPanel from '$lib/components/workspace/BasketPanel.svelte';
   import BookingListPanel from '$lib/components/workspace/BookingListPanel.svelte';
@@ -75,11 +77,12 @@
   const workspaceTabs: WorkspaceTabDefinition[] = [
     { id: 'dashboard', label: 'Dashboard', description: 'Counts and workspace overview' },
     { id: 'inventory', label: 'Inventory', description: 'Assets, state, and history' },
-    { id: 'basket', label: 'Basket', description: 'Temporary held items' },
     { id: 'locations', label: 'Locations', description: 'Spaces, stock, and movement' },
     { id: 'persons', label: 'Persons', description: 'Contacts, team, and borrowers' },
-    { id: 'stock', label: 'Stock', description: 'Stock availability heatmap' },
     { id: 'bookings', label: 'Bookings', description: 'Reservation list and details' },
+    { id: 'stock', label: 'Stock', description: 'Stock availability heatmap' },
+    { id: 'basket', label: 'Basket', description: 'Temporary held items' },
+    { id: 'account', label: 'Account', description: 'Login and profile settings' },
     { id: 'admin', label: 'Admin', description: 'Users and categories' }
   ];
 
@@ -89,6 +92,7 @@
 
   type BookingDraft = {
     title: string;
+    person_id: string;
     starts_at: string;
     ends_at: string;
     notes: string;
@@ -122,7 +126,12 @@
   let message = $state('');
   let error = $state('');
   let activeTab = $state<WorkspaceTab>('dashboard');
-  let showAccountPanel = $state(false);
+  let stockAvailabilityVersion = $state(0);
+  let accountForm = $state({
+    email: '',
+    display_name: '',
+    password: ''
+  });
 
   let categoryForm = $state<CategoryCreate>({ name: '', description: '' });
   let categoryUpdateForm = $state<CategoryUpdate & { category_id: string }>({
@@ -162,7 +171,7 @@
   });
   let personForm = $state<PersonCreate>({
     display_name: '',
-    person_type: 'unknown',
+    person_type: 'user',
     email: null,
     phone: '',
     notes: '',
@@ -171,7 +180,7 @@
   });
   let personEditForm = $state<PersonUpdate>({
     display_name: '',
-    person_type: 'unknown',
+    person_type: 'user',
     email: null,
     phone: '',
     notes: '',
@@ -196,6 +205,7 @@
   });
   let bookingDraft = $state<BookingDraft>({
     title: '',
+    person_id: '',
     starts_at: '',
     ends_at: '',
     notes: '',
@@ -271,9 +281,11 @@
   async function loadCurrentUser() {
     try {
       currentUser = await apiGet<User>('/auth/me');
+      resetAccountForm();
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         currentUser = null;
+        resetAccountForm();
         return;
       }
       throw caught;
@@ -326,11 +338,13 @@
     bookings = await Promise.all(
       bookingSummaries.map((booking) => apiGet<Booking>(`/bookings/${booking.id}`))
     );
+    stockAvailabilityVersion += 1;
   }
 
   async function login() {
     await runAction(async () => {
       currentUser = await apiPost<User>('/auth/login', { email, password });
+      resetAccountForm();
       await loadInventory();
       message = `Logged in as ${currentUser.email}`;
     });
@@ -355,8 +369,25 @@
       resetAssetEditForm();
       selectedLocationId = '';
       resetLocationEditForm('');
-      activeTab = 'dashboard';
+      activeTab = 'account';
+      resetAccountForm();
       message = 'Logged out';
+    });
+  }
+
+  async function saveAccount() {
+    await runAction(async () => {
+      const payload: UserUpdate = {
+        email: accountForm.email,
+        display_name: accountForm.display_name
+      };
+      if (accountForm.password) {
+        payload.password = accountForm.password;
+      }
+      currentUser = await apiPatch<User>('/auth/me', payload);
+      resetAccountForm();
+      await loadInventory();
+      message = 'Account updated';
     });
   }
 
@@ -416,7 +447,7 @@
       await apiPost<Person>('/persons', emptyStringsToNull(personForm));
       personForm = {
         display_name: '',
-        person_type: 'unknown',
+        person_type: 'user',
         email: null,
         phone: '',
         notes: '',
@@ -437,6 +468,19 @@
       await loadInventory();
       resetPersonEditForm(selectedPersonId);
       message = 'Person updated';
+    });
+  }
+
+  async function deleteSelectedPerson(): Promise<boolean> {
+    return await runAction(async () => {
+      if (!selectedPersonId) {
+        throw new Error('Choose a person first.');
+      }
+      await apiDelete<void>(`/persons/${selectedPersonId}`);
+      selectedPersonId = '';
+      resetPersonEditForm('');
+      await loadInventory();
+      message = 'Person deleted';
     });
   }
 
@@ -461,6 +505,19 @@
       await loadInventory();
       resetLocationEditForm(selectedLocationId);
       message = 'Location updated';
+    });
+  }
+
+  async function deleteSelectedLocation(): Promise<boolean> {
+    return await runAction(async () => {
+      if (!selectedLocationId) {
+        throw new Error('Choose a location first.');
+      }
+      await apiDelete<void>(`/locations/${selectedLocationId}`);
+      selectedLocationId = '';
+      resetLocationEditForm('');
+      await loadInventory();
+      message = 'Location deleted';
     });
   }
 
@@ -519,6 +576,20 @@
       await loadInventory();
       await selectAssetDetail(selectedAssetId);
       message = 'Asset updated';
+    });
+  }
+
+  async function deleteSelectedAsset(): Promise<boolean> {
+    return await runAction(async () => {
+      if (!selectedAssetId) {
+        throw new Error('Choose an asset first.');
+      }
+      await apiDelete<void>(`/assets/${selectedAssetId}`);
+      selectedAssetId = '';
+      selectedAssetEvents = [];
+      resetAssetEditForm();
+      await loadInventory();
+      message = 'Asset deleted';
     });
   }
 
@@ -619,6 +690,22 @@
     });
   }
 
+  async function updateBooking(bookingId: string, payload: BookingUpdate): Promise<boolean> {
+    return await runAction(async () => {
+      await apiPatch<Booking>(`/bookings/${bookingId}`, emptyStringsToNull(payload));
+      await loadInventory();
+      message = 'Booking updated';
+    });
+  }
+
+  async function deleteBooking(bookingId: string): Promise<boolean> {
+    return await runAction(async () => {
+      await apiDelete<void>(`/bookings/${bookingId}`);
+      await loadInventory();
+      message = 'Booking deleted';
+    });
+  }
+
   async function addBookingFormToBasket(): Promise<boolean> {
     return await runAction(async () => {
       const asset = assets.find((entry) => entry.id === bookingForm.asset_id);
@@ -647,6 +734,7 @@
         `/basket/${activeBasket.id}`,
         emptyStringsToNull<BasketUpdate>({
           title: basketTitle,
+          person_id: activeBasket.person_id,
           notes: basketNotes,
           starts_at: activeBasket.starts_at,
           ends_at: activeBasket.ends_at
@@ -704,6 +792,7 @@
   async function ensureBasketFromBookingForm(): Promise<Basket> {
     const payload: BasketCreate = {
       title: bookingDraft.title || bookingForm.title || 'New basket',
+      person_id: bookingDraft.person_id,
       starts_at: new Date(bookingDraft.starts_at || bookingForm.starts_at).toISOString(),
       ends_at: new Date(bookingDraft.ends_at || bookingForm.ends_at).toISOString(),
       notes: bookingDraft.notes || null
@@ -762,6 +851,7 @@
   function resetBookingDraft(): void {
     bookingDraft = {
       title: '',
+      person_id: '',
       starts_at: '',
       ends_at: '',
       notes: '',
@@ -1040,6 +1130,7 @@
     }
     return {
       title: bookingDraft.title,
+      person_id: bookingDraft.person_id,
       starts_at: new Date(bookingDraft.starts_at).toISOString(),
       ends_at: new Date(bookingDraft.ends_at).toISOString(),
       notes: bookingDraft.notes || null,
@@ -1051,9 +1142,6 @@
     return workspaceTabs.filter((tab) => {
       if (tab.id === 'admin') {
         return currentUser?.role === 'admin';
-      }
-      if (tab.id === 'basket') {
-        return Boolean(activeBasket?.lines.length);
       }
       return true;
     });
@@ -1069,10 +1157,6 @@
 
   function locationName(id: string | null): string {
     return locations.find((location) => location.id === id)?.name ?? 'No location';
-  }
-
-  function stockAssetName(id: string): string {
-    return assets.find((asset) => asset.id === id)?.name ?? 'Unknown stock';
   }
 
   function stockLocationName(id: string | null): string {
@@ -1116,6 +1200,12 @@
 
   function selectedBookingDraftAsset(): Asset | undefined {
     return assets.find((asset) => asset.id === bookingDraftLineForm.asset_id);
+  }
+
+  function personName(id: string | null): string {
+    return id === null
+      ? 'No person'
+      : (persons.find((person) => person.id === id)?.display_name ?? 'Unknown person');
   }
 
   function selectedAsset(): Asset | undefined {
@@ -1193,7 +1283,7 @@
     const person = persons.find((entry) => entry.id === personId);
     personEditForm = {
       display_name: person?.display_name ?? '',
-      person_type: person?.person_type ?? 'unknown',
+      person_type: person?.person_type ?? 'user',
       email: person?.email ?? null,
       phone: person?.phone ?? '',
       notes: person?.notes ?? '',
@@ -1239,6 +1329,14 @@
     return persons.find((person) => person.id === id)?.display_name ?? 'Unknown person';
   }
 
+  function resetAccountForm(): void {
+    accountForm = {
+      email: currentUser?.email ?? '',
+      display_name: currentUser?.display_name ?? '',
+      password: ''
+    };
+  }
+
   function formatDateTime(value: string): string {
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: 'medium',
@@ -1259,22 +1357,21 @@
   <section class="masthead">
     <h1>NICA e.V. Inventar</h1>
     <div class="header-actions">
-      {#if activeBasket?.lines.length}
-        <button
-          type="button"
-          class="basket-button"
-          aria-label="Open basket"
-          onclick={() => (activeTab = 'basket')}
-        >
-          <span class="basket-icon" aria-hidden="true"></span>
-          <strong>{activeBasket.lines.length}</strong>
-        </button>
-      {/if}
+      <button
+        type="button"
+        class="basket-button"
+        aria-label="Open basket"
+        onclick={() => (activeTab = 'basket')}
+      >
+        <span class="basket-icon" aria-hidden="true"></span>
+        <strong>{activeBasket?.lines.length ?? 0}</strong>
+      </button>
       <button
         type="button"
         class="account-button"
+        class:logged-out-account={!currentUser}
         aria-label={currentUser ? 'Account' : 'Login'}
-        onclick={() => (showAccountPanel = true)}
+        onclick={() => (activeTab = 'account')}
       >
         <span class="account-avatar" aria-hidden="true">
           {currentUser ? currentUser.display_name.slice(0, 1).toUpperCase() : ''}
@@ -1282,55 +1379,6 @@
       </button>
     </div>
   </section>
-
-  {#if showAccountPanel}
-    <div class="modal-backdrop" role="presentation">
-      <div class="panel session-card account-modal">
-        <div class="detail-header">
-          <div>
-            <p class="eyebrow">{currentUser ? 'Account' : 'Login'}</p>
-            <h2>{currentUser ? currentUser.display_name : 'Sign in'}</h2>
-          </div>
-          <button type="button" class="secondary compact" onclick={() => (showAccountPanel = false)}
-            >Close</button
-          >
-        </div>
-        {#if currentUser}
-          <p class="session-label">Signed in</p>
-          <strong>{currentUser.display_name}</strong>
-          <span>{currentUser.email} · {currentUser.role}</span>
-          <button
-            type="button"
-            class="secondary"
-            onclick={() => {
-              void logout();
-              showAccountPanel = false;
-            }}
-            disabled={busy}
-          >
-            Logout
-          </button>
-        {:else}
-          <form
-            onsubmit={(event) => {
-              event.preventDefault();
-              void login();
-            }}
-          >
-            <label>
-              Email
-              <input bind:value={email} type="email" autocomplete="username" />
-            </label>
-            <label>
-              Password
-              <input bind:value={password} type="password" autocomplete="current-password" />
-            </label>
-            <button type="submit" disabled={busy}>Login</button>
-          </form>
-        {/if}
-      </div>
-    </div>
-  {/if}
 
   <section class="workspace-frame">
     {#if loading}
@@ -1352,7 +1400,38 @@
           />
         {/if}
 
-        {#if currentUser && activeTab !== 'dashboard'}
+        {#if activeTab === 'account'}
+          <AccountPanel
+            {currentUser}
+            {busy}
+            bind:email
+            bind:password
+            bind:accountForm
+            login={() => void login()}
+            logout={() => void logout()}
+            saveAccount={() => void saveAccount()}
+          />
+        {/if}
+
+        {#if activeTab === 'basket'}
+          <BasketPanel
+            basket={activeBasket}
+            {assets}
+            {busy}
+            bind:basketTitle
+            bind:basketNotes
+            {updateBasket}
+            {removeBasketLine}
+            {confirmBasket}
+            {cancelBasket}
+            {assetName}
+            {locationName}
+            {personName}
+            {formatDateTime}
+          />
+        {/if}
+
+        {#if currentUser && activeTab !== 'dashboard' && activeTab !== 'account' && activeTab !== 'basket'}
           {#if activeTab === 'admin' && currentUser.role === 'admin'}
             <AdminPanel
               {categories}
@@ -1381,6 +1460,7 @@
               createLocation={() => void createLocation()}
               {selectLocationDetail}
               updateSelectedLocation={() => void updateSelectedLocation()}
+              {deleteSelectedLocation}
               closeLocationDetail={() => {
                 selectedLocationId = '';
                 resetLocationEditForm('');
@@ -1390,17 +1470,17 @@
               {trackedAssetsAtLocation}
               {totalStockAtLocation}
               {responsibleLabel}
-              {stockAssetName}
               {locationImageUrl}
               uploadSelectedLocationImage={(file) => void uploadSelectedLocationImage(file)}
               deleteSelectedLocationImage={() => void deleteSelectedLocationImage()}
-              selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
             />
           {/if}
 
           {#if activeTab === 'persons'}
             <PersonsPanel
               {persons}
+              {bookings}
+              {locations}
               {users}
               {selectedPersonId}
               {busy}
@@ -1408,6 +1488,7 @@
               bind:personEditForm
               createPerson={() => void createPerson()}
               updateSelectedPerson={() => void updateSelectedPerson()}
+              {deleteSelectedPerson}
               {selectPersonDetail}
               closePersonDetail={() => {
                 selectedPersonId = '';
@@ -1421,8 +1502,10 @@
           {#if activeTab === 'stock'}
             <BookingsPanel
               {assets}
+              {persons}
               {locations}
               {bookings}
+              {stockAvailabilityVersion}
               {availability}
               {busy}
               bind:bookingDraft
@@ -1443,32 +1526,19 @@
               {bookings}
               {checkouts}
               {assets}
+              {persons}
               {users}
               {busy}
               {assetName}
               {locationName}
+              {personName}
               {userLabel}
               {formatDateTime}
+              {updateBooking}
+              {deleteBooking}
               {createCheckoutForBooking}
               {loadCheckoutDetails}
               {createReturnForCheckout}
-            />
-          {/if}
-
-          {#if activeTab === 'basket'}
-            <BasketPanel
-              basket={activeBasket}
-              {assets}
-              {busy}
-              bind:basketTitle
-              bind:basketNotes
-              {updateBasket}
-              {removeBasketLine}
-              {confirmBasket}
-              {cancelBasket}
-              {assetName}
-              {locationName}
-              {formatDateTime}
             />
           {/if}
 
@@ -1477,9 +1547,13 @@
               {assets}
               {categories}
               {locations}
+              {persons}
               {users}
               {currentUser}
               {stockLevels}
+              {bookings}
+              {checkouts}
+              {returns}
               {filteredAssets}
               {selectedAssetEvents}
               {selectedAssetId}
@@ -1492,6 +1566,7 @@
               bind:bookingDraft
               createAsset={() => void createAsset()}
               updateSelectedAsset={() => void updateSelectedAsset()}
+              {deleteSelectedAsset}
               {moveSelectedTrackedAsset}
               {moveSelectedStock}
               {addSelectedStock}

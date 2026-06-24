@@ -123,6 +123,30 @@ def test_login_me_and_logout(client: TestClient) -> None:
     assert client.get("/auth/me").status_code == 401
 
 
+def test_current_user_can_update_account(client: TestClient) -> None:
+    csrf_headers = login(client)
+
+    update_response = client.patch(
+        "/auth/me",
+        json={
+            "email": "renamed-admin@example.org",
+            "display_name": "Renamed Admin",
+            "password": "new correct horse password",
+        },
+        headers=csrf_headers,
+    )
+    logout_response = client.post("/auth/logout", headers=csrf_headers)
+    login_headers = login(client, "renamed-admin@example.org", "new correct horse password")
+    me_response = client.get("/auth/me", headers=login_headers)
+
+    assert update_response.status_code == 200
+    assert update_response.json()["email"] == "renamed-admin@example.org"
+    assert update_response.json()["display_name"] == "Renamed Admin"
+    assert update_response.json()["role"] == "admin"
+    assert logout_response.status_code == 204
+    assert me_response.json()["display_name"] == "Renamed Admin"
+
+
 def test_invalid_login_is_rejected(client: TestClient) -> None:
     response = client.post("/auth/login", json={"email": ADMIN_EMAIL, "password": "wrong"})
 
@@ -233,7 +257,7 @@ def test_create_and_update_person(client: TestClient) -> None:
     created = create_response.json()
     update_response = client.patch(
         f"/persons/{created['id']}",
-        json={"display_name": "External Trainer Updated", "person_type": "organization"},
+        json={"display_name": "External Trainer Updated", "person_type": "team"},
         headers=headers,
     )
     list_response = client.get("/persons", headers=headers)
@@ -242,7 +266,7 @@ def test_create_and_update_person(client: TestClient) -> None:
     assert created["email"] == "trainer@example.org"
     assert update_response.status_code == 200
     assert update_response.json()["display_name"] == "External Trainer Updated"
-    assert update_response.json()["person_type"] == "organization"
+    assert update_response.json()["person_type"] == "team"
     assert list_response.status_code == 200
     assert list_response.json()[0]["id"] == created["id"]
 
@@ -269,6 +293,88 @@ def test_location_can_reference_responsible_person(client: TestClient) -> None:
     assert location_response.json()["responsible_person_id"] == person["id"]
 
 
+def test_delete_person_clears_booking_and_location_references(client: TestClient) -> None:
+    headers = login(client)
+    person = client.post(
+        "/persons",
+        json={"display_name": "Delete Person", "person_type": "external"},
+        headers=headers,
+    ).json()
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Delete Person Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    location = client.post(
+        "/locations",
+        json={
+            "name": "Delete Person Storage",
+            "type": "storage",
+            "responsible_person_id": person["id"],
+        },
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Delete Person Booking",
+            "person_id": person["id"],
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    ).json()
+
+    delete_response = client.delete(f"/persons/{person['id']}", headers=headers)
+    booking_response = client.get(f"/bookings/{booking['id']}", headers=headers)
+    location_response = client.get(f"/locations/{location['id']}", headers=headers)
+
+    assert delete_response.status_code == 204
+    assert booking_response.json()["person_id"] is None
+    assert location_response.json()["responsible_person_id"] is None
+    assert client.get(f"/persons/{person['id']}", headers=headers).status_code == 404
+
+
+def test_delete_location_clears_inventory_references(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Delete Location Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    tracked_asset = client.post(
+        "/assets",
+        json={
+            "name": "Delete Location Rig",
+            "asset_type": "tracked",
+            "home_location_id": location["id"],
+            "current_location_id": location["id"],
+        },
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Delete Location Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={"asset_id": stock_asset["id"], "location_id": location["id"], "quantity_total": 6},
+        headers=headers,
+    )
+
+    delete_response = client.delete(f"/locations/{location['id']}", headers=headers)
+    asset_response = client.get(f"/assets/{tracked_asset['id']}", headers=headers)
+    stock_levels_response = client.get("/stock-levels", headers=headers)
+
+    assert delete_response.status_code == 204
+    assert asset_response.json()["home_location_id"] is None
+    assert asset_response.json()["current_location_id"] is None
+    assert all(level["location_id"] != location["id"] for level in stock_levels_response.json())
+    assert client.get(f"/locations/{location['id']}", headers=headers).status_code == 404
+
+
 def test_asset_mode_validation(client: TestClient) -> None:
     headers = login(client)
 
@@ -286,6 +392,45 @@ def test_asset_mode_validation(client: TestClient) -> None:
     assert tracked_response.status_code == 200
     assert tracked_response.json()["unit_name"] is None
     assert invalid_stock_response.status_code == 422
+
+
+def test_delete_unused_asset_removes_definition(client: TestClient) -> None:
+    headers = login(client)
+    asset = client.post(
+        "/assets",
+        json={"name": "Delete Unused Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+
+    delete_response = client.delete(f"/assets/{asset['id']}", headers=headers)
+
+    assert delete_response.status_code == 204
+    assert client.get(f"/assets/{asset['id']}", headers=headers).status_code == 404
+
+
+def test_delete_asset_with_booking_history_is_rejected(client: TestClient) -> None:
+    headers = login(client)
+    asset = client.post(
+        "/assets",
+        json={"name": "Delete Protected Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/bookings",
+        json={
+            "title": "Delete Protected Booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": asset["id"]}],
+        },
+        headers=headers,
+    )
+
+    delete_response = client.delete(f"/assets/{asset['id']}", headers=headers)
+
+    assert delete_response.status_code == 409
+    assert "historical references" in delete_response.json()["detail"]["message"]
+    assert client.get(f"/assets/{asset['id']}", headers=headers).status_code == 200
 
 
 def test_asset_description_is_separate_from_notes(client: TestClient) -> None:
@@ -595,6 +740,147 @@ def test_booking_rejects_invalid_time_range(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_booking_exposes_created_at_and_requester(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Created At Booking Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+
+    create_response = client.post(
+        "/bookings",
+        json={
+            "title": "Created timestamp booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    )
+    created = create_response.json()
+    list_response = client.get("/bookings", headers=headers)
+    detail_response = client.get(f"/bookings/{created['id']}", headers=headers)
+
+    assert create_response.status_code == 200
+    assert created["requested_by_user_id"]
+    assert created["created_at"]
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["created_at"] == created["created_at"]
+    assert detail_response.status_code == 200
+    assert detail_response.json()["created_at"] == created["created_at"]
+
+
+def test_delete_booking_removes_booking_and_lines(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Delete Booking Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Delete Booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    ).json()
+
+    delete_response = client.delete(f"/bookings/{booking['id']}", headers=headers)
+    list_response = client.get("/bookings", headers=headers)
+
+    assert delete_response.status_code == 204
+    assert client.get(f"/bookings/{booking['id']}", headers=headers).status_code == 404
+    assert all(entry["id"] != booking["id"] for entry in list_response.json())
+
+
+def test_booking_update_changes_status_person_and_dates(client: TestClient) -> None:
+    headers = login(client)
+    person = client.post(
+        "/persons",
+        json={"display_name": "Updated Booking Person", "person_type": "external"},
+        headers=headers,
+    ).json()
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Updated Booking Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Editable booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    ).json()
+    next_start = BOOKING_END + timedelta(days=2)
+    next_end = next_start + timedelta(days=1)
+
+    response = client.patch(
+        f"/bookings/{booking['id']}",
+        json={
+            "status": "completed",
+            "person_id": person["id"],
+            "starts_at": next_start.isoformat(),
+            "ends_at": next_end.isoformat(),
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["person_id"] == person["id"]
+    assert response.json()["starts_at"].startswith(next_start.isoformat().replace("+00:00", ""))
+
+
+def test_booking_update_rejects_new_tracked_conflict(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Update Conflict Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    first = client.post(
+        "/bookings",
+        json={
+            "title": "First update booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    ).json()
+    second_start = BOOKING_END + timedelta(days=2)
+    second_end = second_start + timedelta(days=1)
+    second = client.post(
+        "/bookings",
+        json={
+            "title": "Second update booking",
+            "starts_at": second_start.isoformat(),
+            "ends_at": second_end.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    ).json()
+
+    response = client.patch(
+        f"/bookings/{first['id']}",
+        json={"starts_at": second_start.isoformat(), "ends_at": second_end.isoformat()},
+        headers=headers,
+    )
+    unchanged_response = client.get(f"/bookings/{first['id']}", headers=headers)
+
+    assert second["id"] != first["id"]
+    assert response.status_code == 409
+    assert unchanged_response.json()["starts_at"] == first["starts_at"]
 
 
 def test_booking_mutations_require_session(client: TestClient) -> None:
@@ -1508,6 +1794,11 @@ def test_qr_endpoints_require_session_and_do_not_enumerate(client: TestClient) -
 
 def test_basket_hold_blocks_other_user_booking(client: TestClient) -> None:
     admin_headers = login(client)
+    person = client.post(
+        "/persons",
+        json={"display_name": "Held Basket Person", "person_type": "external"},
+        headers=admin_headers,
+    ).json()
     tracked_asset = client.post(
         "/assets",
         json={"name": "Held Aerial Stand", "asset_type": "tracked"},
@@ -1517,6 +1808,7 @@ def test_basket_hold_blocks_other_user_booking(client: TestClient) -> None:
         "/basket",
         json={
             "title": "Held workshop basket",
+            "person_id": person["id"],
             "starts_at": BOOKING_START.isoformat(),
             "ends_at": BOOKING_END.isoformat(),
         },
@@ -1549,6 +1841,11 @@ def test_basket_hold_blocks_other_user_booking(client: TestClient) -> None:
 
 def test_confirm_basket_creates_booking_and_clears_active_basket(client: TestClient) -> None:
     headers = login(client)
+    person = client.post(
+        "/persons",
+        json={"display_name": "Confirmed Basket Person", "person_type": "external"},
+        headers=headers,
+    ).json()
     tracked_asset = client.post(
         "/assets",
         json={"name": "Confirm Basket Rig", "asset_type": "tracked"},
@@ -1558,6 +1855,7 @@ def test_confirm_basket_creates_booking_and_clears_active_basket(client: TestCli
         "/basket",
         json={
             "title": "Confirmed basket booking",
+            "person_id": person["id"],
             "starts_at": BOOKING_START.isoformat(),
             "ends_at": BOOKING_END.isoformat(),
             "notes": "Bundle for project week",
@@ -1576,6 +1874,7 @@ def test_confirm_basket_creates_booking_and_clears_active_basket(client: TestCli
     assert confirm_response.status_code == 200
     confirmed = confirm_response.json()
     assert confirmed["title"] == "Confirmed basket booking"
+    assert confirmed["person_id"] == person["id"]
     assert confirmed["lines"][0]["asset_id"] == tracked_asset["id"]
     assert active_response.status_code == 200
     assert active_response.json() is None
@@ -1583,6 +1882,11 @@ def test_confirm_basket_creates_booking_and_clears_active_basket(client: TestCli
 
 def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: TestClient) -> None:
     headers = login(client)
+    person = client.post(
+        "/persons",
+        json={"display_name": "Heatmap Basket Person", "person_type": "external"},
+        headers=headers,
+    ).json()
     location = client.post(
         "/locations",
         json={"name": "Heatmap Storage", "type": "storage"},
@@ -1596,6 +1900,24 @@ def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: Te
     held_stock_asset = client.post(
         "/assets",
         json={"name": "Heatmap Clubs", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    booked_tracked_asset = client.post(
+        "/assets",
+        json={
+            "name": "Heatmap Aerial Stand",
+            "asset_type": "tracked",
+            "current_location_id": location["id"],
+        },
+        headers=headers,
+    ).json()
+    available_tracked_asset = client.post(
+        "/assets",
+        json={
+            "name": "Heatmap Unicycle",
+            "asset_type": "tracked",
+            "current_location_id": location["id"],
+        },
         headers=headers,
     ).json()
     client.post(
@@ -1627,7 +1949,8 @@ def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: Te
                     "asset_id": booked_stock_asset["id"],
                     "location_id": location["id"],
                     "quantity": 3,
-                }
+                },
+                {"asset_id": booked_tracked_asset["id"]},
             ],
         },
         headers=headers,
@@ -1636,6 +1959,7 @@ def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: Te
         "/basket",
         json={
             "title": "Heatmap basket",
+            "person_id": person["id"],
             "starts_at": BOOKING_START.isoformat(),
             "ends_at": BOOKING_END.isoformat(),
         },
@@ -1662,6 +1986,10 @@ def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: Te
     items = {item["asset_id"]: item for item in response.json()["items"]}
     booked_cell = items[booked_stock_asset["id"]]["cells"][0]
     held_cell = items[held_stock_asset["id"]]["cells"][0]
+    booked_tracked_cell = items[booked_tracked_asset["id"]]["cells"][0]
+    available_tracked_cell = items[available_tracked_asset["id"]]["cells"][0]
+    assert items[booked_stock_asset["id"]]["asset_type"] == "stock"
+    assert items[booked_tracked_asset["id"]]["asset_type"] == "tracked"
     assert booked_cell["total_quantity"] == 10
     assert booked_cell["reserved_quantity"] == 3
     assert booked_cell["held_quantity"] == 0
@@ -1670,6 +1998,38 @@ def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: Te
     assert held_cell["reserved_quantity"] == 0
     assert held_cell["held_quantity"] == 2
     assert held_cell["available_quantity"] == 6
+    assert booked_tracked_cell["total_quantity"] == 1
+    assert booked_tracked_cell["reserved_quantity"] == 1
+    assert booked_tracked_cell["held_quantity"] == 0
+    assert booked_tracked_cell["available_quantity"] == 0
+    assert available_tracked_cell["total_quantity"] == 1
+    assert available_tracked_cell["reserved_quantity"] == 0
+    assert available_tracked_cell["held_quantity"] == 0
+    assert available_tracked_cell["available_quantity"] == 1
+
+    multi_day_response = client.get(
+        "/bookings/availability/heatmap",
+        params={
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "bucket": "day",
+            "location_id": location["id"],
+        },
+        headers=headers,
+    )
+
+    assert multi_day_response.status_code == 200
+    multi_day_items = {item["asset_id"]: item for item in multi_day_response.json()["items"]}
+    assert [
+        cell["reserved_quantity"] for cell in multi_day_items[booked_stock_asset["id"]]["cells"]
+    ] == [3, 3, 3]
+    assert [
+        cell["held_quantity"] for cell in multi_day_items[held_stock_asset["id"]]["cells"]
+    ] == [2, 2, 2]
+    assert [
+        cell["available_quantity"]
+        for cell in multi_day_items[booked_tracked_asset["id"]]["cells"]
+    ] == [0, 0, 0]
 
 
 def test_availability_days_reports_stock_conflicts(client: TestClient) -> None:

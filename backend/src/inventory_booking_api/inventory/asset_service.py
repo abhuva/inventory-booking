@@ -1,11 +1,15 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.audit.enums import AuditAction, ItemEventType
+from inventory_booking_api.audit.models import ItemEvent
 from inventory_booking_api.audit.service import write_audit_log, write_item_event
+from inventory_booking_api.baskets.models import BasketLine
+from inventory_booking_api.bookings.models import BookingLine
+from inventory_booking_api.checkouts.models import CheckoutLine
 from inventory_booking_api.inventory.asset_schemas import (
     AssetCreate,
     AssetStateChange,
@@ -18,7 +22,9 @@ from inventory_booking_api.inventory.asset_schemas import (
     TrackedAssetTransfer,
 )
 from inventory_booking_api.inventory.enums import AssetCondition, AssetStatus, AssetType
-from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
+from inventory_booking_api.inventory.models import Asset, AssetImage, StockBatch, TrackedUnit
+from inventory_booking_api.qr.models import QrCode
+from inventory_booking_api.returns.models import ReturnLine
 from inventory_booking_api.users.models import User
 
 DEFINITION_FIELDS = {"name", "asset_type", "category_id", "unit_name", "description"}
@@ -127,6 +133,66 @@ async def update_asset(
     await session.refresh(asset)
     await apply_primary_unit_state(session, asset)
     return asset
+
+
+async def delete_asset(session: AsyncSession, asset: Asset, actor: User) -> None:
+    counts = await asset_reference_counts(session, asset.id)
+    blocking = {
+        key: value
+        for key, value in counts.items()
+        if key in ("booking_lines", "checkout_lines", "return_lines") and value > 0
+    }
+    if blocking:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Asset has historical references and cannot be deleted.",
+                "references": counts,
+            },
+        )
+    await session.execute(delete(BasketLine).where(BasketLine.asset_id == asset.id))
+    await session.execute(update(QrCode).where(QrCode.asset_id == asset.id).values(asset_id=None))
+    await session.execute(delete(AssetImage).where(AssetImage.asset_id == asset.id))
+    await session.execute(delete(StockBatch).where(StockBatch.asset_id == asset.id))
+    await session.execute(delete(TrackedUnit).where(TrackedUnit.asset_id == asset.id))
+    await session.execute(delete(ItemEvent).where(ItemEvent.asset_id == asset.id))
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.DELETE,
+        entity_type="asset_definition",
+        entity_id=asset.id,
+        summary=f"Deleted asset definition {asset.name}",
+        details=counts,
+    )
+    await session.delete(asset)
+    await session.commit()
+
+
+async def asset_reference_counts(session: AsyncSession, asset_id: UUID) -> dict[str, int]:
+    return {
+        "booking_lines": await count_where(
+            session, select(func.count(BookingLine.id)).where(BookingLine.asset_id == asset_id)
+        ),
+        "basket_lines": await count_where(
+            session, select(func.count(BasketLine.id)).where(BasketLine.asset_id == asset_id)
+        ),
+        "checkout_lines": await count_where(
+            session, select(func.count(CheckoutLine.id)).where(CheckoutLine.asset_id == asset_id)
+        ),
+        "return_lines": await count_where(
+            session, select(func.count(ReturnLine.id)).where(ReturnLine.asset_id == asset_id)
+        ),
+        "item_events": await count_where(
+            session, select(func.count(ItemEvent.id)).where(ItemEvent.asset_id == asset_id)
+        ),
+        "stock_batches": await count_where(
+            session, select(func.count(StockBatch.id)).where(StockBatch.asset_id == asset_id)
+        ),
+        "tracked_units": await count_where(
+            session, select(func.count(TrackedUnit.id)).where(TrackedUnit.asset_id == asset_id)
+        ),
+    }
 
 
 async def list_stock_levels(session: AsyncSession) -> list[StockLevelRead]:
@@ -703,3 +769,7 @@ def asset_state_event_type(status_value: AssetStatus) -> ItemEventType:
     if status_value == AssetStatus.RETIRED:
         return ItemEventType.RETIRED
     return ItemEventType.FOUND
+
+
+async def count_where(session: AsyncSession, statement) -> int:
+    return int((await session.execute(statement)).scalar_one())

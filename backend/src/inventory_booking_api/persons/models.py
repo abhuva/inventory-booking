@@ -8,7 +8,7 @@ from inventory_booking_api.persons.enums import PersonType
 
 
 class Person(IdMixin, TimestampMixin, Base):
-    """Real-world person or organization used in operational inventory workflows."""
+    """Real-world person used in operational inventory workflows."""
 
     __tablename__ = "persons"
 
@@ -20,7 +20,7 @@ class Person(IdMixin, TimestampMixin, Base):
             values_callable=lambda enum: [item.value for item in enum],
         ),
         nullable=False,
-        default=PersonType.UNKNOWN,
+        default=PersonType.USER,
     )
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(80), nullable=True)

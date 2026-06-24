@@ -6,6 +6,7 @@ export type WorkspaceTab =
   | 'persons'
   | 'stock'
   | 'bookings'
+  | 'account'
   | 'admin';
 
 export type WorkspaceTabDefinition = {

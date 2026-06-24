@@ -1,4 +1,4 @@
-﻿# Architecture
+# Architecture
 
 ## System Overview
 
@@ -60,10 +60,13 @@ The primary UI is desktop-first because planning, admin, booking, and inventory 
 PostgreSQL is the source of truth for operational data:
 
 - users and roles
+- persons and external/team contacts
 - locations
 - categories
-- assets with `tracked` and `stock` modes
-- stock levels per location
+- asset definitions with `tracked` and `stock` modes
+- tracked units for exact physical items
+- stock batches for quantity groups by location, holder, and state
+- active baskets for temporary holds
 - QR codes
 - asset image metadata
 - bookings and booking lines
@@ -80,21 +83,23 @@ processed derivatives only, not original camera files.
 ## Initial Domain Boundaries
 
 - `users`: small local team, initially `admin` and `user` roles only.
+- `persons`: people or groups tied to bookings and responsibility; types are `admin`, `user`, `team`, and `external`.
 - `locations`: rooms, storage, vehicles, project sites, external spaces, person homes, repair, unknown.
-- `inventory`: categories, assets, tracked asset state, stock levels.
+- `inventory`: categories, asset definitions, tracked units, stock batches, and derived stock-level compatibility views.
 - `qr`: opaque QR labels mapped to assets or workflow actions.
-- `bookings`: future reservations for exact tracked assets or stock quantities.
+- `bookings`: future reservations for exact tracked assets or stock quantities, with temporary basket holds.
 - `movements`: checkout, return, transfer, and stock movements.
 - `audit`: append-only event and security-relevant mutation history.
 
 ## Tracked Assets
 
-Tracked assets represent exact physical objects.
+Tracked assets represent exact physical objects. The shared description lives on the asset definition; current physical state lives on `tracked_units`.
 
 Important fields:
 
 ```text
 id
+asset_id
 name
 category_id
 status
@@ -112,7 +117,7 @@ Tracked assets can have QR labels and event history.
 
 ## Stock Assets
 
-Stock assets represent quantities of a thing.
+Stock assets represent quantities of a thing. The shared description lives on the asset definition; physical quantities live in `stock_batches`.
 
 Important fields:
 
@@ -124,14 +129,15 @@ unit_name
 notes
 ```
 
-Quantities live in `stock_levels` per location:
+Quantities are exposed through compatible `stock_levels` API shapes, but internally live in stock batches:
 
 ```text
 asset_id
 location_id
-quantity_total
-quantity_reserved
-quantity_checked_out
+quantity
+status
+holder_user_id
+checkout_line_id
 ```
 
 Available stock is computed from total quantity, reservations, checkouts, and unavailable states.
@@ -143,6 +149,8 @@ Bookings contain lines. A line can reserve either:
 - one exact tracked asset
 - a quantity of a stock asset
 
+Bookings can also be created from an active basket. Basket lines temporarily hold tracked items or stock quantities for a user/person/date range until the basket is confirmed or cancelled.
+
 Availability differs by mode:
 
 ```text
@@ -152,6 +160,8 @@ tracked asset:
 stock asset:
   unavailable if requested quantity exceeds available stock for the requested time range and location scope
 ```
+
+The stock tab heatmap uses the same concepts for planning visibility. Stock rows show proportional availability by quantity. Tracked rows show binary availability: available or unavailable.
 
 Time range conflict rule:
 

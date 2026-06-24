@@ -34,6 +34,7 @@ from inventory_booking_api.inventory.asset_service import (
     complete_asset_maintenance,
     create_asset,
     create_stock_level,
+    delete_asset,
     get_asset,
     get_stock_level,
     list_assets,
@@ -178,6 +179,19 @@ async def update_asset_endpoint(
     if asset is None:
         raise_not_found("Asset")
     return await update_asset(session, asset, payload, current_user)
+
+
+@asset_router.delete("/{asset_id}", status_code=204)
+async def delete_asset_endpoint(
+    asset_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    asset = await get_asset(session, asset_id)
+    if asset is None:
+        raise_not_found("Asset")
+    await delete_asset(session, asset, current_user)
+    return Response(status_code=204)
 
 
 @asset_router.post("/{asset_id}/transfer", response_model=AssetRead)

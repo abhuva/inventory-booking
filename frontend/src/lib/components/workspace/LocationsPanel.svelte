@@ -23,17 +23,16 @@
     createLocation,
     selectLocationDetail,
     updateSelectedLocation,
+    deleteSelectedLocation,
     closeLocationDetail,
     selectedLocation,
     stockLevelsAtLocation,
     trackedAssetsAtLocation,
     totalStockAtLocation,
     responsibleLabel,
-    stockAssetName,
     locationImageUrl,
     uploadSelectedLocationImage,
-    deleteSelectedLocationImage,
-    selectAssetDetail
+    deleteSelectedLocationImage
   }: {
     locationTypes: string[];
     persons: Person[];
@@ -45,17 +44,16 @@
     createLocation: () => void;
     selectLocationDetail: (locationId: string) => void;
     updateSelectedLocation: () => void;
+    deleteSelectedLocation: () => Promise<boolean>;
     closeLocationDetail: () => void;
     selectedLocation: () => Location | undefined;
     stockLevelsAtLocation: (locationId: string) => StockLevel[];
     trackedAssetsAtLocation: (locationId: string) => Asset[];
     totalStockAtLocation: (locationId: string) => number;
     responsibleLabel: (id: string | null) => string;
-    stockAssetName: (id: string) => string;
     locationImageUrl: (locationId: string) => string | null;
     uploadSelectedLocationImage: (file: File) => void;
     deleteSelectedLocationImage: () => void;
-    selectAssetDetail: (assetId: string) => void;
   } = $props();
 
   function submitNewLocation() {
@@ -75,6 +73,28 @@
     }
     uploadSelectedLocationImage(file);
     input.value = '';
+  }
+
+  async function confirmDeleteLocation(): Promise<void> {
+    const location = selectedLocation();
+    if (!location) {
+      return;
+    }
+    const tracked = trackedAssetsAtLocation(location.id).length;
+    const stock = stockLevelsAtLocation(location.id).length;
+    const confirmed = window.confirm(
+      [
+        `Delete location "${location.name}"?`,
+        '',
+        `${tracked} tracked item references and ${stock} stock location references will be cleared.`,
+        'Bookings, baskets, checkouts, returns, and history references to this location will be set to no location.',
+        '',
+        'This cannot be undone.'
+      ].join('\n')
+    );
+    if (confirmed) {
+      await deleteSelectedLocation();
+    }
   }
 </script>
 
@@ -138,9 +158,19 @@
           <p class="eyebrow">Location detail</p>
           <h2>{selectedLocation()?.name}</h2>
         </div>
-        <button type="button" class="secondary micro-button" onclick={closeLocationDetail}
-          >Close</button
-        >
+        <div class="button-row compact-button-row">
+          <button
+            type="button"
+            class="danger micro-button"
+            disabled={busy}
+            onclick={() => void confirmDeleteLocation()}
+          >
+            Delete
+          </button>
+          <button type="button" class="secondary micro-button" onclick={closeLocationDetail}>
+            Close
+          </button>
+        </div>
       </div>
 
       <div class="detail-tab-bar" aria-label="Location detail sections">
@@ -297,47 +327,6 @@
             </label>
             <button type="submit" class="compact" disabled={busy}>Update extra</button>
           </form>
-
-          <div class="split-detail location-detail-lists">
-            <article class="mini-list">
-              <h3>Stock here</h3>
-              {#each stockLevelsAtLocation(selectedLocationId) as level}
-                <div class="row-card">
-                  <strong>{stockAssetName(level.asset_id)}</strong>
-                  <span>
-                    {level.quantity_total} total / {level.quantity_checked_out} checked out
-                  </span>
-                </div>
-              {:else}
-                <p class="empty">No stock is stored here.</p>
-              {/each}
-            </article>
-
-            <article class="mini-list">
-              <h3>Tracked items here</h3>
-              {#each trackedAssetsAtLocation(selectedLocationId) as asset}
-                <div class="row-card">
-                  <strong>{asset.name}</strong>
-                  <span
-                    >{asset.status.replaceAll('_', ' ')} / {asset.condition.replaceAll(
-                      '_',
-                      ' '
-                    )}</span
-                  >
-                  <button
-                    type="button"
-                    class="secondary compact"
-                    onclick={() => selectAssetDetail(asset.id)}
-                    disabled={busy}
-                  >
-                    View asset
-                  </button>
-                </div>
-              {:else}
-                <p class="empty">No tracked items are currently here.</p>
-              {/each}
-            </article>
-          </div>
         </div>
       {/if}
     {:else}

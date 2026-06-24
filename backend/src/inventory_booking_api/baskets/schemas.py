@@ -17,6 +17,7 @@ class BasketLineCreate(BaseModel):
 
 class BasketCreate(BaseModel):
     title: str = Field(default="New basket", min_length=1, max_length=180)
+    person_id: UUID | None = None
     starts_at: datetime
     ends_at: datetime
     notes: str | None = None
@@ -32,6 +33,7 @@ class BasketCreate(BaseModel):
 
 class BasketUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=180)
+    person_id: UUID | None = None
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     notes: str | None = None
@@ -53,6 +55,7 @@ class BasketLineRead(BaseModel):
 class BasketRead(BaseModel):
     id: UUID
     user_id: UUID
+    person_id: UUID | None
     title: str
     status: BasketStatus
     starts_at: datetime

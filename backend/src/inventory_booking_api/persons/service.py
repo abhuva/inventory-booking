@@ -1,11 +1,14 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.audit.enums import AuditAction
 from inventory_booking_api.audit.service import write_audit_log
+from inventory_booking_api.baskets.models import Basket
+from inventory_booking_api.bookings.models import Booking
+from inventory_booking_api.locations.models import Location
 from inventory_booking_api.persons.models import Person
 from inventory_booking_api.persons.schemas import PersonCreate, PersonUpdate
 from inventory_booking_api.users.models import User
@@ -62,6 +65,47 @@ async def update_person(
     return person
 
 
+async def delete_person(session: AsyncSession, person: Person, actor: User) -> None:
+    summary = await person_reference_counts(session, person.id)
+    await session.execute(
+        update(Location)
+        .where(Location.responsible_person_id == person.id)
+        .values(responsible_person_id=None)
+    )
+    await session.execute(
+        update(Booking).where(Booking.person_id == person.id).values(person_id=None)
+    )
+    await session.execute(
+        update(Basket).where(Basket.person_id == person.id).values(person_id=None)
+    )
+    await write_audit_log(
+        session,
+        actor=actor,
+        action=AuditAction.DELETE,
+        entity_type="person",
+        entity_id=person.id,
+        summary=f"Deleted person {person.display_name}",
+        details=summary,
+    )
+    await session.delete(person)
+    await session.commit()
+
+
+async def person_reference_counts(session: AsyncSession, person_id: UUID) -> dict[str, int]:
+    return {
+        "bookings": await count_where(
+            session, select(func.count(Booking.id)).where(Booking.person_id == person_id)
+        ),
+        "baskets": await count_where(
+            session, select(func.count(Basket.id)).where(Basket.person_id == person_id)
+        ),
+        "locations": await count_where(
+            session,
+            select(func.count(Location.id)).where(Location.responsible_person_id == person_id),
+        ),
+    }
+
+
 async def validate_user_link(
     session: AsyncSession,
     user_id: UUID | None,
@@ -88,3 +132,7 @@ def normalized_payload(values: dict) -> dict:
         if key in values and values[key] == "":
             values[key] = None
     return values
+
+
+async def count_where(session: AsyncSession, statement) -> int:
+    return int((await session.execute(statement)).scalar_one())

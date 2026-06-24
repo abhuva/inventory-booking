@@ -8,7 +8,8 @@ from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.security import get_current_user, verify_password
 from inventory_booking_api.settings import get_settings
 from inventory_booking_api.users.models import User
-from inventory_booking_api.users.schemas import LoginRequest, UserRead
+from inventory_booking_api.users.schemas import CurrentUserUpdate, LoginRequest, UserRead
+from inventory_booking_api.users.service import update_current_user
 from inventory_booking_api.users.session_service import (
     create_user_session,
     get_user_by_email,
@@ -83,3 +84,14 @@ async def me(current_user: Annotated[User, Depends(get_current_user)]) -> UserRe
     """Return the authenticated user."""
 
     return current_user
+
+
+@router.patch("/me", response_model=UserRead)
+async def update_me(
+    payload: CurrentUserUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> UserRead:
+    """Update the authenticated user's editable account fields."""
+
+    return await update_current_user(session, current_user, payload)

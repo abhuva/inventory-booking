@@ -104,6 +104,11 @@ h3 {
   padding: 0;
 }
 
+.account-button.logged-out-account {
+  color: #8f6a00;
+  background: #f6d35b;
+}
+
 .account-avatar {
   position: relative;
   display: grid;
@@ -264,6 +269,10 @@ button.secondary {
   background: #5f6647;
 }
 
+button.danger {
+  background: #8a271f;
+}
+
 .notice {
   margin: 0.5rem 0;
   border-radius: 8px;
@@ -301,6 +310,17 @@ button.secondary {
   overflow: hidden;
 }
 
+.account-workspace {
+  display: grid;
+  grid-template-columns: minmax(20rem, 32rem);
+  align-content: start;
+  min-height: 0;
+}
+
+.account-panel {
+  padding: 0.85rem;
+}
+
 .error {
   color: #6d1f1a;
   background: #f9d7cf;
@@ -319,6 +339,7 @@ button.secondary {
 }
 
 .tab-bar button {
+  position: relative;
   display: grid;
   width: auto;
   min-width: max-content;
@@ -332,10 +353,27 @@ button.secondary {
   text-align: center;
 }
 
-.tab-bar button:hover,
-.active-tab {
+.tab-bar button:hover {
   border-color: #68765d;
   background: #e4ebd7;
+}
+
+.tab-bar button.active-tab {
+  border-color: #254c37;
+  color: #102018;
+  background: #d9e8c7;
+  box-shadow:
+    inset 0 -3px 0 #d48a22,
+    0 1px 0 rgba(37, 76, 55, 0.18);
+}
+
+.tab-bar button.active-tab::before {
+  content: '';
+  position: absolute;
+  inset: 0.35rem auto 0.35rem 0.32rem;
+  width: 0.18rem;
+  border-radius: 999px;
+  background: #d48a22;
 }
 
 .tab-bar span {
@@ -653,6 +691,10 @@ button.secondary {
   width: auto;
 }
 
+.micro-button.danger {
+  width: auto;
+}
+
 .inventory-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(24rem, 1fr);
@@ -738,10 +780,11 @@ button.secondary {
 
 .inventory-actions {
   display: grid;
-  grid-template-columns: minmax(12rem, 1fr) minmax(10rem, 14rem) auto auto;
+  grid-template-columns: minmax(8rem, 0.75fr) minmax(9rem, 12rem) auto auto;
   gap: 0.35rem;
   align-items: center;
-  min-width: min(100%, 44rem);
+  min-width: 0;
+  width: min(100%, 36rem);
 }
 
 .asset-table-wrap {
@@ -774,6 +817,25 @@ button.secondary {
   font-size: 0.72rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.sortable-header-button {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.sortable-header-button:hover,
+.sortable-header-button:focus-visible {
+  color: #1f6f9a;
+  outline: none;
 }
 
 .asset-table tbody tr {
@@ -899,6 +961,27 @@ button.secondary {
   min-width: 0;
 }
 
+.booking-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 0.75rem;
+}
+
+.booking-field-grid .compact-field-row {
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  margin: 0;
+}
+
+.booking-field-grid input[readonly] {
+  color: #33443a;
+  background: #fffef8;
+}
+
+.booking-field-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
 .history-panel {
   display: grid;
   gap: 0.65rem;
@@ -1002,9 +1085,10 @@ button.secondary {
 }
 
 .booking-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(12rem, 18rem) minmax(0, auto);
   gap: 0.55rem;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 0.35rem;
 }
@@ -1024,10 +1108,106 @@ button.secondary {
   display: grid;
   grid-template-columns:
     minmax(6.5rem, 0.8fr) minmax(8rem, 0.9fr) minmax(9rem, 1.1fr) minmax(9rem, 1.1fr)
-    auto auto;
+    auto auto auto;
   gap: 0.35rem;
   align-items: center;
   min-width: min(100%, 58rem);
+}
+
+.heatmap-scale-control {
+  display: grid;
+  grid-template-columns: auto minmax(7rem, 1fr) auto;
+  gap: 0.4rem;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid #d4d9d1;
+  border-radius: 8px;
+  padding: 0.3rem 0.45rem;
+  background: #f7f6ee;
+}
+
+.heatmap-scale-control span {
+  color: #526358;
+  font-size: 0.68rem;
+  font-weight: 850;
+}
+
+.heatmap-scale-slider {
+  position: relative;
+  height: 1.3rem;
+}
+
+.heatmap-scale-track,
+.heatmap-scale-window {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 0.45rem;
+  border-radius: 999px;
+  transform: translateY(-50%);
+}
+
+.heatmap-scale-track {
+  background: linear-gradient(90deg, #a63d2f, #e6c75e, #5d8a4f);
+}
+
+.heatmap-scale-window {
+  left: var(--range-start);
+  right: calc(100% - var(--range-end));
+  border: 1px solid rgba(20, 33, 28, 0.35);
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.heatmap-scale-slider input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 1.3rem;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: none;
+  appearance: none;
+}
+
+.heatmap-scale-slider input::-webkit-slider-runnable-track {
+  height: 0.45rem;
+  background: transparent;
+}
+
+.heatmap-scale-slider input::-webkit-slider-thumb {
+  width: 0.7rem;
+  height: 1rem;
+  margin-top: -0.28rem;
+  border: 2px solid #14211c;
+  border-radius: 999px;
+  background: #fffef8;
+  pointer-events: auto;
+  appearance: none;
+}
+
+.heatmap-scale-slider input::-moz-range-track {
+  height: 0.45rem;
+  background: transparent;
+}
+
+.heatmap-scale-slider input::-moz-range-thumb {
+  width: 0.7rem;
+  height: 1rem;
+  border: 2px solid #14211c;
+  border-radius: 999px;
+  background: #fffef8;
+  pointer-events: auto;
+}
+
+.booking-list-filters {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 1fr) auto;
+  gap: 0.35rem;
+  align-items: center;
+  min-width: min(100%, 34rem);
 }
 
 .inline-check {
@@ -1042,10 +1222,64 @@ button.secondary {
 }
 
 .heatmap-shell {
+  position: relative;
   min-width: 0;
   min-height: 0;
   height: 100%;
   overflow: hidden;
+}
+
+.heatmap-chart {
+  width: 100%;
+  height: 100%;
+}
+
+.heatmap-loading-panel,
+.heatmap-error-panel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  display: grid;
+  gap: 0.45rem;
+  width: min(22rem, calc(100% - 2rem));
+  border: 1px solid rgba(37, 76, 55, 0.2);
+  border-radius: 12px;
+  padding: 0.8rem;
+  background: rgba(251, 250, 244, 0.96);
+  box-shadow: 0 12px 34px rgba(20, 33, 28, 0.18);
+  transform: translate(-50%, -50%);
+}
+
+.heatmap-loading-panel span,
+.heatmap-error-panel span {
+  color: #526358;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.heatmap-loading-panel strong {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.heatmap-progress-track {
+  height: 0.55rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dde4d4;
+}
+
+.heatmap-progress-track div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5d8a4f, #e6c75e);
+  transition: width 0.22s ease;
+}
+
+.heatmap-error-panel {
+  border-color: #efb7ab;
+  background: #fff5f2;
 }
 
 .booking-builder {
@@ -1056,6 +1290,30 @@ button.secondary {
 
 .stock-batch-list h3 {
   margin-top: 0.2rem;
+}
+
+.mini-list-heading {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.icon-toggle {
+  width: 1.9rem;
+  min-width: 1.9rem;
+  padding: 0;
+  font-weight: 900;
+}
+
+.compact-booked-item {
+  grid-template-columns: 1fr;
+}
+
+.compact-booked-item span {
+  color: #1d2520;
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 .stock-batch-card {
@@ -1093,9 +1351,11 @@ button.secondary {
 .availability-picker {
   display: grid;
   gap: 0.65rem;
+  min-height: 0;
   border: 1px solid #cbd4c4;
   border-radius: 9px;
   padding: 0.75rem;
+  overflow: auto;
   background: #f7f6ee;
 }
 
@@ -1150,7 +1410,7 @@ button.secondary {
   display: grid;
   align-content: center;
   gap: 0.12rem;
-  min-height: 3.15rem;
+  min-height: clamp(2.25rem, 6vh, 3.15rem);
   border: 1px solid #cbd4c4;
   border-radius: 7px;
   padding: 0.25rem;
@@ -1279,7 +1539,9 @@ button.secondary {
   display: grid;
   gap: 0.65rem;
   width: min(36rem, 100%);
+  max-height: calc(100dvh - 2rem);
   padding: 0.9rem;
+  overflow: auto;
 }
 
 @media (max-width: 960px) {
@@ -1297,7 +1559,12 @@ button.secondary {
   }
 
   .inventory-actions,
-  .booking-actions {
+  .booking-actions,
+  .booking-list-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-toolbar {
     grid-template-columns: 1fr;
   }
 
@@ -1312,7 +1579,28 @@ button.secondary {
 
 @media (max-width: 560px) {
   .dashboard-summary-grid,
-  .split-fields {
+  .split-fields,
+  .booking-field-grid {
     grid-template-columns: 1fr;
+  }
+
+  .availability-picker {
+    gap: 0.45rem;
+    padding: 0.55rem;
+  }
+
+  .availability-picker-header,
+  .availability-picker-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .availability-month-controls {
+    justify-content: space-between;
+  }
+
+  .availability-day {
+    min-height: 2.1rem;
+    padding: 0.15rem;
   }
 }

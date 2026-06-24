@@ -128,6 +128,7 @@ def build_basket_read(basket: Basket, lines: list[BasketLine]) -> BasketRead:
     return BasketRead(
         id=basket.id,
         user_id=basket.user_id,
+        person_id=basket.person_id,
         title=basket.title,
         status=basket.status,
         starts_at=basket.starts_at,

@@ -108,16 +108,18 @@ npm.cmd --prefix .\frontend run lint
 
 ## Current Status
 
-This repo has a working Docker-backed local stack. Backend health endpoints are `GET /health` and `GET /health/database`. PostgreSQL migrations create users, sessions, locations, categories, tracked/stock assets, stock levels, item events, and audit logs.
+This repo has a working Docker-backed local stack. Backend health endpoints are `GET /health` and `GET /health/database`. PostgreSQL migrations create users, sessions, persons, locations, categories, tracked/stock asset definitions, tracked units, stock batches, baskets, bookings, checkouts, returns, item events, and audit logs.
 
 The frontend is currently a desktop-first tabbed workspace:
 
 - `Dashboard`: high-level counts.
-- `Inventory`: assets, asset search, asset detail/history, and asset state changes.
+- `Inventory`: assets, asset search, asset detail/history, basket entry, deletion, and asset state changes.
 - `Locations`: spaces, stock by location, and movement workflows.
-- `Stock`: stock availability heatmap.
-- `Bookings`: reservation list, booking details, check-out, and check-in workflows.
-- `Field / QR`: QR label creation, assignment, and lookup.
+- `Persons`: team, user, and external contact records used for bookings and location responsibility.
+- `Bookings`: filtered/sortable reservation list, editable booking details, check-out, and check-in workflows.
+- `Stock`: availability heatmap for stock assets and tracked unique items, with cached range controls.
+- `Basket`: temporary held items before confirming a booking.
+- `Account`: login, logout, and editable current account name/email/password.
 - `Admin`: users and categories.
 
 For initial server hosting discussion, see `docs/server-deployment-notes.md`.
@@ -140,6 +142,7 @@ Current endpoints:
 - `POST /auth/login`
 - `POST /auth/logout`
 - `GET /auth/me`
+- `PATCH /auth/me`
 - `GET /users`
 - `POST /users`
 - `GET /users/{user_id}`
@@ -154,12 +157,26 @@ Current endpoints:
 - `POST /locations`
 - `GET /locations/{location_id}`
 - `PATCH /locations/{location_id}`
+- `DELETE /locations/{location_id}`
+- `GET /locations/images`
+- `GET /locations/{location_id}/image`
+- `GET /locations/{location_id}/image/content`
+- `POST /locations/{location_id}/image`
+- `DELETE /locations/{location_id}/image`
+- `GET /persons`
+- `POST /persons`
+- `GET /persons/{person_id}`
+- `PATCH /persons/{person_id}`
+- `DELETE /persons/{person_id}`
 - `GET /assets`
 - `POST /assets`
 - `GET /assets/{asset_id}`
 - `PATCH /assets/{asset_id}`
+- `DELETE /assets/{asset_id}`
 - `GET /assets/images`
 - `GET /assets/{asset_id}/image`
+- `GET /assets/{asset_id}/qr`
+- `POST /assets/{asset_id}/qr`
 - `GET /assets/{asset_id}/image/content`
 - `POST /assets/{asset_id}/image`
 - `DELETE /assets/{asset_id}/image`
@@ -175,8 +192,19 @@ Current endpoints:
 - `GET /bookings`
 - `POST /bookings`
 - `POST /bookings/availability`
+- `GET /bookings/availability/heatmap`
+- `GET /bookings/availability/days`
 - `GET /bookings/{booking_id}`
+- `PATCH /bookings/{booking_id}`
+- `DELETE /bookings/{booking_id}`
 - `POST /bookings/{booking_id}/cancel`
+- `GET /basket/active`
+- `POST /basket`
+- `PATCH /basket/{basket_id}`
+- `POST /basket/{basket_id}/lines`
+- `DELETE /basket/{basket_id}/lines/{line_id}`
+- `POST /basket/{basket_id}/confirm`
+- `POST /basket/{basket_id}/cancel`
 - `GET /checkouts`
 - `POST /checkouts`
 - `GET /checkouts/{checkout_id}`

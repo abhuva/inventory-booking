@@ -17,6 +17,7 @@ class Booking(IdMixin, TimestampMixin, Base):
     )
 
     requested_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    person_id: Mapped[UUID | None] = mapped_column(ForeignKey("persons.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(180), nullable=False)
     status: Mapped[BookingStatus] = mapped_column(
         Enum(

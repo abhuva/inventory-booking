@@ -1,7 +1,7 @@
 ﻿import { PUBLIC_API_BASE_URL } from '$env/static/public';
 
 export type UserRole = 'admin' | 'user';
-export type PersonType = 'team' | 'external' | 'organization' | 'unknown';
+export type PersonType = 'admin' | 'user' | 'team' | 'external';
 export type AssetType = 'tracked' | 'stock';
 export type AssetStatus =
   | 'available'
@@ -161,10 +161,12 @@ export type BookingLine = {
 export type Booking = {
   id: string;
   requested_by_user_id: string;
+  person_id: string | null;
   title: string;
   status: BookingStatus;
   starts_at: string;
   ends_at: string;
+  created_at: string;
   notes: string | null;
   lines?: BookingLine[];
 };
@@ -181,6 +183,7 @@ export type BasketLine = {
 export type Basket = {
   id: string;
   user_id: string;
+  person_id: string | null;
   title: string;
   status: BasketStatus;
   starts_at: string;
@@ -237,6 +240,7 @@ export type HeatmapCell = {
 export type HeatmapItem = {
   asset_id: string;
   name: string;
+  asset_type: AssetType;
   unit_name: string | null;
   total_quantity: number;
   cells: HeatmapCell[];
@@ -391,14 +395,23 @@ export type BookingLineCreate = {
 
 export type BookingCreate = {
   title: string;
+  person_id?: string | null;
   starts_at: string;
   ends_at: string;
   notes?: string | null;
   lines: BookingLineCreate[];
 };
 
+export type BookingUpdate = {
+  status?: BookingStatus | null;
+  person_id?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+};
+
 export type BasketCreate = {
   title: string;
+  person_id?: string | null;
   starts_at: string;
   ends_at: string;
   notes?: string | null;
@@ -406,6 +419,7 @@ export type BasketCreate = {
 
 export type BasketUpdate = {
   title?: string | null;
+  person_id?: string | null;
   starts_at?: string | null;
   ends_at?: string | null;
   notes?: string | null;
@@ -481,8 +495,8 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  return request<T>(path, { method: 'GET' });
+export async function apiGet<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return request<T>(path, { ...init, method: 'GET' });
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {

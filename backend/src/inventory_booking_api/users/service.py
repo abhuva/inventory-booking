@@ -8,7 +8,7 @@ from inventory_booking_api.audit.enums import AuditAction
 from inventory_booking_api.audit.service import write_audit_log
 from inventory_booking_api.core.security import hash_password
 from inventory_booking_api.users.models import User
-from inventory_booking_api.users.schemas import UserCreate, UserUpdate
+from inventory_booking_api.users.schemas import CurrentUserUpdate, UserCreate, UserUpdate
 
 
 async def list_users(session: AsyncSession) -> list[User]:
@@ -74,6 +74,37 @@ async def update_user(session: AsyncSession, user: User, payload: UserUpdate, ac
         entity_type="user",
         entity_id=user.id,
         summary=f"Updated user {user.email}",
+    )
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def update_current_user(
+    session: AsyncSession, user: User, payload: CurrentUserUpdate
+) -> User:
+    updates = payload.model_dump(exclude_unset=True)
+    if "email" in updates and updates["email"] is not None:
+        email = str(updates["email"]).lower()
+        existing = await _get_user_by_email(session, email)
+        if existing is not None and existing.id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Email already exists."
+            )
+        user.email = email
+
+    if "display_name" in updates:
+        user.display_name = updates["display_name"]
+    if "password" in updates and updates["password"] is not None:
+        user.password_hash = hash_password(updates["password"])
+
+    await write_audit_log(
+        session,
+        actor=user,
+        action=AuditAction.UPDATE,
+        entity_type="user",
+        entity_id=user.id,
+        summary=f"Updated own account {user.email}",
     )
     await session.commit()
     await session.refresh(user)

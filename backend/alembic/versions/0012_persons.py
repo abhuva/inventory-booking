@@ -21,10 +21,10 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     person_type = postgresql.ENUM(
+        "admin",
+        "user",
         "team",
         "external",
-        "organization",
-        "unknown",
         name="person_type",
         create_type=False,
     )
@@ -59,7 +59,9 @@ def upgrade() -> None:
 
     bind = op.get_bind()
     now = datetime.now(UTC)
-    users = bind.execute(sa.text("SELECT id, email, display_name, is_active FROM users")).mappings()
+    users = bind.execute(
+        sa.text("SELECT id, email, display_name, role, is_active FROM users")
+    ).mappings()
     user_person_ids: dict[str, str] = {}
     for user in users:
         person_id = uuid4()
@@ -72,7 +74,7 @@ def upgrade() -> None:
                 ) VALUES (
                     :id,
                     :display_name,
-                    'team',
+                    :person_type,
                     :email,
                     :user_id,
                     :is_active,
@@ -84,6 +86,7 @@ def upgrade() -> None:
             {
                 "id": person_id,
                 "display_name": user["display_name"],
+                "person_type": user["role"],
                 "email": user["email"],
                 "user_id": user["id"],
                 "is_active": user["is_active"],

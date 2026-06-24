@@ -1,10 +1,20 @@
 <script lang="ts">
-  import type { Person, PersonCreate, PersonType, PersonUpdate, User } from '$lib/api';
+  import type {
+    Booking,
+    Location,
+    Person,
+    PersonCreate,
+    PersonType,
+    PersonUpdate,
+    User
+  } from '$lib/api';
 
   let showAddPerson = $state(false);
 
   let {
     persons,
+    bookings,
+    locations,
     users,
     selectedPersonId,
     busy,
@@ -12,12 +22,15 @@
     personEditForm = $bindable(),
     createPerson,
     updateSelectedPerson,
+    deleteSelectedPerson,
     selectPersonDetail,
     closePersonDetail,
     selectedPerson,
     userLabel
   }: {
     persons: Person[];
+    bookings: Booking[];
+    locations: Location[];
     users: User[];
     selectedPersonId: string;
     busy: boolean;
@@ -25,13 +38,14 @@
     personEditForm: PersonUpdate;
     createPerson: () => void;
     updateSelectedPerson: () => void;
+    deleteSelectedPerson: () => Promise<boolean>;
     selectPersonDetail: (personId: string) => void;
     closePersonDetail: () => void;
     selectedPerson: () => Person | undefined;
     userLabel: (id: string | null) => string;
   } = $props();
 
-  const personTypes: PersonType[] = ['team', 'external', 'organization', 'unknown'];
+  const personTypes: PersonType[] = ['admin', 'user', 'team', 'external'];
 
   function submitNewPerson(): void {
     createPerson();
@@ -39,7 +53,31 @@
   }
 
   function personTypeLabel(type: PersonType | null | undefined): string {
-    return type ? type.replaceAll('_', ' ') : 'unknown';
+    return type ? type.replaceAll('_', ' ') : 'user';
+  }
+
+  async function confirmDeletePerson(): Promise<void> {
+    const person = selectedPerson();
+    if (!person) {
+      return;
+    }
+    const bookingCount = bookings.filter((booking) => booking.person_id === person.id).length;
+    const locationCount = locations.filter(
+      (location) => location.responsible_person_id === person.id
+    ).length;
+    const confirmed = window.confirm(
+      [
+        `Delete person "${person.display_name}"?`,
+        '',
+        `${bookingCount} bookings and ${locationCount} responsible-location references will be cleared.`,
+        'Existing bookings will keep their other data but will no longer point to this person.',
+        '',
+        'This cannot be undone.'
+      ].join('\n')
+    );
+    if (confirmed) {
+      await deleteSelectedPerson();
+    }
   }
 </script>
 
@@ -99,9 +137,19 @@
           <p class="eyebrow">Person detail</p>
           <h2>{selectedPerson()?.display_name}</h2>
         </div>
-        <button type="button" class="secondary micro-button" onclick={closePersonDetail}
-          >Close</button
-        >
+        <div class="button-row compact-button-row">
+          <button
+            type="button"
+            class="danger micro-button"
+            disabled={busy}
+            onclick={() => void confirmDeletePerson()}
+          >
+            Delete
+          </button>
+          <button type="button" class="secondary micro-button" onclick={closePersonDetail}>
+            Close
+          </button>
+        </div>
       </div>
 
       <form
@@ -138,9 +186,7 @@
           </select>
         </label>
         <label class="description-field" aria-label="Person notes">
-          <textarea
-            bind:value={personEditForm.notes}
-            placeholder="Notes about this person or organization"
+          <textarea bind:value={personEditForm.notes} placeholder="Notes about this person"
           ></textarea>
         </label>
         <label class="checkbox-label">

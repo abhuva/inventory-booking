@@ -23,6 +23,7 @@ from inventory_booking_api.locations.schemas import (
 )
 from inventory_booking_api.locations.service import (
     create_location,
+    delete_location,
     get_location,
     list_locations,
     update_location,
@@ -131,3 +132,16 @@ async def update_location_endpoint(
     if location is None:
         raise_not_found("Location")
     return await update_location(session, location, payload, current_user)
+
+
+@router.delete("/{location_id}", status_code=204)
+async def delete_location_endpoint(
+    location_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> Response:
+    location = await get_location(session, location_id)
+    if location is None:
+        raise_not_found("Location")
+    await delete_location(session, location, current_user)
+    return Response(status_code=204)

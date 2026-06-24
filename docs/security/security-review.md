@@ -72,3 +72,40 @@ Controls in place:
 Residual risk:
 
 - Concurrent booking creation is still enforced at service level, not by a database exclusion constraint or serializable transaction. This is acceptable for the local MVP but should be revisited before any larger multi-user deployment or external network exposure.
+
+## Workspace Mutation Review (2026-06-24)
+
+Reviewed endpoints:
+
+- `PATCH /auth/me`
+- `PATCH /bookings/{booking_id}`
+- `DELETE /bookings/{booking_id}`
+- `GET /bookings/availability/heatmap`
+- `GET /bookings/availability/days`
+- `GET /basket/active`
+- `POST /basket`
+- `PATCH /basket/{basket_id}`
+- `POST /basket/{basket_id}/lines`
+- `DELETE /basket/{basket_id}/lines/{line_id}`
+- `POST /basket/{basket_id}/confirm`
+- `POST /basket/{basket_id}/cancel`
+- `DELETE /assets/{asset_id}`
+- `DELETE /locations/{location_id}`
+- `DELETE /persons/{person_id}`
+
+Controls in place:
+
+- Session authentication is required for current-account updates, baskets, booking edits, heatmap reads, and delete operations.
+- CSRF middleware covers browser-triggered mutations.
+- `PATCH /auth/me` only accepts email, display name, and password; role and active-state changes remain admin-only through `/users`.
+- Booking date edits reuse backend availability validation instead of trusting the UI.
+- Basket confirmation reuses booking creation validation and writes the resulting booking server-side.
+- Location and person deletion repair nullable references before deleting.
+- Asset deletion refuses to break booking, checkout, or return history.
+- Delete operations and self-account updates write audit records.
+- Regression tests cover current-account update, booking edit/delete, basket holds, heatmap availability, and destructive delete behavior.
+
+Residual risk:
+
+- Delete operations are intentionally broad admin/user mutations for the current trusted internal workflow. If stricter permissions are needed, add per-action authorization rules before external deployment.
+- Asset deletion removes item events only when there are no booking/checkout/return references. This preserves operational history for used assets, but audit retention policy should be revisited before production.
