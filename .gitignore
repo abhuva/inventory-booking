@@ -11,6 +11,9 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Server-local deployment file copied from docker-compose.prod.example.yml
+inventory-compose.yml
+
 # Python
 __pycache__/
 *.py[cod]

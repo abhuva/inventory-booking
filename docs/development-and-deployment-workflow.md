@@ -92,6 +92,38 @@ Recommended permissions:
 chmod 600 /opt/docker/inventory/.env
 ```
 
+The server-local Compose file is:
+
+```text
+/opt/docker/inventory/inventory-compose.yml
+```
+
+It is copied from `docker-compose.prod.example.yml` and intentionally not
+tracked in Git. This allows the server to keep small local deployment details
+without committing secrets or server-only configuration.
+
+## Convert Prototype Copy To Git Checkout
+
+The first prototype deployment was copied from a local working directory. To
+turn that directory into a Git-backed checkout while keeping the server `.env`:
+
+```bash
+cd /opt/docker/inventory
+git init
+git remote add origin https://github.com/abhuva/inventory-booking.git
+git fetch origin main
+git checkout -B main origin/main
+cp docker-compose.prod.example.yml inventory-compose.yml
+chmod 600 .env
+```
+
+After conversion, confirm the checkout and ignored server files:
+
+```bash
+git status --short --branch
+git check-ignore -v .env inventory-compose.yml
+```
+
 ## Server Update Flow
 
 After GitHub is set up and the server directory is a Git checkout, a typical
