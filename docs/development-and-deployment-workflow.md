@@ -137,6 +137,16 @@ docker compose -f inventory-compose.yml exec -T backend \
   uv run alembic upgrade head
 ```
 
+The same flow is available as a manual deployment script:
+
+```bash
+cd /opt/docker/inventory
+bash scripts/deploy-production.sh
+```
+
+The script intentionally does not run automatically. Production updates should
+be a conscious manual action.
+
 Then check the running services:
 
 ```bash
