@@ -3,7 +3,7 @@ from hashlib import sha256
 from secrets import token_urlsafe
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.settings import get_settings
@@ -61,6 +61,34 @@ async def revoke_session_token(session: AsyncSession, raw_token: str) -> None:
 
     user_session.revoked_at = datetime.now(UTC)
     await session.commit()
+
+
+async def revoke_user_sessions(
+    session: AsyncSession,
+    user_id: UUID,
+    except_raw_token: str | None = None,
+) -> None:
+    """Revoke active sessions for a user, optionally keeping the current browser session."""
+
+    except_token_hash = hash_session_token(except_raw_token) if except_raw_token else None
+    result = await session.execute(select(UserSession).where(UserSession.user_id == user_id))
+    now = datetime.now(UTC)
+    for user_session in result.scalars().all():
+        if not user_session.is_active or user_session.token_hash == except_token_hash:
+            continue
+        user_session.revoked_at = now
+
+
+async def delete_inactive_user_sessions(session: AsyncSession) -> int:
+    """Delete revoked or expired sessions and return the number of removed rows."""
+
+    result = await session.execute(
+        delete(UserSession).where(
+            (UserSession.revoked_at.is_not(None)) | (UserSession.expires_at <= datetime.now(UTC))
+        )
+    )
+    await session.commit()
+    return int(result.rowcount or 0)
 
 
 async def get_user_by_email(session: AsyncSession, email: str) -> User | None:

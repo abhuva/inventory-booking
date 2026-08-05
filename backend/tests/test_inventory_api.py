@@ -1,9 +1,12 @@
 from collections.abc import AsyncGenerator, Generator
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -11,9 +14,10 @@ from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.security import hash_password
 from inventory_booking_api.main import app
 from inventory_booking_api.models import Base
-from inventory_booking_api.settings import get_settings
+from inventory_booking_api.settings import Settings, get_settings
 from inventory_booking_api.users.enums import UserRole
 from inventory_booking_api.users.models import User
+from inventory_booking_api.users.router import _failed_login_attempts
 
 ADMIN_EMAIL = "admin@example.org"
 ADMIN_PASSWORD = "correct horse battery staple"
@@ -72,6 +76,7 @@ def client(tmp_path: Path) -> Generator[TestClient]:
 
     import asyncio
 
+    _failed_login_attempts.clear()
     asyncio.run(create_schema())
     app.dependency_overrides[get_session] = override_get_session
 
@@ -79,6 +84,7 @@ def client(tmp_path: Path) -> Generator[TestClient]:
         yield test_client
 
     app.dependency_overrides.clear()
+    _failed_login_attempts.clear()
     settings.asset_upload_dir = original_upload_dir
     settings.location_upload_dir = original_location_upload_dir
     asyncio.run(drop_schema())
@@ -95,10 +101,52 @@ def login(
     return {"X-CSRF-Token": csrf_token}
 
 
+def image_bytes(format_name: str) -> bytes:
+    image = Image.new("RGB", (2, 2), color=(255, 0, 0))
+    output = BytesIO()
+    image.save(output, format=format_name)
+    return output.getvalue()
+
+
 def test_write_endpoints_require_session(client: TestClient) -> None:
     response = client.post("/categories", json={"name": "Juggling"})
 
     assert response.status_code == 401
+
+
+def test_domain_read_endpoints_require_session(client: TestClient) -> None:
+    list_paths = [
+        "/categories",
+        "/locations",
+        "/assets",
+        "/stock-levels",
+        "/bookings",
+        "/checkouts",
+        "/returns",
+    ]
+    detail_paths = [
+        "/categories/00000000-0000-0000-0000-000000000001",
+        "/locations/00000000-0000-0000-0000-000000000001",
+        "/assets/00000000-0000-0000-0000-000000000001",
+        "/stock-levels/00000000-0000-0000-0000-000000000001",
+        "/bookings/00000000-0000-0000-0000-000000000001",
+        "/checkouts/00000000-0000-0000-0000-000000000001",
+        "/returns/00000000-0000-0000-0000-000000000001",
+    ]
+
+    for path in [*list_paths, *detail_paths]:
+        response = client.get(path)
+
+        assert response.status_code == 401, path
+
+
+def test_security_headers_are_applied(client: TestClient) -> None:
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "same-origin"
 
 
 def test_session_mutations_require_csrf_token(client: TestClient) -> None:
@@ -107,6 +155,19 @@ def test_session_mutations_require_csrf_token(client: TestClient) -> None:
     response = client.post("/categories", json={"name": "Juggling"})
 
     assert response.status_code == 403
+
+
+def test_session_mutations_reject_untrusted_origin(client: TestClient) -> None:
+    headers = login(client)
+
+    response = client.post(
+        "/categories",
+        json={"name": "Juggling"},
+        headers={**headers, "Origin": "https://evil.example.org"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Invalid request origin."
 
 
 def test_login_me_and_logout(client: TestClient) -> None:
@@ -153,6 +214,36 @@ def test_invalid_login_is_rejected(client: TestClient) -> None:
     assert response.status_code == 401
 
 
+def test_login_rate_limit_rejects_repeated_failures(client: TestClient) -> None:
+    for _ in range(5):
+        response = client.post("/auth/login", json={"email": ADMIN_EMAIL, "password": "wrong"})
+
+        assert response.status_code == 401
+
+    limited_response = client.post(
+        "/auth/login", json={"email": ADMIN_EMAIL, "password": "still wrong"}
+    )
+
+    assert limited_response.status_code == 429
+
+
+def test_production_settings_reject_local_defaults() -> None:
+    with pytest.raises(ValidationError, match="Unsafe production settings"):
+        Settings(app_env="production")
+
+
+def test_production_settings_accept_safe_values() -> None:
+    settings = Settings(
+        app_env="production",
+        database_url="postgresql+asyncpg://inventory:secret@example.org:5432/inventory_booking",
+        internal_api_token="not-the-local-token",
+        session_cookie_secure=True,
+        cors_origins="https://inventory.example.org",
+    )
+
+    assert settings.app_env == "production"
+
+
 def test_admin_can_manage_users(client: TestClient) -> None:
     headers = login(client)
 
@@ -181,6 +272,24 @@ def test_admin_can_manage_users(client: TestClient) -> None:
     assert update_response.json()["display_name"] == "Updated User"
 
 
+def test_deactivating_user_revokes_existing_sessions(client: TestClient) -> None:
+    with TestClient(app) as user_client:
+        login(user_client, USER_EMAIL, USER_PASSWORD)
+        assert user_client.get("/auth/me").status_code == 200
+
+        admin_headers = login(client)
+        users = client.get("/users", headers=admin_headers).json()
+        user_id = next(user["id"] for user in users if user["email"] == USER_EMAIL)
+        update_response = client.patch(
+            f"/users/{user_id}",
+            headers=admin_headers,
+            json={"is_active": False},
+        )
+
+        assert update_response.status_code == 200
+        assert user_client.get("/auth/me").status_code == 401
+
+
 def test_normal_user_cannot_manage_users(client: TestClient) -> None:
     headers = login(client, USER_EMAIL, USER_PASSWORD)
 
@@ -195,6 +304,35 @@ def test_normal_user_cannot_read_audit_logs(client: TestClient) -> None:
     response = client.get("/audit/logs", headers=headers)
 
     assert response.status_code == 403
+
+
+def test_normal_user_cannot_perform_admin_only_mutations(client: TestClient) -> None:
+    admin_headers = login(client)
+    asset = client.post(
+        "/assets",
+        json={"name": "Admin Asset", "asset_type": "tracked"},
+        headers=admin_headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Admin booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": asset["id"], "quantity": 1}],
+        },
+        headers=admin_headers,
+    ).json()
+    assert client.post("/auth/logout", headers=admin_headers).status_code == 204
+
+    user_headers = login(client, USER_EMAIL, USER_PASSWORD)
+
+    assert (
+        client.post("/categories", json={"name": "User Category"}, headers=user_headers).status_code
+        == 403
+    )
+    assert client.delete(f"/assets/{asset['id']}", headers=user_headers).status_code == 403
+    assert client.delete(f"/bookings/{booking['id']}", headers=user_headers).status_code == 403
 
 
 def test_create_and_list_category(client: TestClient) -> None:
@@ -491,11 +629,11 @@ def test_asset_image_upload_fetch_replace_and_delete(client: TestClient) -> None
         json={"name": "Photo Aerial Stand", "asset_type": "tracked"},
         headers=headers,
     ).json()
-    image_bytes = b"RIFF\x18\x00\x00\x00WEBPVP8 " + (b"\x00" * 20)
+    webp_bytes = image_bytes("WEBP")
 
     upload_response = client.post(
         f"/assets/{asset['id']}/image",
-        files={"file": ("asset.webp", image_bytes, "image/webp")},
+        files={"file": ("asset.webp", webp_bytes, "image/webp")},
         headers=headers,
     )
 
@@ -503,7 +641,9 @@ def test_asset_image_upload_fetch_replace_and_delete(client: TestClient) -> None
     created = upload_response.json()
     assert created["asset_id"] == asset["id"]
     assert created["mime_type"] == "image/webp"
-    assert created["size_bytes"] == len(image_bytes)
+    assert created["size_bytes"] > 0
+    assert created["width"] == 2
+    assert created["height"] == 2
 
     list_response = client.get("/assets/images", headers=headers)
     content_response = client.get(f"/assets/{asset['id']}/image/content", headers=headers)
@@ -512,9 +652,9 @@ def test_asset_image_upload_fetch_replace_and_delete(client: TestClient) -> None
     assert list_response.json()[0]["asset_id"] == asset["id"]
     assert content_response.status_code == 200
     assert content_response.headers["content-type"].startswith("image/webp")
-    assert content_response.content == image_bytes
+    assert len(content_response.content) == created["size_bytes"]
 
-    replacement_bytes = b"\xff\xd8\xff" + (b"\x00" * 24)
+    replacement_bytes = image_bytes("JPEG")
     replace_response = client.post(
         f"/assets/{asset['id']}/image",
         files={"file": ("asset.jpg", replacement_bytes, "image/jpeg")},
@@ -529,8 +669,10 @@ def test_asset_image_upload_fetch_replace_and_delete(client: TestClient) -> None
 
     assert replace_response.status_code == 200
     assert replace_response.json()["mime_type"] == "image/jpeg"
+    assert replace_response.json()["width"] == 2
+    assert replace_response.json()["height"] == 2
     assert replacement_content_response.status_code == 200
-    assert replacement_content_response.content == replacement_bytes
+    assert len(replacement_content_response.content) == replace_response.json()["size_bytes"]
     assert delete_response.status_code == 204
     assert missing_response.status_code == 404
     assert any(entry["entity_type"] == "asset_image" for entry in audit_response.json())
@@ -560,11 +702,11 @@ def test_location_image_upload_fetch_replace_and_delete(client: TestClient) -> N
         json={"name": "Photo Storage", "type": "storage"},
         headers=headers,
     ).json()
-    image_bytes = b"RIFF\x18\x00\x00\x00WEBPVP8 " + (b"\x00" * 20)
+    webp_bytes = image_bytes("WEBP")
 
     upload_response = client.post(
         f"/locations/{location['id']}/image",
-        files={"file": ("location.webp", image_bytes, "image/webp")},
+        files={"file": ("location.webp", webp_bytes, "image/webp")},
         headers=headers,
     )
 
@@ -572,7 +714,9 @@ def test_location_image_upload_fetch_replace_and_delete(client: TestClient) -> N
     created = upload_response.json()
     assert created["location_id"] == location["id"]
     assert created["mime_type"] == "image/webp"
-    assert created["size_bytes"] == len(image_bytes)
+    assert created["size_bytes"] > 0
+    assert created["width"] == 2
+    assert created["height"] == 2
 
     list_response = client.get("/locations/images", headers=headers)
     content_response = client.get(f"/locations/{location['id']}/image/content", headers=headers)
@@ -581,9 +725,9 @@ def test_location_image_upload_fetch_replace_and_delete(client: TestClient) -> N
     assert list_response.json()[0]["location_id"] == location["id"]
     assert content_response.status_code == 200
     assert content_response.headers["content-type"].startswith("image/webp")
-    assert content_response.content == image_bytes
+    assert len(content_response.content) == created["size_bytes"]
 
-    replacement_bytes = b"\xff\xd8\xff" + (b"\x00" * 24)
+    replacement_bytes = image_bytes("JPEG")
     replace_response = client.post(
         f"/locations/{location['id']}/image",
         files={"file": ("location.jpg", replacement_bytes, "image/jpeg")},
@@ -599,8 +743,10 @@ def test_location_image_upload_fetch_replace_and_delete(client: TestClient) -> N
 
     assert replace_response.status_code == 200
     assert replace_response.json()["mime_type"] == "image/jpeg"
+    assert replace_response.json()["width"] == 2
+    assert replace_response.json()["height"] == 2
     assert replacement_content_response.status_code == 200
-    assert replacement_content_response.content == replacement_bytes
+    assert len(replacement_content_response.content) == replace_response.json()["size_bytes"]
     assert delete_response.status_code == 204
     assert missing_response.status_code == 404
     assert any(entry["entity_type"] == "location_image" for entry in audit_response.json())
@@ -1660,6 +1806,37 @@ def test_asset_state_change_marks_lost_and_retired(client: TestClient) -> None:
     assert retired_response.status_code == 200
     assert retired_response.json()["status"] == "retired"
     assert reactivate_response.status_code == 409
+
+
+def test_normal_user_cannot_mark_asset_lost_or_retired(client: TestClient) -> None:
+    admin_headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Protected State Rig", "asset_type": "tracked"},
+        headers=admin_headers,
+    ).json()
+    assert client.post("/auth/logout", headers=admin_headers).status_code == 204
+    user_headers = login(client, USER_EMAIL, USER_PASSWORD)
+
+    damaged_response = client.post(
+        f"/assets/{tracked_asset['id']}/state",
+        json={"status": "damaged", "condition": "damaged"},
+        headers=user_headers,
+    )
+    lost_response = client.post(
+        f"/assets/{tracked_asset['id']}/state",
+        json={"status": "lost"},
+        headers=user_headers,
+    )
+    retired_response = client.post(
+        f"/assets/{tracked_asset['id']}/state",
+        json={"status": "retired"},
+        headers=user_headers,
+    )
+
+    assert damaged_response.status_code == 200
+    assert lost_response.status_code == 403
+    assert retired_response.status_code == 403
 
 
 def test_asset_state_change_rejects_unsupported_status(client: TestClient) -> None:

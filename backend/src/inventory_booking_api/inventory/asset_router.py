@@ -1,13 +1,14 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.errors import raise_not_found
-from inventory_booking_api.core.security import get_current_user
+from inventory_booking_api.core.security import get_current_user, require_admin
+from inventory_booking_api.inventory.asset_commands import create_asset, delete_asset, update_asset
 from inventory_booking_api.inventory.asset_image_service import (
     delete_asset_image,
     get_asset_image,
@@ -29,24 +30,23 @@ from inventory_booking_api.inventory.asset_schemas import (
     StockTransfer,
     TrackedAssetTransfer,
 )
-from inventory_booking_api.inventory.asset_service import (
-    change_asset_state,
-    complete_asset_maintenance,
-    create_asset,
-    create_stock_level,
-    delete_asset,
+from inventory_booking_api.inventory.enums import AssetStatus
+from inventory_booking_api.inventory.movement_commands import transfer_stock, transfer_tracked_asset
+from inventory_booking_api.inventory.queries import (
     get_asset,
     get_stock_level,
     list_assets,
     list_stock_levels,
+)
+from inventory_booking_api.inventory.stock_commands import create_stock_level, update_stock_level
+from inventory_booking_api.inventory.tracked_unit_commands import (
+    change_asset_state,
+    complete_asset_maintenance,
     start_asset_maintenance,
-    transfer_stock,
-    transfer_tracked_asset,
-    update_asset,
-    update_stock_level,
 )
 from inventory_booking_api.qr.schemas import QrCodeRead
 from inventory_booking_api.qr.service import ensure_qr_code_for_asset, get_qr_code_for_asset
+from inventory_booking_api.users.enums import UserRole
 from inventory_booking_api.users.models import User
 
 asset_router = APIRouter(prefix="/assets", tags=["assets"])
@@ -56,6 +56,7 @@ stock_router = APIRouter(prefix="/stock-levels", tags=["stock-levels"])
 @asset_router.get("", response_model=list[AssetRead])
 async def list_asset_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[AssetRead]:
     return await list_assets(session)
 
@@ -81,6 +82,7 @@ async def list_asset_images_endpoint(
 async def get_asset_endpoint(
     asset_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> AssetRead:
     asset = await get_asset(session, asset_id)
     if asset is None:
@@ -185,7 +187,7 @@ async def update_asset_endpoint(
 async def delete_asset_endpoint(
     asset_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_admin)],
 ) -> Response:
     asset = await get_asset(session, asset_id)
     if asset is None:
@@ -243,12 +245,16 @@ async def change_asset_state_endpoint(
     asset = await get_asset(session, asset_id)
     if asset is None:
         raise_not_found("Asset")
+    irreversible_status = payload.status in (AssetStatus.LOST, AssetStatus.RETIRED)
+    if irreversible_status and current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin role required.")
     return await change_asset_state(session, asset, payload, current_user)
 
 
 @stock_router.get("", response_model=list[StockLevelRead])
 async def list_stock_level_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[StockLevelRead]:
     return await list_stock_levels(session)
 
@@ -279,6 +285,7 @@ async def transfer_stock_endpoint(
 async def get_stock_level_endpoint(
     stock_level_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> StockLevelRead:
     stock_level = await get_stock_level(session, stock_level_id)
     if stock_level is None:

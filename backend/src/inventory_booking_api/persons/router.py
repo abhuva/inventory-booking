@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.errors import raise_not_found
-from inventory_booking_api.core.security import get_current_user
+from inventory_booking_api.core.security import get_current_user, require_admin
 from inventory_booking_api.persons.schemas import PersonCreate, PersonRead, PersonUpdate
 from inventory_booking_api.persons.service import (
     create_person,
@@ -67,7 +67,7 @@ async def update_person_endpoint(
 async def delete_person_endpoint(
     person_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_admin)],
 ) -> Response:
     person = await get_person(session, person_id)
     if person is None:

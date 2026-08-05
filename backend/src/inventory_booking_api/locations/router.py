@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.errors import raise_not_found
-from inventory_booking_api.core.security import get_current_user
+from inventory_booking_api.core.security import get_current_user, require_admin
 from inventory_booking_api.locations.image_service import (
     delete_location_image,
     get_location_image,
@@ -36,6 +36,7 @@ router = APIRouter(prefix="/locations", tags=["locations"])
 @router.get("", response_model=list[LocationRead])
 async def list_location_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[LocationRead]:
     return await list_locations(session)
 
@@ -61,6 +62,7 @@ async def list_location_images_endpoint(
 async def get_location_endpoint(
     location_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> LocationRead:
     location = await get_location(session, location_id)
     if location is None:
@@ -138,7 +140,7 @@ async def update_location_endpoint(
 async def delete_location_endpoint(
     location_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_admin)],
 ) -> Response:
     location = await get_location(session, location_id)
     if location is None:

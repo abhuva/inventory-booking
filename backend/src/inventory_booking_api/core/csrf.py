@@ -16,6 +16,16 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
         settings = get_settings()
         has_session = settings.session_cookie_name in request.cookies
         if request.method not in SAFE_METHODS and has_session:
+            origin = request.headers.get("origin")
+            if origin is not None:
+                same_origin = f"{request.url.scheme}://{request.url.netloc}"
+                allowed_origins = {*settings.cors_origin_list, same_origin}
+                if origin.rstrip("/") not in allowed_origins:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Invalid request origin."},
+                    )
+
             cookie_token = request.cookies.get(settings.csrf_cookie_name)
             header_token = request.headers.get("X-CSRF-Token")
             if (

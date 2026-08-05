@@ -11,6 +11,7 @@ from inventory_booking_api.inventory.asset_image_service import (
     ALLOWED_IMAGE_MIME_TYPES,
     MIME_EXTENSIONS,
     detect_image_mime_type,
+    normalize_image,
 )
 from inventory_booking_api.locations.models import Location, LocationImage
 from inventory_booking_api.settings import get_settings
@@ -60,6 +61,12 @@ async def store_location_image(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Image MIME type does not match file contents.",
         )
+    normalized = normalize_image(content, mime_type)
+    if len(normalized.content) > settings.asset_image_max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Location image is too large after processing.",
+        )
 
     existing = await get_location_image(session, location.id)
     storage_path = relative_storage_path(location.id, mime_type)
@@ -70,15 +77,15 @@ async def store_location_image(
         await session.flush()
 
     absolute_path.parent.mkdir(parents=True, exist_ok=True)
-    absolute_path.write_bytes(content)
+    absolute_path.write_bytes(normalized.content)
 
     image = LocationImage(
         location_id=location.id,
         storage_path=storage_path,
         mime_type=mime_type,
-        size_bytes=len(content),
-        width=None,
-        height=None,
+        size_bytes=len(normalized.content),
+        width=normalized.width,
+        height=normalized.height,
         created_by_user_id=actor.id,
     )
     session.add(image)

@@ -1,502 +1,71 @@
-﻿import { PUBLIC_API_BASE_URL } from '$env/static/public';
+import { PUBLIC_API_BASE_URL } from '$env/static/public';
+import type { components } from '$lib/api/generated';
 
-export type UserRole = 'admin' | 'user';
-export type PersonType = 'admin' | 'user' | 'team' | 'external';
-export type AssetType = 'tracked' | 'stock';
-export type AssetStatus =
-  | 'available'
-  | 'reserved'
-  | 'checked_out'
-  | 'in_transfer'
-  | 'maintenance'
-  | 'damaged'
-  | 'lost'
-  | 'retired';
-export type AssetCondition = 'unknown' | 'good' | 'worn' | 'damaged' | 'needs_repair';
-export type LocationType =
-  | 'room'
-  | 'storage'
-  | 'vehicle'
-  | 'project_site'
-  | 'external_space'
-  | 'person_home'
-  | 'repair'
-  | 'unknown';
-export type BookingStatus = 'reserved' | 'cancelled' | 'checked_out' | 'completed';
-export type BasketStatus = 'active' | 'confirmed' | 'cancelled' | 'expired';
-export type CheckoutStatus = 'checked_out' | 'partially_returned' | 'returned';
+type Schema = components['schemas'];
 
-export type User = {
-  id: string;
-  email: string;
-  display_name: string;
-  role: UserRole;
-  is_active: boolean;
-};
+export type UserRole = Schema['UserRole'];
+export type PersonType = Schema['PersonType'];
+export type AssetType = Schema['AssetType'];
+export type AssetStatus = Schema['AssetStatus'];
+export type AssetCondition = Schema['AssetCondition'];
+export type LocationType = Schema['LocationType'];
+export type BookingStatus = Schema['BookingStatus'];
+export type BasketStatus = Schema['BasketStatus'];
+export type CheckoutStatus = Schema['CheckoutStatus'];
 
-export type UserCreate = {
-  email: string;
-  display_name: string;
-  password: string;
-  role: UserRole;
-  is_active: boolean;
-};
-
-export type UserUpdate = {
-  email?: string | null;
-  display_name?: string | null;
-  password?: string | null;
-  role?: UserRole | null;
-  is_active?: boolean | null;
-};
-
-export type Person = {
-  id: string;
-  display_name: string;
-  person_type: PersonType;
-  email: string | null;
-  phone: string | null;
-  notes: string | null;
-  user_id: string | null;
-  is_active: boolean;
-};
-
-export type PersonCreate = {
-  display_name: string;
-  person_type: PersonType;
-  email?: string | null;
-  phone?: string | null;
-  notes?: string | null;
-  user_id?: string | null;
-  is_active: boolean;
-};
-
-export type PersonUpdate = {
-  display_name?: string | null;
-  person_type?: PersonType | null;
-  email?: string | null;
-  phone?: string | null;
-  notes?: string | null;
-  user_id?: string | null;
-  is_active?: boolean | null;
-};
-
-export type Category = {
-  id: string;
-  name: string;
-  description: string | null;
-};
-
-export type Location = {
-  id: string;
-  name: string;
-  type: LocationType;
-  address: string | null;
-  responsible_user_id: string | null;
-  responsible_person_id: string | null;
-  notes: string | null;
-  is_active: boolean;
-};
-
-export type LocationImage = {
-  id: string;
-  location_id: string;
-  mime_type: string;
-  size_bytes: number;
-  width: number | null;
-  height: number | null;
-  created_by_user_id: string | null;
-  created_at: string;
-};
-
-export type Asset = {
-  id: string;
-  name: string;
-  asset_type: AssetType;
-  category_id: string | null;
-  status: AssetStatus;
-  condition: AssetCondition;
-  unit_name: string | null;
-  home_location_id: string | null;
-  current_location_id: string | null;
-  current_holder_user_id: string | null;
-  manufacturer: string | null;
-  model: string | null;
-  serial_number: string | null;
-  asset_tag: string | null;
-  replacement_value: string | null;
-  description: string | null;
-  notes: string | null;
-};
-
-export type AssetImage = {
-  id: string;
-  asset_id: string;
-  mime_type: string;
-  size_bytes: number;
-  width: number | null;
-  height: number | null;
-  created_by_user_id: string | null;
-  created_at: string;
-};
-
-export type StockLevel = {
-  id: string;
-  asset_id: string;
-  location_id: string | null;
-  quantity_total: number;
-  quantity_reserved: number;
-  quantity_checked_out: number;
-};
-
-export type BookingLine = {
-  id: string;
-  booking_id: string;
-  asset_id: string;
-  location_id: string | null;
-  starts_at: string;
-  ends_at: string;
-  quantity: number | null;
-  notes: string | null;
-};
-
-export type Booking = {
-  id: string;
-  requested_by_user_id: string;
-  person_id: string | null;
-  title: string;
-  status: BookingStatus;
-  starts_at: string;
-  ends_at: string;
-  created_at: string;
-  notes: string | null;
-  lines?: BookingLine[];
-};
-
-export type BasketLine = {
-  id: string;
-  basket_id: string;
-  asset_id: string;
-  location_id: string | null;
-  starts_at: string;
-  ends_at: string;
-  quantity: number | null;
-  notes: string | null;
-};
-
-export type Basket = {
-  id: string;
-  user_id: string;
-  person_id: string | null;
-  title: string;
-  status: BasketStatus;
-  starts_at: string;
-  ends_at: string;
-  expires_at: string;
-  notes: string | null;
-  lines: BasketLine[];
-};
-
-export type AvailabilityLine = {
-  asset_id: string;
-  location_id: string | null;
-  requested_quantity: number | null;
-  available_quantity: number | null;
-  available: boolean;
-  reason: string | null;
-};
-
-export type Availability = {
-  available: boolean;
-  lines: AvailabilityLine[];
-};
-
-export type AvailabilityDay = {
-  bucket_start: string;
-  bucket_end: string;
-  total_quantity: number;
-  reserved_quantity: number;
-  held_quantity: number;
-  available_quantity: number;
-  requested_quantity: number;
-  available: boolean;
-  reason: string | null;
-};
-
-export type AvailabilityDays = {
-  asset_id: string;
-  location_id: string | null;
-  quantity: number;
-  starts_at: string;
-  ends_at: string;
-  days: AvailabilityDay[];
-};
-
-export type HeatmapCell = {
-  bucket_start: string;
-  bucket_end: string;
-  total_quantity: number;
-  reserved_quantity: number;
-  held_quantity: number;
-  available_quantity: number;
-};
-
-export type HeatmapItem = {
-  asset_id: string;
-  name: string;
-  asset_type: AssetType;
-  unit_name: string | null;
-  total_quantity: number;
-  cells: HeatmapCell[];
-};
-
-export type AvailabilityHeatmap = {
-  starts_at: string;
-  ends_at: string;
-  bucket: 'day' | 'week';
-  location_id: string | null;
-  items: HeatmapItem[];
-};
-
-export type CheckoutLine = {
-  id: string;
-  checkout_id: string;
-  asset_id: string;
-  location_id: string | null;
-  quantity: number | null;
-  quantity_returned: number;
-  condition_out: AssetCondition;
-  notes: string | null;
-};
-
-export type Checkout = {
-  id: string;
-  booking_id: string;
-  checked_out_by_user_id: string;
-  checked_out_to_user_id: string | null;
-  status: CheckoutStatus;
-  notes: string | null;
-  lines?: CheckoutLine[];
-};
-
-export type ReturnLine = {
-  id: string;
-  return_id: string;
-  checkout_line_id: string;
-  asset_id: string;
-  location_id: string | null;
-  quantity: number | null;
-  condition_in: AssetCondition;
-  notes: string | null;
-};
-
-export type ReturnRecord = {
-  id: string;
-  checkout_id: string;
-  returned_by_user_id: string;
-  notes: string | null;
-  lines?: ReturnLine[];
-};
-
-export type ItemEvent = {
-  id: string;
-  created_at: string;
-  asset_id: string;
-  event_type: string;
-  actor_user_id: string | null;
-  from_location_id: string | null;
-  to_location_id: string | null;
-  notes: string | null;
-  details: Record<string, unknown> | null;
-};
-
-export type QrCode = {
-  id: string;
-  token: string;
-  asset_id: string | null;
-  label: string | null;
-  notes: string | null;
-};
-
-export type QrResolve = {
-  token: string;
-  assigned: boolean;
-  asset: Pick<
-    Asset,
-    | 'id'
-    | 'name'
-    | 'asset_type'
-    | 'status'
-    | 'condition'
-    | 'current_location_id'
-    | 'current_holder_user_id'
-  > | null;
-};
-
-export type CategoryCreate = {
-  name: string;
-  description?: string | null;
-};
-
-export type CategoryUpdate = {
-  name?: string | null;
-  description?: string | null;
-};
-
-export type LocationCreate = {
-  name: string;
-  type: LocationType;
-  responsible_person_id?: string | null;
-};
-
-export type LocationUpdate = {
-  name?: string | null;
-  type?: LocationType | null;
-  address?: string | null;
-  responsible_user_id?: string | null;
-  responsible_person_id?: string | null;
-  notes?: string | null;
-  is_active?: boolean | null;
-};
-
-export type AssetCreate = {
-  name: string;
-  asset_type: AssetType;
-  category_id?: string | null;
-  unit_name?: string | null;
-  current_location_id?: string | null;
-};
-
-export type AssetUpdate = {
-  name?: string | null;
-  category_id?: string | null;
-  status?: AssetStatus | null;
-  condition?: AssetCondition | null;
-  home_location_id?: string | null;
-  current_location_id?: string | null;
-  current_holder_user_id?: string | null;
-  manufacturer?: string | null;
-  model?: string | null;
-  serial_number?: string | null;
-  asset_tag?: string | null;
-  replacement_value?: string | null;
-  description?: string | null;
-  notes?: string | null;
-};
-
-export type StockLevelCreate = {
-  asset_id: string;
-  location_id: string;
-  quantity_total: number;
-};
-
-export type BookingLineCreate = {
-  asset_id: string;
-  location_id?: string | null;
-  starts_at?: string | null;
-  ends_at?: string | null;
-  quantity?: number | null;
-  notes?: string | null;
-};
-
-export type BookingCreate = {
-  title: string;
-  person_id?: string | null;
-  starts_at: string;
-  ends_at: string;
-  notes?: string | null;
-  lines: BookingLineCreate[];
-};
-
-export type BookingUpdate = {
-  status?: BookingStatus | null;
-  person_id?: string | null;
-  starts_at?: string | null;
-  ends_at?: string | null;
-};
-
-export type BasketCreate = {
-  title: string;
-  person_id?: string | null;
-  starts_at: string;
-  ends_at: string;
-  notes?: string | null;
-};
-
-export type BasketUpdate = {
-  title?: string | null;
-  person_id?: string | null;
-  starts_at?: string | null;
-  ends_at?: string | null;
-  notes?: string | null;
-};
-
-export type BasketLineUpdate = {
-  starts_at?: string | null;
-  ends_at?: string | null;
-  quantity?: number | null;
-  notes?: string | null;
-};
-
-export type CheckoutCreate = {
-  booking_id: string;
-  checked_out_to_user_id?: string | null;
-  condition_out?: AssetCondition;
-  notes?: string | null;
-};
-
-export type ReturnLineCreate = {
-  checkout_line_id: string;
-  quantity?: number | null;
-  condition_in?: AssetCondition;
-  notes?: string | null;
-};
-
-export type ReturnCreate = {
-  checkout_id: string;
-  notes?: string | null;
-  lines: ReturnLineCreate[];
-};
-
-export type TrackedAssetTransfer = {
-  to_location_id?: string | null;
-  to_holder_user_id?: string | null;
-  notes?: string | null;
-};
-
-export type StockTransfer = {
-  asset_id: string;
-  from_location_id: string;
-  to_location_id: string;
-  quantity: number;
-  notes?: string | null;
-};
-
-export type MaintenanceStart = {
-  notes?: string | null;
-};
-
-export type MaintenanceComplete = {
-  condition?: AssetCondition;
-  notes?: string | null;
-};
-
-export type AssetStateChange = {
-  status: AssetStatus;
-  condition?: AssetCondition | null;
-  notes?: string | null;
-};
-
-export type QrCodeCreate = {
-  label?: string | null;
-  notes?: string | null;
-};
-
-export type QrAssign = {
-  asset_id: string;
-  notes?: string | null;
-};
-
+export type User = Schema['UserRead'];
+export type UserCreate = Schema['UserCreate'];
+export type UserUpdate = Schema['UserUpdate'];
+export type Person = Schema['PersonRead'];
+export type PersonCreate = Schema['PersonCreate'];
+export type PersonUpdate = Schema['PersonUpdate'];
+export type Category = Schema['CategoryRead'];
+export type CategoryCreate = Schema['CategoryCreate'];
+export type CategoryUpdate = Schema['CategoryUpdate'];
+export type Location = Schema['LocationRead'];
+export type LocationCreate = Schema['LocationCreate'];
+export type LocationUpdate = Schema['LocationUpdate'];
+export type LocationImage = Schema['LocationImageRead'];
+export type Asset = Schema['AssetRead'];
+export type AssetCreate = Schema['AssetCreate'];
+export type AssetUpdate = Schema['AssetUpdate'];
+export type AssetImage = Schema['AssetImageRead'];
+export type StockLevel = Schema['StockLevelRead'];
+export type StockLevelCreate = Schema['StockLevelCreate'];
+export type BookingLine = Schema['BookingLineRead'];
+export type Booking = Schema['BookingRead'];
+export type BookingLineCreate = Schema['BookingLineCreate'];
+export type BookingCreate = Schema['BookingCreate'];
+export type BookingUpdate = Schema['BookingUpdate'];
+export type BasketLine = Schema['BasketLineRead'];
+export type Basket = Schema['BasketRead'];
+export type BasketCreate = Schema['BasketCreate'];
+export type BasketUpdate = Schema['BasketUpdate'];
+export type BasketLineUpdate = Schema['BasketLineUpdate'];
+export type AvailabilityLine = Schema['AvailabilityLineRead'];
+export type Availability = Schema['AvailabilityRead'];
+export type AvailabilityDay = Schema['AvailabilityDayRead'];
+export type AvailabilityDays = Schema['AvailabilityDaysRead'];
+export type HeatmapCell = Schema['HeatmapCellRead'];
+export type HeatmapItem = Schema['HeatmapItemRead'];
+export type AvailabilityHeatmap = Schema['AvailabilityHeatmapRead'];
+export type CheckoutLine = Schema['CheckoutLineRead'];
+export type Checkout = Schema['CheckoutRead'];
+export type CheckoutCreate = Schema['CheckoutCreate'];
+export type ReturnLine = Schema['ReturnLineRead'];
+export type ReturnRecord = Schema['ReturnRead'];
+export type ReturnLineCreate = Schema['ReturnLineCreate'];
+export type ReturnCreate = Schema['ReturnCreate'];
+export type ItemEvent = Schema['ItemEventRead'];
+export type QrCode = Schema['QrCodeRead'];
+export type QrResolve = Schema['QrResolveRead'];
+export type QrCodeCreate = Schema['QrCodeCreate'];
+export type QrAssign = Schema['QrAssign'];
+export type TrackedAssetTransfer = Schema['TrackedAssetTransfer'];
+export type StockTransfer = Schema['StockTransfer'];
+export type MaintenanceStart = Schema['MaintenanceStart'];
+export type MaintenanceComplete = Schema['MaintenanceComplete'];
+export type AssetStateChange = Schema['AssetStateChange'];
 const csrfCookieName = 'inventory_booking_csrf';
 
 export class ApiError extends Error {

@@ -1,5 +1,12 @@
 <script lang="ts">
   import AvailabilityDatePicker from './AvailabilityDatePicker.svelte';
+  import AssetExtraPanel from './AssetExtraPanel.svelte';
+  import AssetHistoryPanel from './AssetHistoryPanel.svelte';
+  import AssetInfoPanel from './AssetInfoPanel.svelte';
+  import AssetQrPanel from './AssetQrPanel.svelte';
+  import AssetStockPanel from './AssetStockPanel.svelte';
+  import InventoryAssetTable from './InventoryAssetTable.svelte';
+  import TrackedUnitPanel from './TrackedUnitPanel.svelte';
   import { readStoredString, writeStoredValue } from '$lib/persisted';
   import { downloadSvg, renderQrSvg, safeFilename } from '$lib/qr';
   import type {
@@ -51,7 +58,6 @@
   let stockAdjustLocationId = $state('');
   let stockAdjustAmount = $state(1);
   let stockAdjustError = $state('');
-  let photoInput = $state<HTMLInputElement>();
   let trackedMoveForm = $state<TrackedAssetTransfer>({
     to_location_id: '',
     to_holder_user_id: null,
@@ -335,16 +341,6 @@
     return users.some((user) => user.id === currentUser.id) ? users : [currentUser, ...users];
   }
 
-  function handlePhotoChange(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) {
-      return;
-    }
-    uploadSelectedAssetImage(file);
-    input.value = '';
-  }
-
   function selectedStockLevels(): StockLevel[] {
     return visibleStockLevelsForAsset(selectedAssetId);
   }
@@ -625,94 +621,21 @@
 </script>
 
 <section class="inventory-workspace" aria-label="Inventory workspace">
-  <section class="panel inventory-table-panel">
-    <div class="inventory-toolbar">
-      <div>
-        <h2>Assets</h2>
-        <p>{displayedAssets().length} of {assets.length} shown</p>
-      </div>
-      <div class="inventory-actions">
-        <input
-          bind:value={assetSearch}
-          aria-label="Search assets"
-          placeholder="Search assets..."
-          type="search"
-        />
-        <select bind:value={inventoryLocationFilter} aria-label="Filter assets by location">
-          <option value="">All locations</option>
-          {#each locations as location}
-            <option value={location.id}>{location.name}</option>
-          {/each}
-        </select>
-        <button
-          type="button"
-          class="secondary compact"
-          disabled={!assetSearch && !inventoryLocationFilter}
-          onclick={() => {
-            assetSearch = '';
-            inventoryLocationFilter = '';
-          }}
-        >
-          Clear
-        </button>
-        <button type="button" class="compact" onclick={() => (showAddAsset = true)}
-          >+ Add asset</button
-        >
-      </div>
-    </div>
-
-    <div class="asset-table-wrap">
-      <table class="asset-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Location</th>
-            <th>Holder</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each displayedAssets() as asset}
-            <tr
-              class:selected-row={asset.id === selectedAssetId}
-              onclick={() => selectAssetDetail(asset.id)}
-            >
-              <td>
-                <div class="asset-name-cell">
-                  {#if assetImageUrl(asset.id)}
-                    <img src={assetImageUrl(asset.id) ?? ''} alt="" class="asset-thumb" />
-                  {:else}
-                    <span class="asset-thumb asset-thumb-empty">No photo</span>
-                  {/if}
-                  <div>
-                    <strong>{asset.name}</strong>
-                    <span>{asset.asset_type} / {categoryName(asset.category_id)}</span>
-                  </div>
-                </div>
-              </td>
-              <td>
-                <span
-                  class={asset.asset_type === 'tracked'
-                    ? `status-pill status-${asset.status}`
-                    : 'status-pill status-stock'}
-                >
-                  {assetStatusSummary(asset)}
-                </span>
-              </td>
-              <td>{assetLocationSummary(asset)}</td>
-              <td>{assetHolderSummary(asset)}</td>
-            </tr>
-          {:else}
-            <tr>
-              <td colspan="4" class="empty">
-                {assets.length ? 'No assets match this filter.' : 'No assets yet.'}
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-  </section>
+  <InventoryAssetTable
+    {assets}
+    {locations}
+    displayedAssets={displayedAssets()}
+    {selectedAssetId}
+    bind:assetSearch
+    bind:locationFilter={inventoryLocationFilter}
+    {assetImageUrl}
+    {categoryName}
+    {assetStatusSummary}
+    {assetLocationSummary}
+    {assetHolderSummary}
+    onAddAsset={() => (showAddAsset = true)}
+    onSelectAsset={selectAssetDetail}
+  />
 
   <aside class="panel inventory-detail-panel" aria-label="Selected asset details">
     {#if selectedAsset()}
@@ -785,355 +708,86 @@
       </div>
 
       {#if activeDetailTab === 'info'}
-        <form
-          class="asset-edit-form detail-tab-panel"
-          onsubmit={(event) => {
-            event.preventDefault();
-            updateSelectedAsset();
-          }}
-        >
-          <div class="asset-info-layout">
-            <div class="asset-photo-panel compact-photo-panel">
-              {#if assetImageUrl(selectedAssetId)}
-                <img
-                  src={assetImageUrl(selectedAssetId) ?? ''}
-                  alt={`Photo of ${selectedAsset()?.name}`}
-                  class="asset-photo"
-                />
-              {:else}
-                <div class="asset-photo-placeholder">
-                  <strong>No photo</strong>
-                  <span>Add a square reference photo.</span>
-                </div>
-              {/if}
-              <div class="asset-photo-actions">
-                <input
-                  bind:this={photoInput}
-                  class="visually-hidden"
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  capture="environment"
-                  onchange={handlePhotoChange}
-                />
-                <button
-                  type="button"
-                  class="micro-button"
-                  disabled={busy}
-                  onclick={() => photoInput?.click()}
-                >
-                  {assetImageUrl(selectedAssetId) ? 'Replace' : 'Add photo'}
-                </button>
-                {#if assetImageUrl(selectedAssetId)}
-                  <button
-                    type="button"
-                    class="secondary micro-button"
-                    disabled={busy}
-                    onclick={deleteSelectedAssetImage}
-                  >
-                    Delete
-                  </button>
-                {/if}
-              </div>
-            </div>
-
-            <label class="description-field" aria-label="Description">
-              <textarea
-                bind:value={assetEditForm.description}
-                placeholder="What is this item, what makes it recognizable, and what should people know first?"
-              ></textarea>
-            </label>
-          </div>
-
-          <label class="compact-field-row"
-            >Name <input bind:value={assetEditForm.name} required /></label
-          >
-          <label class="compact-field-row">
-            Mode
-            <input value={selectedAsset()?.asset_type.replaceAll('_', ' ')} disabled />
-          </label>
-          <label class="compact-field-row">
-            Unit
-            <input value={selectedAsset()?.unit_name ?? 'single unit'} disabled />
-          </label>
-          <label class="compact-field-row">
-            Category
-            <select bind:value={assetEditForm.category_id}>
-              <option value={null}>No category</option>
-              {#each categories as category}
-                <option value={category.id}>{category.name}</option>
-              {/each}
-            </select>
-          </label>
-          <div class="button-row compact-button-row">
-            <button type="submit" class="compact" disabled={busy}>Update info</button>
-            <button
-              type="button"
-              class="secondary compact"
-              disabled={busy}
-              onclick={openMoveDialog}
-            >
-              {selectedAsset()?.asset_type === 'stock' ? 'Move' : 'Move tracked item'}
-            </button>
-            <button
-              type="button"
-              class="secondary compact"
-              disabled={busy}
-              onclick={openReserveDialog}
-            >
-              Add to basket
-            </button>
-          </div>
-        </form>
+        {@const infoAsset = selectedAsset()}
+        {#if infoAsset}
+          <AssetInfoPanel
+            asset={infoAsset}
+            bind:assetEditForm
+            {categories}
+            imageUrl={assetImageUrl(selectedAssetId)}
+            {busy}
+            onUpdate={updateSelectedAsset}
+            onMove={openMoveDialog}
+            onReserve={openReserveDialog}
+            onUploadImage={uploadSelectedAssetImage}
+            onDeleteImage={deleteSelectedAssetImage}
+          />
+        {/if}
       {/if}
-
       {#if activeDetailTab === 'unit' && selectedAsset()?.asset_type === 'tracked'}
-        <form
-          class="asset-edit-form detail-tab-panel"
-          onsubmit={(event) => {
-            event.preventDefault();
-            updateSelectedAsset();
-          }}
-        >
-          <div class="physical-summary-grid">
-            <article>
-              <span>Status</span>
-              <strong>{selectedAsset()?.status.replaceAll('_', ' ')}</strong>
-            </article>
-            <article>
-              <span>Condition</span>
-              <strong>{selectedAsset()?.condition.replaceAll('_', ' ')}</strong>
-            </article>
-            <article>
-              <span>Location</span>
-              <strong>{locationName(selectedAsset()?.current_location_id ?? null)}</strong>
-            </article>
-            <article>
-              <span>Holder</span>
-              <strong>{holderLabel(selectedAsset()?.current_holder_user_id ?? null)}</strong>
-            </article>
-          </div>
-
-          <div class="split-fields">
-            <label>
-              Status
-              <select bind:value={assetEditForm.status}>
-                {#each assetStatuses as status}
-                  <option value={status}>{status.replaceAll('_', ' ')}</option>
-                {/each}
-              </select>
-            </label>
-            <label>
-              Condition
-              <select bind:value={assetEditForm.condition}>
-                {#each assetConditions as condition}
-                  <option value={condition}>{condition.replaceAll('_', ' ')}</option>
-                {/each}
-              </select>
-            </label>
-          </div>
-          <label>
-            Current location
-            <select bind:value={assetEditForm.current_location_id}>
-              <option value={null}>No location</option>
-              {#each locations as location}
-                <option value={location.id}>{location.name}</option>
-              {/each}
-            </select>
-          </label>
-          <label>
-            Holder
-            <select bind:value={assetEditForm.current_holder_user_id}>
-              <option value={null}>No holder</option>
-              {#each availableHolderUsers() as user}
-                <option value={user.id}>{user.display_name}</option>
-              {/each}
-            </select>
-          </label>
-          <div class="split-fields">
-            <label>Serial <input bind:value={assetEditForm.serial_number} /></label>
-            <label>Asset tag <input bind:value={assetEditForm.asset_tag} /></label>
-          </div>
-          <button type="submit" class="compact" disabled={busy}>Update unit</button>
-        </form>
+        {@const trackedAsset = selectedAsset()}
+        {#if trackedAsset}
+          <TrackedUnitPanel
+            asset={trackedAsset}
+            bind:assetEditForm
+            {assetStatuses}
+            {assetConditions}
+            {locations}
+            availableHolderUsers={availableHolderUsers()}
+            {busy}
+            {locationName}
+            {holderLabel}
+            onUpdate={updateSelectedAsset}
+          />
+        {/if}
       {/if}
 
       {#if activeDetailTab === 'stock' && selectedAsset()?.asset_type === 'stock'}
-        <div class="detail-tab-panel stock-panel">
-          <div class="stock-scope-row">
-            <p class="field-note">Scope: {stockDetailScopeLabel()}</p>
-            <div class="button-row compact-button-row">
-              <button
-                type="button"
-                class="compact"
-                disabled={busy}
-                onclick={() => openStockAdjustDialog('add')}
-              >
-                Add
-              </button>
-              <button
-                type="button"
-                class="secondary compact"
-                disabled={busy || !canRemoveStock()}
-                onclick={() => openStockAdjustDialog('remove')}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-
-          <div class="physical-summary-grid">
-            <article>
-              <span>Total</span>
-              <strong>{selectedStockTotal()} {selectedAsset()?.unit_name ?? 'units'}</strong>
-            </article>
-            <article>
-              <span>Available</span>
-              <strong
-                >{selectedStockTotal() - selectedStockCheckedOut()}
-                {selectedAsset()?.unit_name ?? 'units'}</strong
-              >
-            </article>
-            <article>
-              <span>Checked out</span>
-              <strong>{selectedStockCheckedOut()} {selectedAsset()?.unit_name ?? 'units'}</strong>
-            </article>
-          </div>
-
-          <div class="stock-batch-list">
-            <h3>{inventoryLocationFilter ? 'Physical stock here' : 'Physical batches'}</h3>
-            {#each selectedStockLevels() as level}
-              <article class="stock-batch-card">
-                <div>
-                  <strong>{locationName(level.location_id)}</strong>
-                  <span>
-                    {level.quantity_total - level.quantity_checked_out} available
-                    {#if level.quantity_checked_out}
-                      / {level.quantity_checked_out} checked out
-                    {/if}
-                  </span>
-                </div>
-                <span class="stock-quantity"
-                  >{level.quantity_total} {selectedAsset()?.unit_name ?? 'units'}</span
-                >
-              </article>
-            {:else}
-              <p class="empty">
-                {inventoryLocationFilter
-                  ? 'No stock exists for this item at the selected location.'
-                  : 'No stock batches exist for this item yet.'}
-              </p>
-            {/each}
-          </div>
-
-          <p class="field-note">
-            {inventoryLocationFilter
-              ? 'Add, remove, or move stock for the selected location here.'
-              : 'Add stock here by choosing a location in the popup.'}
-          </p>
-        </div>
+        <AssetStockPanel
+          {busy}
+          canRemoveStock={canRemoveStock()}
+          locationFilter={inventoryLocationFilter}
+          scopeLabel={stockDetailScopeLabel()}
+          stockLevels={selectedStockLevels()}
+          total={selectedStockTotal()}
+          checkedOut={selectedStockCheckedOut()}
+          unitName={selectedAsset()?.unit_name ?? 'units'}
+          {locationName}
+          onAddStock={() => openStockAdjustDialog('add')}
+          onRemoveStock={() => openStockAdjustDialog('remove')}
+        />
       {/if}
 
       {#if activeDetailTab === 'extra'}
-        <form
-          class="asset-edit-form detail-tab-panel"
-          onsubmit={(event) => {
-            event.preventDefault();
-            updateSelectedAsset();
-          }}
-        >
-          <div class="split-fields">
-            <label>Manufacturer <input bind:value={assetEditForm.manufacturer} /></label>
-            <label>Model <input bind:value={assetEditForm.model} /></label>
-          </div>
-          <div class="split-fields">
-            <label>Replacement value <input bind:value={assetEditForm.replacement_value} /></label>
-            <label>Definition type <input value={selectedAsset()?.asset_type} disabled /></label>
-          </div>
-          <label>
-            Internal notes
-            <textarea
-              bind:value={assetEditForm.notes}
-              placeholder="Operational notes, quirks, repair context, or admin-only reminders."
-            ></textarea>
-          </label>
-          <button type="submit" class="compact" disabled={busy}>Update extra</button>
-        </form>
+        {@const extraAsset = selectedAsset()}
+        {#if extraAsset}
+          <AssetExtraPanel
+            asset={extraAsset}
+            bind:assetEditForm
+            {busy}
+            onUpdate={updateSelectedAsset}
+          />
+        {/if}
       {/if}
-
       {#if activeDetailTab === 'qr'}
-        <div class="detail-tab-panel qr-panel">
-          <div class="qr-preview">
-            {#if selectedAssetQr() && qrSvg}
-              {@html qrSvg}
-            {:else}
-              <div class="asset-photo-placeholder qr-placeholder">
-                <strong>No QR code</strong>
-                <span>Generate a QR code for this asset.</span>
-              </div>
-            {/if}
-          </div>
-
-          <div class="qr-detail-copy">
-            <h3>{selectedAsset()?.name}</h3>
-            {#if selectedAssetQr()}
-              <p class="field-note">
-                Scanning this QR will open this asset once scan routing exists.
-              </p>
-            {:else}
-              <p class="field-note">
-                No QR code exists for this asset yet. Generate one and download the SVG for
-                printing.
-              </p>
-            {/if}
-            {#if qrError}
-              <p class="notice error">{qrError}</p>
-            {/if}
-          </div>
-
-          <div class="button-row compact-button-row">
-            <button
-              type="button"
-              class="compact"
-              disabled={busy || Boolean(selectedAssetQr())}
-              onclick={generateSelectedAssetQr}
-            >
-              Generate QR code
-            </button>
-            <button
-              type="button"
-              class="secondary compact"
-              disabled={!selectedAssetQr() || !qrSvg}
-              onclick={downloadSelectedAssetQr}
-            >
-              Download SVG
-            </button>
-          </div>
-        </div>
+        <AssetQrPanel
+          assetName={selectedAsset()?.name ?? ''}
+          qrCode={selectedAssetQr()}
+          {qrSvg}
+          {qrError}
+          {busy}
+          onGenerateQr={generateSelectedAssetQr}
+          onDownloadQr={downloadSelectedAssetQr}
+        />
       {/if}
 
       {#if activeDetailTab === 'history'}
-        <div class="detail-tab-panel history-panel">
-          <div class="timeline">
-            <h3>History</h3>
-            {#each selectedAssetEvents as event}
-              <article class="timeline-entry">
-                <div>
-                  <strong>{event.event_type.replaceAll('_', ' ')}</strong>
-                  <span>{formatDateTime(event.created_at)} - {userLabel(event.actor_user_id)}</span>
-                </div>
-                <p>
-                  {#if event.from_location_id || event.to_location_id}
-                    {locationName(event.from_location_id)} -> {locationName(event.to_location_id)}
-                  {:else}
-                    {event.notes ?? 'No notes'}
-                  {/if}
-                </p>
-              </article>
-            {:else}
-              <p class="empty">No history recorded for this asset yet.</p>
-            {/each}
-          </div>
-        </div>
+        <AssetHistoryPanel
+          events={selectedAssetEvents}
+          {formatDateTime}
+          {userLabel}
+          {locationName}
+        />
       {/if}
     {:else}
       <div class="empty-detail">

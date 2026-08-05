@@ -189,10 +189,9 @@
     const visibleItems = heatmap.items.filter((item) =>
       item.name.toLocaleLowerCase().includes(assetFilter.trim().toLocaleLowerCase())
     );
+    const bucket = heatmap.bucket === 'week' ? 'week' : 'day';
     const xLabels =
-      visibleItems[0]?.cells.map((cell) =>
-        heatmapBucketLabel(cell.bucket_start, heatmap?.bucket)
-      ) ?? [];
+      visibleItems[0]?.cells.map((cell) => heatmapBucketLabel(cell.bucket_start, bucket)) ?? [];
     const yLabels = visibleItems.map((item) => item.name);
     const values = visibleItems.flatMap((item, yIndex) =>
       item.cells.map((cell, xIndex) => [
@@ -218,7 +217,7 @@
           return [
             `<strong>${item.name}</strong>`,
             item.asset_type === 'tracked' ? 'Tracked item' : 'Stock item',
-            heatmapBucketLabel(cell.bucket_start, heatmap?.bucket),
+            heatmapBucketLabel(cell.bucket_start, bucket),
             `Available: ${cell.available_quantity} ${heatmapUnitLabel(item)}`,
             `Reserved: ${cell.reserved_quantity}`,
             `Basket holds: ${cell.held_quantity}`

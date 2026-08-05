@@ -9,6 +9,7 @@ from inventory_booking_api.audit.service import write_audit_log
 from inventory_booking_api.core.security import hash_password
 from inventory_booking_api.users.models import User
 from inventory_booking_api.users.schemas import CurrentUserUpdate, UserCreate, UserUpdate
+from inventory_booking_api.users.session_service import revoke_user_sessions
 
 
 async def list_users(session: AsyncSession) -> list[User]:
@@ -49,6 +50,7 @@ async def create_user(session: AsyncSession, payload: UserCreate, actor: User) -
 
 async def update_user(session: AsyncSession, user: User, payload: UserUpdate, actor: User) -> User:
     updates = payload.model_dump(exclude_unset=True)
+    should_revoke_sessions = False
     if "email" in updates and updates["email"] is not None:
         email = str(updates["email"]).lower()
         existing = await _get_user_by_email(session, email)
@@ -62,10 +64,14 @@ async def update_user(session: AsyncSession, user: User, payload: UserUpdate, ac
         user.display_name = updates["display_name"]
     if "password" in updates and updates["password"] is not None:
         user.password_hash = hash_password(updates["password"])
+        should_revoke_sessions = True
     if "role" in updates:
         user.role = updates["role"]
+        should_revoke_sessions = True
     if "is_active" in updates:
         user.is_active = updates["is_active"]
+        if updates["is_active"] is False:
+            should_revoke_sessions = True
 
     await write_audit_log(
         session,
@@ -75,15 +81,21 @@ async def update_user(session: AsyncSession, user: User, payload: UserUpdate, ac
         entity_id=user.id,
         summary=f"Updated user {user.email}",
     )
+    if should_revoke_sessions:
+        await revoke_user_sessions(session, user.id)
     await session.commit()
     await session.refresh(user)
     return user
 
 
 async def update_current_user(
-    session: AsyncSession, user: User, payload: CurrentUserUpdate
+    session: AsyncSession,
+    user: User,
+    payload: CurrentUserUpdate,
+    current_session_token: str | None = None,
 ) -> User:
     updates = payload.model_dump(exclude_unset=True)
+    should_revoke_other_sessions = False
     if "email" in updates and updates["email"] is not None:
         email = str(updates["email"]).lower()
         existing = await _get_user_by_email(session, email)
@@ -97,6 +109,7 @@ async def update_current_user(
         user.display_name = updates["display_name"]
     if "password" in updates and updates["password"] is not None:
         user.password_hash = hash_password(updates["password"])
+        should_revoke_other_sessions = True
 
     await write_audit_log(
         session,
@@ -106,6 +119,8 @@ async def update_current_user(
         entity_id=user.id,
         summary=f"Updated own account {user.email}",
     )
+    if should_revoke_other_sessions:
+        await revoke_user_sessions(session, user.id, except_raw_token=current_session_token)
     await session.commit()
     await session.refresh(user)
     return user

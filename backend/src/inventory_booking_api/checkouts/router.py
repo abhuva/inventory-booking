@@ -28,6 +28,7 @@ router = APIRouter(prefix="/checkouts", tags=["checkouts"])
 @router.get("", response_model=list[CheckoutSummaryRead])
 async def list_checkout_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[CheckoutSummaryRead]:
     return await list_checkouts(session)
 
@@ -46,6 +47,7 @@ async def create_checkout_endpoint(
 async def get_checkout_endpoint(
     checkout_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> CheckoutRead:
     checkout = await get_checkout(session, checkout_id)
     if checkout is None:

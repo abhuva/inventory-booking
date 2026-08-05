@@ -6,7 +6,19 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from inventory_booking_api.bookings.availability import (
+    build_asset_availability_days,
+    preview_availability,
+)
+from inventory_booking_api.bookings.commands import (
+    cancel_booking,
+    create_booking,
+    delete_booking,
+    update_booking,
+)
+from inventory_booking_api.bookings.heatmap import build_stock_availability_heatmap
 from inventory_booking_api.bookings.models import Booking, BookingLine
+from inventory_booking_api.bookings.queries import get_booking, list_booking_lines, list_bookings
 from inventory_booking_api.bookings.schemas import (
     AvailabilityDaysRead,
     AvailabilityHeatmapRead,
@@ -17,21 +29,9 @@ from inventory_booking_api.bookings.schemas import (
     BookingSummaryRead,
     BookingUpdate,
 )
-from inventory_booking_api.bookings.service import (
-    build_asset_availability_days,
-    build_stock_availability_heatmap,
-    cancel_booking,
-    create_booking,
-    delete_booking,
-    get_booking,
-    list_booking_lines,
-    list_bookings,
-    preview_availability,
-    update_booking,
-)
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.errors import raise_not_found
-from inventory_booking_api.core.security import get_current_user
+from inventory_booking_api.core.security import get_current_user, require_admin
 from inventory_booking_api.users.models import User
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -40,6 +40,7 @@ router = APIRouter(prefix="/bookings", tags=["bookings"])
 @router.get("", response_model=list[BookingSummaryRead])
 async def list_booking_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[BookingSummaryRead]:
     return await list_bookings(session)
 
@@ -106,6 +107,7 @@ async def availability_days_endpoint(
 async def get_booking_endpoint(
     booking_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> BookingRead:
     booking = await get_booking(session, booking_id)
     if booking is None:
@@ -147,7 +149,7 @@ async def cancel_booking_endpoint(
 async def delete_booking_endpoint(
     booking_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_admin)],
 ) -> Response:
     booking = await get_booking(session, booking_id)
     if booking is None:

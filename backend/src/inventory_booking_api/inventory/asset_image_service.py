@@ -1,7 +1,9 @@
+from io import BytesIO
 from pathlib import Path
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, status
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +15,7 @@ from inventory_booking_api.users.models import User
 
 ALLOWED_IMAGE_MIME_TYPES = {"image/webp", "image/jpeg", "image/png"}
 MIME_EXTENSIONS = {"image/webp": ".webp", "image/jpeg": ".jpg", "image/png": ".png"}
+PIL_FORMATS = {"image/webp": "WEBP", "image/jpeg": "JPEG", "image/png": "PNG"}
 
 
 async def list_asset_images(session: AsyncSession) -> list[AssetImage]:
@@ -56,6 +59,12 @@ async def store_asset_image(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Image MIME type does not match file contents.",
         )
+    normalized = normalize_image(content, mime_type)
+    if len(normalized.content) > settings.asset_image_max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Asset image is too large after processing.",
+        )
 
     existing = await get_asset_image(session, asset.id)
     storage_path = relative_storage_path(asset.id, mime_type)
@@ -66,15 +75,15 @@ async def store_asset_image(
         await session.flush()
 
     absolute_path.parent.mkdir(parents=True, exist_ok=True)
-    absolute_path.write_bytes(content)
+    absolute_path.write_bytes(normalized.content)
 
     image = AssetImage(
         asset_id=asset.id,
         storage_path=storage_path,
         mime_type=mime_type,
-        size_bytes=len(content),
-        width=None,
-        height=None,
+        size_bytes=len(normalized.content),
+        width=normalized.width,
+        height=normalized.height,
         created_by_user_id=actor.id,
     )
     session.add(image)
@@ -148,6 +157,37 @@ def detect_image_mime_type(content: bytes) -> str | None:
     if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP":
         return "image/webp"
     return None
+
+
+class NormalizedImage:
+    def __init__(self, content: bytes, width: int, height: int) -> None:
+        self.content = content
+        self.width = width
+        self.height = height
+
+
+def normalize_image(content: bytes, mime_type: str) -> NormalizedImage:
+    """Decode and re-encode image bytes to strip unsafe/polyglot payloads."""
+
+    try:
+        with Image.open(BytesIO(content)) as image:
+            image.load()
+            width, height = image.size
+            output = BytesIO()
+            if mime_type == "image/jpeg":
+                image = image.convert("RGB")
+                image.save(output, format=PIL_FORMATS[mime_type], quality=85, optimize=True)
+            elif mime_type == "image/png":
+                image.save(output, format=PIL_FORMATS[mime_type], optimize=True)
+            else:
+                image.save(output, format=PIL_FORMATS[mime_type], quality=85, method=6)
+    except (OSError, UnidentifiedImageError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Image could not be decoded.",
+        ) from None
+
+    return NormalizedImage(output.getvalue(), width, height)
 
 
 def relative_storage_path(asset_id: UUID, mime_type: str) -> str:

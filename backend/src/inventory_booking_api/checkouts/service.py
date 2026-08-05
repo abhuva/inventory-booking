@@ -11,6 +11,11 @@ from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.checkouts.enums import CheckoutStatus
 from inventory_booking_api.checkouts.models import Checkout, CheckoutLine
 from inventory_booking_api.checkouts.schemas import CheckoutCreate
+from inventory_booking_api.core.locks import (
+    acquire_advisory_locks,
+    asset_lock_key,
+    booking_lock_key,
+)
 from inventory_booking_api.inventory.enums import AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
 from inventory_booking_api.users.models import User
@@ -64,6 +69,10 @@ async def create_checkout(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Booking has no lines to check out.",
         )
+    await acquire_advisory_locks(
+        session,
+        [booking_lock_key(booking.id), *(asset_lock_key(line.asset_id) for line in booking_lines)],
+    )
 
     checkout = Checkout(
         booking_id=booking.id,

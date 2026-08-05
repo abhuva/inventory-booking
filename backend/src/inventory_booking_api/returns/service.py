@@ -10,6 +10,11 @@ from inventory_booking_api.bookings.enums import BookingStatus
 from inventory_booking_api.bookings.models import Booking
 from inventory_booking_api.checkouts.enums import CheckoutStatus
 from inventory_booking_api.checkouts.models import Checkout, CheckoutLine
+from inventory_booking_api.core.locks import (
+    acquire_advisory_locks,
+    asset_lock_key,
+    checkout_lock_key,
+)
 from inventory_booking_api.inventory.enums import AssetCondition, AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
 from inventory_booking_api.returns.models import Return, ReturnLine
@@ -33,6 +38,13 @@ async def list_return_lines(session: AsyncSession, return_id: UUID) -> list[Retu
     return list(result.scalars().all())
 
 
+async def get_checkout_lines(session: AsyncSession, checkout_id: UUID) -> list[CheckoutLine]:
+    result = await session.execute(
+        select(CheckoutLine).where(CheckoutLine.checkout_id == checkout_id)
+    )
+    return list(result.scalars().all())
+
+
 async def create_return(
     session: AsyncSession,
     payload: ReturnCreate,
@@ -49,6 +61,14 @@ async def create_return(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Checkout is already fully returned.",
         )
+    checkout_lines = await get_checkout_lines(session, checkout.id)
+    await acquire_advisory_locks(
+        session,
+        [
+            checkout_lock_key(checkout.id),
+            *(asset_lock_key(line.asset_id) for line in checkout_lines),
+        ],
+    )
 
     seen_lines: set[UUID] = set()
     return_record = Return(
@@ -118,7 +138,11 @@ async def return_checkout_line(
         )
 
     quantity = resolve_return_quantity(checkout_line, line_payload.quantity, asset)
-    assert quantity is not None
+    if quantity is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Return quantity is required.",
+        )
     remaining = line_remaining_quantity(checkout_line, asset)
     if quantity > remaining:
         raise HTTPException(

@@ -1,0 +1,22 @@
+:root {
+  font-family: 'Aptos', 'Segoe UI', sans-serif;
+  color: #1d2520;
+  background: #eef0eb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-width: 320px;
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  background: #eef0eb;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}

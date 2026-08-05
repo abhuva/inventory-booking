@@ -82,3 +82,39 @@ async def write_item_event(
     )
     session.add(item_event)
     return item_event
+
+
+async def write_audited_item_event(
+    session: AsyncSession,
+    *,
+    actor: User | None,
+    asset_id: UUID,
+    event_type: ItemEventType,
+    audit_action: AuditAction,
+    audit_entity_type: str,
+    audit_entity_id: UUID | None,
+    audit_summary: str,
+    item_notes: str | None = None,
+    item_details: dict[str, Any] | None = None,
+    audit_details: dict[str, Any] | None = None,
+) -> tuple[ItemEvent, AuditLog]:
+    """Stage an operational item event and its audit log in the same transaction."""
+
+    item_event = await write_item_event(
+        session,
+        asset_id=asset_id,
+        event_type=event_type,
+        actor=actor,
+        notes=item_notes,
+        details=item_details,
+    )
+    audit_log = await write_audit_log(
+        session,
+        actor=actor,
+        action=audit_action,
+        entity_type=audit_entity_type,
+        entity_id=audit_entity_id,
+        summary=audit_summary,
+        details=audit_details,
+    )
+    return item_event, audit_log

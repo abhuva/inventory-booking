@@ -51,6 +51,14 @@
     type UserRole,
     type UserUpdate
   } from '$lib/api';
+  import { adminApi } from '$lib/api/admin';
+  import { authApi } from '$lib/api/auth';
+  import { basketApi } from '$lib/api/basket';
+  import { bookingsApi } from '$lib/api/bookings';
+  import { inventoryApi } from '$lib/api/inventory';
+  import { locationsApi } from '$lib/api/locations';
+  import { operationsApi } from '$lib/api/operations';
+  import { personsApi } from '$lib/api/persons';
   import AccountPanel from '$lib/components/workspace/AccountPanel.svelte';
   import AdminPanel from '$lib/components/workspace/AdminPanel.svelte';
   import BasketPanel from '$lib/components/workspace/BasketPanel.svelte';
@@ -61,6 +69,10 @@
   import LocationsPanel from '$lib/components/workspace/LocationsPanel.svelte';
   import PersonsPanel from '$lib/components/workspace/PersonsPanel.svelte';
   import { prepareAssetImage, prepareInventoryImage } from '$lib/image';
+  import { createAuthState } from '$lib/workspace/auth-state.svelte';
+  import { createBasketState } from '$lib/workspace/basket-state.svelte';
+  import { createBookingState, type BookingDraftLine } from '$lib/workspace/booking-state.svelte';
+  import { createInventoryState } from '$lib/workspace/inventory-state.svelte';
   import WorkspaceTabs from '$lib/components/workspace/WorkspaceTabs.svelte';
   import type { WorkspaceTab, WorkspaceTabDefinition } from '$lib/components/workspace/types';
 
@@ -87,20 +99,7 @@
     { id: 'admin', label: 'Admin', description: 'Users and categories' }
   ];
 
-  type BookingDraftLine = BookingLineCreate & {
-    client_id: string;
-  };
-
-  type BookingDraft = {
-    title: string;
-    person_id: string;
-    starts_at: string;
-    ends_at: string;
-    notes: string;
-    lines: BookingDraftLine[];
-  };
-
-  let currentUser = $state<User | null>(null);
+  const auth = createAuthState();
   let categories = $state<Category[]>([]);
   let persons = $state<Person[]>([]);
   let locations = $state<Location[]>([]);
@@ -108,32 +107,22 @@
   let assets = $state<Asset[]>([]);
   let assetImages = $state<AssetImage[]>([]);
   let stockLevels = $state<StockLevel[]>([]);
-  let activeBasket = $state<Basket | null>(null);
+  const basketState = createBasketState();
+  const bookingState = createBookingState();
+  const inventoryState = createInventoryState();
   let bookings = $state<Booking[]>([]);
   let checkouts = $state<Checkout[]>([]);
   let returns = $state<ReturnRecord[]>([]);
   let qrCodes = $state<QrCode[]>([]);
   let users = $state<User[]>([]);
-  let assetSearch = $state('');
-  let selectedAssetId = $state('');
-  let selectedAssetEvents = $state<ItemEvent[]>([]);
   let selectedLocationId = $state('');
   let selectedPersonId = $state('');
-  let availability = $state<Availability | null>(null);
-  let email = $state('admin@example.org');
-  let password = $state('change-this-password');
   let loading = $state(true);
   let busy = $state(false);
   let message = $state('');
   let error = $state('');
   let activeTab = $state<WorkspaceTab>('dashboard');
   let stockAvailabilityVersion = $state(0);
-  let accountForm = $state({
-    email: '',
-    display_name: '',
-    password: ''
-  });
-
   let categoryForm = $state<CategoryCreate>({ name: '', description: '' });
   let categoryUpdateForm = $state<CategoryUpdate & { category_id: string }>({
     category_id: '',
@@ -160,7 +149,7 @@
     is_active: true,
     password: ''
   });
-  let locationForm = $state<LocationCreate>({ name: '', type: 'storage' });
+  let locationForm = $state<LocationCreate>({ name: '', type: 'storage', is_active: true });
   let locationEditForm = $state<LocationUpdate>({
     name: '',
     type: 'storage',
@@ -188,78 +177,11 @@
     user_id: null,
     is_active: true
   });
-  let assetForm = $state<AssetCreate>({
-    name: '',
-    asset_type: 'tracked',
-    category_id: null,
-    unit_name: null,
-    current_location_id: null
-  });
-  let stockForm = $state<StockLevelCreate>({ asset_id: '', location_id: '', quantity_total: 0 });
-  let bookingForm = $state({
-    title: '',
-    starts_at: '',
-    ends_at: '',
-    asset_id: '',
-    location_id: '',
-    quantity: 1
-  });
-  let bookingDraft = $state<BookingDraft>({
-    title: '',
-    person_id: '',
-    starts_at: '',
-    ends_at: '',
-    notes: '',
-    lines: []
-  });
-  let bookingDraftLineForm = $state({
-    asset_id: '',
-    location_id: '',
-    quantity: 1,
-    notes: ''
-  });
-  let basketTitle = $state('');
-  let basketNotes = $state('');
-  let trackedTransferForm = $state<TrackedAssetTransfer & { asset_id: string }>({
-    asset_id: '',
-    to_location_id: '',
-    to_holder_user_id: null,
-    notes: ''
-  });
-  let stockTransferForm = $state<StockTransfer>({
-    asset_id: '',
-    from_location_id: '',
-    to_location_id: '',
-    quantity: 1,
-    notes: ''
-  });
-  let assetStateForm = $state({
-    asset_id: '',
-    action: 'maintenance_start',
-    status: 'damaged',
-    condition: 'unknown',
-    notes: ''
-  });
-  let assetEditForm = $state<AssetUpdate>({
-    name: '',
-    category_id: null,
-    status: 'available',
-    condition: 'unknown',
-    home_location_id: null,
-    current_location_id: null,
-    current_holder_user_id: null,
-    manufacturer: '',
-    model: '',
-    serial_number: '',
-    asset_tag: '',
-    replacement_value: null,
-    description: '',
-    notes: ''
-  });
-
   const trackedAssets = $derived(assets.filter((asset) => asset.asset_type === 'tracked'));
   const stockAssets = $derived(assets.filter((asset) => asset.asset_type === 'stock'));
-  const filteredAssets = $derived(assets.filter((asset) => assetMatchesSearch(asset, assetSearch)));
+  const filteredAssets = $derived(
+    assets.filter((asset) => assetMatchesSearch(asset, inventoryState.assetSearch))
+  );
 
   $effect(() => {
     void bootstrap();
@@ -281,11 +203,11 @@
 
   async function loadCurrentUser() {
     try {
-      currentUser = await apiGet<User>('/auth/me');
+      auth.currentUser = await authApi.currentUser();
       resetAccountForm();
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
-        currentUser = null;
+        auth.currentUser = null;
         resetAccountForm();
         return;
       }
@@ -309,19 +231,19 @@
       loadedQrCodes,
       loadedUsers
     ] = await Promise.all([
-      apiGet<Category[]>('/categories'),
-      currentUser ? apiGet<Person[]>('/persons') : Promise.resolve([]),
-      apiGet<Location[]>('/locations'),
-      currentUser ? apiGet<LocationImage[]>('/locations/images') : Promise.resolve([]),
-      apiGet<Asset[]>('/assets'),
-      currentUser ? apiGet<AssetImage[]>('/assets/images') : Promise.resolve([]),
-      apiGet<StockLevel[]>('/stock-levels'),
-      currentUser ? apiGet<Basket | null>('/basket/active') : Promise.resolve(null),
-      apiGet<Booking[]>('/bookings'),
-      apiGet<Checkout[]>('/checkouts'),
-      apiGet<ReturnRecord[]>('/returns'),
-      currentUser ? apiGet<QrCode[]>('/qr-codes') : Promise.resolve([]),
-      currentUser?.role === 'admin' ? apiGet<User[]>('/users') : Promise.resolve([])
+      adminApi.listCategories(),
+      auth.currentUser ? personsApi.listPersons() : Promise.resolve([]),
+      locationsApi.listLocations(),
+      auth.currentUser ? locationsApi.listLocationImages() : Promise.resolve([]),
+      inventoryApi.listAssets(),
+      auth.currentUser ? inventoryApi.listAssetImages() : Promise.resolve([]),
+      inventoryApi.listStockLevels(),
+      auth.currentUser ? basketApi.activeBasket() : Promise.resolve(null),
+      bookingsApi.listBookings(),
+      operationsApi.listCheckouts(),
+      operationsApi.listReturns(),
+      auth.currentUser ? inventoryApi.listQrCodes() : Promise.resolve([]),
+      auth.currentUser?.role === 'admin' ? adminApi.listUsers() : Promise.resolve([])
     ]);
     categories = loadedCategories;
     persons = loadedPersons;
@@ -330,41 +252,38 @@
     assets = loadedAssets;
     assetImages = loadedAssetImages;
     stockLevels = loadedStockLevels;
-    activeBasket = loadedActiveBasket;
+    basketState.activeBasket = loadedActiveBasket;
     syncBasketForm();
     checkouts = loadedCheckouts;
     returns = loadedReturns;
     qrCodes = loadedQrCodes;
     users = loadedUsers;
     bookings = await Promise.all(
-      bookingSummaries.map((booking) => apiGet<Booking>(`/bookings/${booking.id}`))
+      bookingSummaries.map((booking) => bookingsApi.getBooking(booking.id))
     );
     stockAvailabilityVersion += 1;
   }
 
   async function login() {
     await runAction(async () => {
-      currentUser = await apiPost<User>('/auth/login', { email, password });
+      auth.currentUser = await authApi.login({ email: auth.email, password: auth.password });
       resetAccountForm();
       await loadInventory();
-      message = `Logged in as ${currentUser.email}`;
+      message = `Logged in as ${auth.currentUser.email}`;
     });
   }
 
   async function logout() {
     await runAction(async () => {
-      await apiPost<void>('/auth/logout');
-      currentUser = null;
+      await authApi.logout();
+      auth.currentUser = null;
       assetImages = [];
       locationImages = [];
-      activeBasket = null;
-      basketTitle = '';
-      basketNotes = '';
+      basketState.clear();
       qrCodes = [];
       users = [];
       persons = [];
-      selectedAssetId = '';
-      selectedAssetEvents = [];
+      inventoryState.clearSelection();
       selectedLocationId = '';
       selectedPersonId = '';
       resetAssetEditForm();
@@ -379,13 +298,13 @@
   async function saveAccount() {
     await runAction(async () => {
       const payload: UserUpdate = {
-        email: accountForm.email,
-        display_name: accountForm.display_name
+        email: auth.accountForm.email,
+        display_name: auth.accountForm.display_name
       };
-      if (accountForm.password) {
-        payload.password = accountForm.password;
+      if (auth.accountForm.password) {
+        payload.password = auth.accountForm.password;
       }
-      currentUser = await apiPatch<User>('/auth/me', payload);
+      auth.currentUser = await authApi.updateCurrentUser(payload);
       resetAccountForm();
       await loadInventory();
       message = 'Account updated';
@@ -394,7 +313,7 @@
 
   async function createCategory() {
     await runAction(async () => {
-      await apiPost<Category>('/categories', emptyStringsToNull(categoryForm));
+      await adminApi.createCategory(emptyStringsToNull(categoryForm));
       categoryForm = { name: '', description: '' };
       await loadInventory();
       message = 'Category created';
@@ -404,7 +323,7 @@
   async function updateCategory() {
     await runAction(async () => {
       const { category_id: categoryId, ...payload } = categoryUpdateForm;
-      await apiPatch<Category>(`/categories/${categoryId}`, emptyStringsToNull(payload));
+      await adminApi.updateCategory(categoryId, emptyStringsToNull(payload));
       categoryUpdateForm = { category_id: '', name: '', description: '' };
       await loadInventory();
       message = 'Category updated';
@@ -413,7 +332,7 @@
 
   async function createUser() {
     await runAction(async () => {
-      await apiPost<User>('/users', userCreateForm);
+      await adminApi.createUser(userCreateForm);
       userCreateForm = {
         email: '',
         display_name: '',
@@ -436,7 +355,7 @@
       if (userUpdateForm.password) {
         payload.password = userUpdateForm.password;
       }
-      await apiPatch<User>(`/users/${userUpdateForm.user_id}`, payload);
+      await adminApi.updateUser(userUpdateForm.user_id, payload);
       userUpdateForm.password = '';
       await loadInventory();
       message = 'User updated';
@@ -445,7 +364,7 @@
 
   async function createPerson() {
     await runAction(async () => {
-      await apiPost<Person>('/persons', emptyStringsToNull(personForm));
+      await personsApi.createPerson(emptyStringsToNull(personForm));
       personForm = {
         display_name: '',
         person_type: 'user',
@@ -465,7 +384,7 @@
       if (!selectedPersonId) {
         throw new Error('Choose a person first.');
       }
-      await apiPatch<Person>(`/persons/${selectedPersonId}`, emptyStringsToNull(personEditForm));
+      await personsApi.updatePerson(selectedPersonId, emptyStringsToNull(personEditForm));
       await loadInventory();
       resetPersonEditForm(selectedPersonId);
       message = 'Person updated';
@@ -477,7 +396,7 @@
       if (!selectedPersonId) {
         throw new Error('Choose a person first.');
       }
-      await apiDelete<void>(`/persons/${selectedPersonId}`);
+      await personsApi.deletePerson(selectedPersonId);
       selectedPersonId = '';
       resetPersonEditForm('');
       await loadInventory();
@@ -487,8 +406,8 @@
 
   async function createLocation() {
     await runAction(async () => {
-      await apiPost<Location>('/locations', locationForm);
-      locationForm = { name: '', type: 'storage' };
+      await locationsApi.createLocation(locationForm);
+      locationForm = { name: '', type: 'storage', is_active: true };
       await loadInventory();
       message = 'Location created';
     });
@@ -499,10 +418,7 @@
       if (!selectedLocationId) {
         throw new Error('Choose a location first.');
       }
-      await apiPatch<Location>(
-        `/locations/${selectedLocationId}`,
-        emptyStringsToNull(locationEditForm)
-      );
+      await locationsApi.updateLocation(selectedLocationId, emptyStringsToNull(locationEditForm));
       await loadInventory();
       resetLocationEditForm(selectedLocationId);
       message = 'Location updated';
@@ -514,7 +430,7 @@
       if (!selectedLocationId) {
         throw new Error('Choose a location first.');
       }
-      await apiDelete<void>(`/locations/${selectedLocationId}`);
+      await locationsApi.deleteLocation(selectedLocationId);
       selectedLocationId = '';
       resetLocationEditForm('');
       await loadInventory();
@@ -530,7 +446,7 @@
       const processed = await prepareInventoryImage(file);
       const formData = new FormData();
       formData.append('file', processed);
-      await apiUpload<LocationImage>(`/locations/${selectedLocationId}/image`, formData);
+      await locationsApi.uploadLocationImage(selectedLocationId, formData);
       await loadInventory();
       resetLocationEditForm(selectedLocationId);
       message = 'Location photo updated';
@@ -542,7 +458,7 @@
       if (!selectedLocationId) {
         throw new Error('Choose a location first.');
       }
-      await apiDelete<void>(`/locations/${selectedLocationId}/image`);
+      await locationsApi.deleteLocationImage(selectedLocationId);
       await loadInventory();
       resetLocationEditForm(selectedLocationId);
       message = 'Location photo deleted';
@@ -552,17 +468,14 @@
   async function createAsset() {
     await runAction(async () => {
       const payload: AssetCreate = {
-        ...emptyStringsToNull(assetForm),
-        unit_name: assetForm.asset_type === 'stock' ? assetForm.unit_name : null
+        ...emptyStringsToNull(inventoryState.assetForm),
+        unit_name:
+          inventoryState.assetForm.asset_type === 'stock'
+            ? inventoryState.assetForm.unit_name
+            : null
       };
-      await apiPost<Asset>('/assets', payload);
-      assetForm = {
-        name: '',
-        asset_type: 'tracked',
-        category_id: null,
-        unit_name: null,
-        current_location_id: null
-      };
+      await inventoryApi.createAsset(payload);
+      inventoryState.resetAssetForm();
       await loadInventory();
       message = 'Asset created';
     });
@@ -570,25 +483,26 @@
 
   async function updateSelectedAsset() {
     await runAction(async () => {
-      if (!selectedAssetId) {
+      if (!inventoryState.selectedAssetId) {
         throw new Error('Choose an asset first.');
       }
-      await apiPatch<Asset>(`/assets/${selectedAssetId}`, emptyStringsToNull(assetEditForm));
+      await inventoryApi.updateAsset(
+        inventoryState.selectedAssetId,
+        emptyStringsToNull(inventoryState.assetEditForm)
+      );
       await loadInventory();
-      await selectAssetDetail(selectedAssetId);
+      await selectAssetDetail(inventoryState.selectedAssetId);
       message = 'Asset updated';
     });
   }
 
   async function deleteSelectedAsset(): Promise<boolean> {
     return await runAction(async () => {
-      if (!selectedAssetId) {
+      if (!inventoryState.selectedAssetId) {
         throw new Error('Choose an asset first.');
       }
-      await apiDelete<void>(`/assets/${selectedAssetId}`);
-      selectedAssetId = '';
-      selectedAssetEvents = [];
-      resetAssetEditForm();
+      await inventoryApi.deleteAsset(inventoryState.selectedAssetId);
+      inventoryState.clearSelection();
       await loadInventory();
       message = 'Asset deleted';
     });
@@ -596,37 +510,37 @@
 
   async function uploadSelectedAssetImage(file: File) {
     await runAction(async () => {
-      if (!selectedAssetId) {
+      if (!inventoryState.selectedAssetId) {
         throw new Error('Choose an asset first.');
       }
       const processed = await prepareAssetImage(file);
       const formData = new FormData();
       formData.append('file', processed);
-      await apiUpload<AssetImage>(`/assets/${selectedAssetId}/image`, formData);
+      await inventoryApi.uploadAssetImage(inventoryState.selectedAssetId, formData);
       await loadInventory();
-      await selectAssetDetail(selectedAssetId);
+      await selectAssetDetail(inventoryState.selectedAssetId);
       message = 'Asset photo updated';
     });
   }
 
   async function deleteSelectedAssetImage() {
     await runAction(async () => {
-      if (!selectedAssetId) {
+      if (!inventoryState.selectedAssetId) {
         throw new Error('Choose an asset first.');
       }
-      await apiDelete<void>(`/assets/${selectedAssetId}/image`);
+      await inventoryApi.deleteAssetImage(inventoryState.selectedAssetId);
       await loadInventory();
-      await selectAssetDetail(selectedAssetId);
+      await selectAssetDetail(inventoryState.selectedAssetId);
       message = 'Asset photo deleted';
     });
   }
 
   async function generateSelectedAssetQr() {
     await runAction(async () => {
-      if (!selectedAssetId) {
+      if (!inventoryState.selectedAssetId) {
         throw new Error('Choose an asset first.');
       }
-      await apiPost<QrCode>(`/assets/${selectedAssetId}/qr`);
+      await inventoryApi.generateAssetQr(inventoryState.selectedAssetId);
       await loadInventory();
       message = 'QR code ready';
     });
@@ -634,8 +548,8 @@
 
   async function createStockLevel() {
     await runAction(async () => {
-      await apiPost<StockLevel>('/stock-levels', stockForm);
-      stockForm = { asset_id: '', location_id: '', quantity_total: 0 };
+      await inventoryApi.createStockLevel(inventoryState.stockForm);
+      inventoryState.resetStockForm();
       await loadInventory();
       message = 'Stock level created';
     });
@@ -643,39 +557,30 @@
 
   async function previewBooking(): Promise<boolean> {
     return await runAction(async () => {
-      availability = await apiPost<Availability>('/bookings/availability', buildBookingPayload());
-      message = availability.available ? 'Booking is available' : 'Booking has conflicts';
+      bookingState.availability = await bookingsApi.previewAvailability(buildBookingPayload());
+      message = bookingState.availability.available
+        ? 'Booking is available'
+        : 'Booking has conflicts';
     });
   }
 
   async function createBooking(): Promise<boolean> {
     return await runAction(async () => {
-      const booking = await apiPost<Booking>('/bookings', buildBookingPayload());
-      bookingForm = {
-        title: '',
-        starts_at: '',
-        ends_at: '',
-        asset_id: '',
-        location_id: '',
-        quantity: 1
-      };
-      availability = null;
+      const booking = await bookingsApi.createBooking(buildBookingPayload());
+      bookingState.resetBookingForm();
       await loadInventory();
       message = `Booking created: ${booking.title}`;
     });
   }
 
   function clearBookingAvailability() {
-    availability = null;
+    bookingState.clearAvailability();
   }
 
   async function previewBookingDraft(): Promise<boolean> {
     return await runAction(async () => {
-      availability = await apiPost<Availability>(
-        '/bookings/availability',
-        buildBookingDraftPayload()
-      );
-      message = availability.available
+      bookingState.availability = await bookingsApi.previewAvailability(buildBookingDraftPayload());
+      message = bookingState.availability.available
         ? 'Booking bundle is available'
         : 'Booking bundle has conflicts';
     });
@@ -683,9 +588,8 @@
 
   async function createBookingDraft(): Promise<boolean> {
     return await runAction(async () => {
-      const booking = await apiPost<Booking>('/bookings', buildBookingDraftPayload());
+      const booking = await bookingsApi.createBooking(buildBookingDraftPayload());
       resetBookingDraft();
-      availability = null;
       await loadInventory();
       message = `Booking created: ${booking.title}`;
     });
@@ -693,7 +597,7 @@
 
   async function updateBooking(bookingId: string, payload: BookingUpdate): Promise<boolean> {
     return await runAction(async () => {
-      await apiPatch<Booking>(`/bookings/${bookingId}`, emptyStringsToNull(payload));
+      await bookingsApi.updateBooking(bookingId, emptyStringsToNull(payload));
       await loadInventory();
       message = 'Booking updated';
     });
@@ -701,7 +605,7 @@
 
   async function deleteBooking(bookingId: string): Promise<boolean> {
     return await runAction(async () => {
-      await apiDelete<void>(`/bookings/${bookingId}`);
+      await bookingsApi.deleteBooking(bookingId);
       await loadInventory();
       message = 'Booking deleted';
     });
@@ -709,17 +613,17 @@
 
   async function addBookingFormToBasket(): Promise<boolean> {
     return await runAction(async () => {
-      const asset = assets.find((entry) => entry.id === bookingForm.asset_id);
+      const asset = assets.find((entry) => entry.id === bookingState.bookingForm.asset_id);
       if (!asset) {
         throw new Error('Choose an asset first.');
       }
       const basket = await ensureBasketFromBookingForm();
-      activeBasket = await apiPost<Basket>(`/basket/${basket.id}/lines`, {
-        asset_id: bookingForm.asset_id,
-        location_id: asset.asset_type === 'stock' ? bookingForm.location_id : null,
-        starts_at: new Date(bookingForm.starts_at).toISOString(),
-        ends_at: new Date(bookingForm.ends_at).toISOString(),
-        quantity: asset.asset_type === 'stock' ? bookingForm.quantity : null,
+      basketState.activeBasket = await basketApi.addLine(basket.id, {
+        asset_id: bookingState.bookingForm.asset_id,
+        location_id: asset.asset_type === 'stock' ? bookingState.bookingForm.location_id : null,
+        starts_at: new Date(bookingState.bookingForm.starts_at).toISOString(),
+        ends_at: new Date(bookingState.bookingForm.ends_at).toISOString(),
+        quantity: asset.asset_type === 'stock' ? bookingState.bookingForm.quantity : null,
         notes: null
       });
       syncBasketForm();
@@ -730,17 +634,17 @@
 
   async function updateBasket(): Promise<boolean> {
     return await runAction(async () => {
-      if (!activeBasket) {
+      if (!basketState.activeBasket) {
         throw new Error('No active basket.');
       }
-      activeBasket = await apiPatch<Basket>(
-        `/basket/${activeBasket.id}`,
+      basketState.activeBasket = await basketApi.updateBasket(
+        basketState.activeBasket.id,
         emptyStringsToNull<BasketUpdate>({
-          title: basketTitle,
-          person_id: activeBasket.person_id,
-          notes: basketNotes,
-          starts_at: activeBasket.starts_at,
-          ends_at: activeBasket.ends_at
+          title: basketState.basketTitle,
+          person_id: basketState.activeBasket.person_id,
+          notes: basketState.basketNotes,
+          starts_at: basketState.activeBasket.starts_at,
+          ends_at: basketState.activeBasket.ends_at
         })
       );
       syncBasketForm();
@@ -750,13 +654,13 @@
 
   async function removeBasketLine(lineId: string): Promise<boolean> {
     return await runAction(async () => {
-      if (!activeBasket) {
+      if (!basketState.activeBasket) {
         throw new Error('No active basket.');
       }
-      await apiDelete<void>(`/basket/${activeBasket.id}/lines/${lineId}`);
-      activeBasket = await apiGet<Basket | null>('/basket/active');
+      await basketApi.removeLine(basketState.activeBasket.id, lineId);
+      basketState.activeBasket = await basketApi.activeBasket();
       syncBasketForm();
-      if (!activeBasket?.lines.length) {
+      if (!basketState.activeBasket?.lines.length) {
         activeTab = 'inventory';
       }
       message = 'Basket item removed';
@@ -765,11 +669,12 @@
 
   async function updateBasketLine(lineId: string, payload: BasketLineUpdate): Promise<boolean> {
     return await runAction(async () => {
-      if (!activeBasket) {
+      if (!basketState.activeBasket) {
         throw new Error('No active basket.');
       }
-      activeBasket = await apiPatch<Basket>(
-        `/basket/${activeBasket.id}/lines/${lineId}`,
+      basketState.activeBasket = await basketApi.updateLine(
+        basketState.activeBasket.id,
+        lineId,
         emptyStringsToNull<BasketLineUpdate>(payload)
       );
       syncBasketForm();
@@ -779,13 +684,11 @@
 
   async function confirmBasket(): Promise<boolean> {
     return await runAction(async () => {
-      if (!activeBasket) {
+      if (!basketState.activeBasket) {
         throw new Error('No active basket.');
       }
-      const booking = await apiPost<Booking>(`/basket/${activeBasket.id}/confirm`);
-      activeBasket = null;
-      basketTitle = '';
-      basketNotes = '';
+      const booking = await basketApi.confirmBasket(basketState.activeBasket.id);
+      basketState.clear();
       await loadInventory();
       activeTab = 'bookings';
       message = `Booking created: ${booking.title}`;
@@ -794,13 +697,11 @@
 
   async function cancelBasket(): Promise<boolean> {
     return await runAction(async () => {
-      if (!activeBasket) {
+      if (!basketState.activeBasket) {
         throw new Error('No active basket.');
       }
-      await apiPost<Basket>(`/basket/${activeBasket.id}/cancel`);
-      activeBasket = null;
-      basketTitle = '';
-      basketNotes = '';
+      await basketApi.cancelBasket(basketState.activeBasket.id);
+      basketState.clear();
       activeTab = 'inventory';
       message = 'Basket cancelled';
     });
@@ -808,80 +709,58 @@
 
   async function ensureBasketFromBookingForm(): Promise<Basket> {
     const payload: BasketCreate = {
-      title: bookingDraft.title || bookingForm.title || 'New basket',
-      person_id: bookingDraft.person_id,
-      starts_at: new Date(bookingDraft.starts_at || bookingForm.starts_at).toISOString(),
-      ends_at: new Date(bookingDraft.ends_at || bookingForm.ends_at).toISOString(),
-      notes: bookingDraft.notes || null
+      title: bookingState.bookingDraft.title || bookingState.bookingForm.title || 'New basket',
+      person_id: bookingState.bookingDraft.person_id,
+      starts_at: new Date(
+        bookingState.bookingDraft.starts_at || bookingState.bookingForm.starts_at
+      ).toISOString(),
+      ends_at: new Date(
+        bookingState.bookingDraft.ends_at || bookingState.bookingForm.ends_at
+      ).toISOString(),
+      notes: bookingState.bookingDraft.notes || null
     };
-    activeBasket = await apiPost<Basket>('/basket', payload);
+    basketState.activeBasket = await basketApi.createBasket(payload);
     syncBasketForm();
-    return activeBasket;
+    return basketState.activeBasket;
   }
 
   function syncBasketForm(): void {
-    basketTitle = activeBasket?.title ?? '';
-    basketNotes = activeBasket?.notes ?? '';
+    basketState.syncForm();
   }
 
   function addBookingDraftLine(line: BookingLineCreate): void {
-    bookingDraft.lines = [
-      ...bookingDraft.lines,
-      {
-        ...line,
-        client_id: crypto.randomUUID()
-      }
-    ];
-    availability = null;
+    bookingState.addDraftLine(line);
   }
 
   function addBookingDraftLineFromForm(): void {
-    const asset = assets.find((entry) => entry.id === bookingDraftLineForm.asset_id);
+    const asset = assets.find((entry) => entry.id === bookingState.bookingDraftLineForm.asset_id);
     if (!asset) {
       error = 'Choose an asset first.';
       return;
     }
-    if (asset.asset_type === 'stock' && !bookingDraftLineForm.location_id) {
+    if (asset.asset_type === 'stock' && !bookingState.bookingDraftLineForm.location_id) {
       error = 'Choose a stock source location.';
       return;
     }
     addBookingDraftLine({
-      asset_id: bookingDraftLineForm.asset_id,
-      location_id: asset.asset_type === 'stock' ? bookingDraftLineForm.location_id : null,
-      starts_at: new Date(bookingDraft.starts_at).toISOString(),
-      ends_at: new Date(bookingDraft.ends_at).toISOString(),
-      quantity: asset.asset_type === 'stock' ? bookingDraftLineForm.quantity : null,
-      notes: bookingDraftLineForm.notes || null
+      asset_id: bookingState.bookingDraftLineForm.asset_id,
+      location_id:
+        asset.asset_type === 'stock' ? bookingState.bookingDraftLineForm.location_id : null,
+      starts_at: new Date(bookingState.bookingDraft.starts_at).toISOString(),
+      ends_at: new Date(bookingState.bookingDraft.ends_at).toISOString(),
+      quantity: asset.asset_type === 'stock' ? bookingState.bookingDraftLineForm.quantity : null,
+      notes: bookingState.bookingDraftLineForm.notes || null
     });
-    bookingDraftLineForm = {
-      asset_id: '',
-      location_id: '',
-      quantity: 1,
-      notes: ''
-    };
+    bookingState.resetDraftLineForm();
     message = 'Added line to booking bundle';
   }
 
   function removeBookingDraftLine(clientId: string): void {
-    bookingDraft.lines = bookingDraft.lines.filter((line) => line.client_id !== clientId);
-    availability = null;
+    bookingState.removeDraftLine(clientId);
   }
 
   function resetBookingDraft(): void {
-    bookingDraft = {
-      title: '',
-      person_id: '',
-      starts_at: '',
-      ends_at: '',
-      notes: '',
-      lines: []
-    };
-    bookingDraftLineForm = {
-      asset_id: '',
-      location_id: '',
-      quantity: 1,
-      notes: ''
-    };
+    bookingState.resetDraft();
   }
 
   async function createCheckoutForBooking(
@@ -890,8 +769,7 @@
     notes: string
   ): Promise<boolean> {
     return await runAction(async () => {
-      const checkout = await apiPost<Checkout>(
-        '/checkouts',
+      const checkout = await operationsApi.createCheckout(
         emptyStringsToNull({
           booking_id: bookingId,
           condition_out: conditionOut,
@@ -906,7 +784,7 @@
   async function loadCheckoutDetails(checkoutId: string): Promise<Checkout | null> {
     let checkout: Checkout | null = null;
     const loaded = await runAction(async () => {
-      checkout = await apiGet<Checkout>(`/checkouts/${checkoutId}`);
+      checkout = await operationsApi.getCheckout(checkoutId);
       message = 'Checkout lines loaded';
     });
     return loaded ? checkout : null;
@@ -914,7 +792,7 @@
 
   async function createReturnForCheckout(payload: ReturnCreate): Promise<boolean> {
     return await runAction(async () => {
-      await apiPost<ReturnRecord>('/returns', payload);
+      await operationsApi.createReturn(payload);
       await loadInventory();
       message = 'Check in recorded';
     });
@@ -922,26 +800,21 @@
 
   async function transferTrackedAssetAction() {
     await runAction(async () => {
-      const { asset_id, ...payload } = trackedTransferForm;
-      await apiPost<Asset>(`/assets/${asset_id}/transfer`, emptyStringsToNull(payload));
-      trackedTransferForm = {
-        asset_id: '',
-        to_location_id: '',
-        to_holder_user_id: null,
-        notes: ''
-      };
+      const { asset_id, ...payload } = inventoryState.trackedTransferForm;
+      await inventoryApi.transferTrackedAsset(asset_id, emptyStringsToNull(payload));
+      inventoryState.resetTrackedTransferForm();
       await loadInventory();
       message = 'Tracked asset transferred';
     });
   }
 
   async function moveSelectedTrackedAsset(payload: TrackedAssetTransfer): Promise<boolean> {
-    const assetId = selectedAssetId;
+    const assetId = inventoryState.selectedAssetId;
     return await runAction(async () => {
       if (!assetId) {
         throw new Error('Choose a tracked item first.');
       }
-      await apiPost<Asset>(`/assets/${assetId}/transfer`, emptyStringsToNull(payload));
+      await inventoryApi.transferTrackedAsset(assetId, emptyStringsToNull(payload));
       await loadInventory();
       await selectAssetDetail(assetId);
       message = 'Tracked item moved';
@@ -950,26 +823,20 @@
 
   async function transferStockAction() {
     await runAction(async () => {
-      await apiPost<StockLevel[]>('/stock-levels/transfer', emptyStringsToNull(stockTransferForm));
-      stockTransferForm = {
-        asset_id: '',
-        from_location_id: '',
-        to_location_id: '',
-        quantity: 1,
-        notes: ''
-      };
+      await inventoryApi.transferStock(emptyStringsToNull(inventoryState.stockTransferForm));
+      inventoryState.resetStockTransferForm();
       await loadInventory();
       message = 'Stock transferred';
     });
   }
 
   async function moveSelectedStock(payload: StockTransfer): Promise<boolean> {
-    const assetId = selectedAssetId;
+    const assetId = inventoryState.selectedAssetId;
     return await runAction(async () => {
       if (!assetId) {
         throw new Error('Choose a stock item first.');
       }
-      await apiPost<StockLevel[]>('/stock-levels/transfer', emptyStringsToNull(payload));
+      await inventoryApi.transferStock(emptyStringsToNull(payload));
       await loadInventory();
       await selectAssetDetail(assetId);
       message = 'Stock moved';
@@ -977,14 +844,16 @@
   }
 
   async function addSelectedStock(locationId: string, quantity: number): Promise<boolean> {
-    const assetId = selectedAssetId;
+    const assetId = inventoryState.selectedAssetId;
     return await runAction(async () => {
       if (!assetId) {
         throw new Error('Choose a stock item first.');
       }
-      await apiPost<StockLevel>('/stock-levels', {
+      await inventoryApi.createStockLevel({
         asset_id: assetId,
         location_id: locationId,
+        quantity_checked_out: 0,
+        quantity_reserved: 0,
         quantity_total: quantity
       });
       await loadInventory();
@@ -994,7 +863,7 @@
   }
 
   async function removeSelectedStock(locationId: string, quantity: number): Promise<boolean> {
-    const assetId = selectedAssetId;
+    const assetId = inventoryState.selectedAssetId;
     return await runAction(async () => {
       if (!assetId) {
         throw new Error('Choose a stock item first.');
@@ -1009,7 +878,7 @@
       if (quantity > availableQuantity) {
         throw new Error(`Only ${availableQuantity} available at this location.`);
       }
-      await apiPatch<StockLevel>(`/stock-levels/${stockLevel.id}`, {
+      await inventoryApi.updateStockLevel(stockLevel.id, {
         quantity_total: stockLevel.quantity_total - quantity
       });
       await loadInventory();
@@ -1020,31 +889,25 @@
 
   async function changeAssetOperationalState() {
     await runAction(async () => {
-      const assetId = assetStateForm.asset_id;
-      if (assetStateForm.action === 'maintenance_start') {
-        const payload: MaintenanceStart = { notes: assetStateForm.notes || null };
-        await apiPost<Asset>(`/assets/${assetId}/maintenance/start`, payload);
-      } else if (assetStateForm.action === 'maintenance_complete') {
+      const assetId = inventoryState.assetStateForm.asset_id;
+      if (inventoryState.assetStateForm.action === 'maintenance_start') {
+        const payload: MaintenanceStart = { notes: inventoryState.assetStateForm.notes || null };
+        await inventoryApi.startMaintenance(assetId, payload);
+      } else if (inventoryState.assetStateForm.action === 'maintenance_complete') {
         const payload: MaintenanceComplete = {
-          condition: assetStateForm.condition as MaintenanceComplete['condition'],
-          notes: assetStateForm.notes || null
+          condition: inventoryState.assetStateForm.condition as MaintenanceComplete['condition'],
+          notes: inventoryState.assetStateForm.notes || null
         };
-        await apiPost<Asset>(`/assets/${assetId}/maintenance/complete`, payload);
+        await inventoryApi.completeMaintenance(assetId, payload);
       } else {
         const payload: AssetStateChange = {
-          status: assetStateForm.status as AssetStateChange['status'],
-          condition: assetStateForm.condition as AssetStateChange['condition'],
-          notes: assetStateForm.notes || null
+          status: inventoryState.assetStateForm.status as AssetStateChange['status'],
+          condition: inventoryState.assetStateForm.condition as AssetStateChange['condition'],
+          notes: inventoryState.assetStateForm.notes || null
         };
-        await apiPost<Asset>(`/assets/${assetId}/state`, payload);
+        await inventoryApi.changeAssetState(assetId, payload);
       }
-      assetStateForm = {
-        asset_id: '',
-        action: 'maintenance_start',
-        status: 'damaged',
-        condition: 'unknown',
-        notes: ''
-      };
+      inventoryState.resetAssetStateForm();
       await loadInventory();
       message = 'Asset state updated';
     });
@@ -1052,57 +915,21 @@
 
   async function selectAssetDetail(assetId: string) {
     await runAction(async () => {
-      selectedAssetId = assetId;
+      inventoryState.selectedAssetId = assetId;
       syncAssetEditForm(assets.find((asset) => asset.id === assetId));
-      selectedAssetEvents = currentUser
-        ? await apiGet<ItemEvent[]>(
-            `/audit/item-events?asset_id=${encodeURIComponent(assetId)}&limit=50`
-          )
+      inventoryState.selectedAssetEvents = auth.currentUser
+        ? await inventoryApi.getAssetEvents(assetId)
         : [];
       message = 'Asset detail loaded';
     });
   }
 
   function resetAssetEditForm() {
-    assetEditForm = {
-      name: '',
-      category_id: null,
-      status: 'available',
-      condition: 'unknown',
-      home_location_id: null,
-      current_location_id: null,
-      current_holder_user_id: null,
-      manufacturer: '',
-      model: '',
-      serial_number: '',
-      asset_tag: '',
-      replacement_value: null,
-      description: '',
-      notes: ''
-    };
+    inventoryState.resetAssetEditForm();
   }
 
   function syncAssetEditForm(asset: Asset | undefined) {
-    if (!asset) {
-      resetAssetEditForm();
-      return;
-    }
-    assetEditForm = {
-      name: asset.name,
-      category_id: asset.category_id,
-      status: asset.status,
-      condition: asset.condition,
-      home_location_id: asset.home_location_id,
-      current_location_id: asset.current_location_id,
-      current_holder_user_id: asset.current_holder_user_id,
-      manufacturer: asset.manufacturer ?? '',
-      model: asset.model ?? '',
-      serial_number: asset.serial_number ?? '',
-      asset_tag: asset.asset_tag ?? '',
-      replacement_value: asset.replacement_value,
-      description: asset.description ?? '',
-      notes: asset.notes ?? ''
-    };
+    inventoryState.syncAssetEditForm(asset);
   }
 
   async function runAction(action: () => Promise<void>): Promise<boolean> {
@@ -1127,42 +954,45 @@
   }
 
   function buildBookingPayload(): BookingCreate {
-    const asset = assets.find((entry) => entry.id === bookingForm.asset_id);
+    const asset = assets.find((entry) => entry.id === bookingState.bookingForm.asset_id);
     const isStock = asset?.asset_type === 'stock';
     return {
-      title: bookingForm.title,
-      starts_at: new Date(bookingForm.starts_at).toISOString(),
-      ends_at: new Date(bookingForm.ends_at).toISOString(),
+      title: bookingState.bookingForm.title,
+      starts_at: new Date(bookingState.bookingForm.starts_at).toISOString(),
+      ends_at: new Date(bookingState.bookingForm.ends_at).toISOString(),
       lines: [
         {
-          asset_id: bookingForm.asset_id,
-          location_id: isStock ? bookingForm.location_id : null,
-          starts_at: new Date(bookingForm.starts_at).toISOString(),
-          ends_at: new Date(bookingForm.ends_at).toISOString(),
-          quantity: isStock ? bookingForm.quantity : null
+          asset_id: bookingState.bookingForm.asset_id,
+          location_id: isStock ? bookingState.bookingForm.location_id : null,
+          starts_at: new Date(bookingState.bookingForm.starts_at).toISOString(),
+          ends_at: new Date(bookingState.bookingForm.ends_at).toISOString(),
+          quantity: isStock ? bookingState.bookingForm.quantity : null
         }
       ]
     };
   }
 
   function buildBookingDraftPayload(): BookingCreate {
-    if (!bookingDraft.lines.length) {
+    if (!bookingState.bookingDraft.lines.length) {
       throw new Error('Add at least one item to the booking bundle.');
     }
     return {
-      title: bookingDraft.title,
-      person_id: bookingDraft.person_id,
-      starts_at: new Date(bookingDraft.starts_at).toISOString(),
-      ends_at: new Date(bookingDraft.ends_at).toISOString(),
-      notes: bookingDraft.notes || null,
-      lines: bookingDraft.lines.map(({ client_id: _clientId, ...line }) => line)
+      title: bookingState.bookingDraft.title,
+      person_id: bookingState.bookingDraft.person_id,
+      starts_at: new Date(bookingState.bookingDraft.starts_at).toISOString(),
+      ends_at: new Date(bookingState.bookingDraft.ends_at).toISOString(),
+      notes: bookingState.bookingDraft.notes || null,
+      lines: bookingState.bookingDraft.lines.map((draftLine: BookingDraftLine) => {
+        const { client_id: _clientId, ...line } = draftLine;
+        return line;
+      })
     };
   }
 
   function visibleTabs(): { id: WorkspaceTab; label: string; description: string }[] {
     return workspaceTabs.filter((tab) => {
       if (tab.id === 'admin') {
-        return currentUser?.role === 'admin';
+        return auth.currentUser?.role === 'admin';
       }
       return true;
     });
@@ -1216,11 +1046,11 @@
   }
 
   function selectedBookingAsset(): Asset | undefined {
-    return assets.find((asset) => asset.id === bookingForm.asset_id);
+    return assets.find((asset) => asset.id === bookingState.bookingForm.asset_id);
   }
 
   function selectedBookingDraftAsset(): Asset | undefined {
-    return assets.find((asset) => asset.id === bookingDraftLineForm.asset_id);
+    return assets.find((asset) => asset.id === bookingState.bookingDraftLineForm.asset_id);
   }
 
   function personName(id: string | null): string {
@@ -1230,7 +1060,7 @@
   }
 
   function selectedAsset(): Asset | undefined {
-    return assets.find((asset) => asset.id === selectedAssetId);
+    return assets.find((asset) => asset.id === inventoryState.selectedAssetId);
   }
 
   function assetImageForAsset(assetId: string): AssetImage | undefined {
@@ -1333,8 +1163,8 @@
     if (id === null) {
       return 'system';
     }
-    if (currentUser?.id === id) {
-      return currentUser.display_name;
+    if (auth.currentUser?.id === id) {
+      return auth.currentUser.display_name;
     }
     return users.find((user) => user.id === id)?.display_name ?? 'user';
   }
@@ -1351,11 +1181,7 @@
   }
 
   function resetAccountForm(): void {
-    accountForm = {
-      email: currentUser?.email ?? '',
-      display_name: currentUser?.display_name ?? '',
-      password: ''
-    };
+    auth.resetAccountForm();
   }
 
   function closeNotice(): void {
@@ -1390,17 +1216,17 @@
         onclick={() => (activeTab = 'basket')}
       >
         <span class="basket-icon" aria-hidden="true"></span>
-        <strong>{activeBasket?.lines.length ?? 0}</strong>
+        <strong>{basketState.activeBasket?.lines.length ?? 0}</strong>
       </button>
       <button
         type="button"
         class="account-button"
-        class:logged-out-account={!currentUser}
-        aria-label={currentUser ? 'Account' : 'Login'}
+        class:logged-out-account={!auth.currentUser}
+        aria-label={auth.currentUser ? 'Account' : 'Login'}
         onclick={() => (activeTab = 'account')}
       >
         <span class="account-avatar" aria-hidden="true">
-          {currentUser ? currentUser.display_name.slice(0, 1).toUpperCase() : ''}
+          {auth.currentUser ? auth.currentUser.display_name.slice(0, 1).toUpperCase() : ''}
         </span>
       </button>
     </div>
@@ -1428,11 +1254,11 @@
 
         {#if activeTab === 'account'}
           <AccountPanel
-            {currentUser}
+            currentUser={auth.currentUser}
             {busy}
-            bind:email
-            bind:password
-            bind:accountForm
+            bind:email={auth.email}
+            bind:password={auth.password}
+            bind:accountForm={auth.accountForm}
             login={() => void login()}
             logout={() => void logout()}
             saveAccount={() => void saveAccount()}
@@ -1441,11 +1267,11 @@
 
         {#if activeTab === 'basket'}
           <BasketPanel
-            basket={activeBasket}
+            basket={basketState.activeBasket}
             {assets}
             {busy}
-            bind:basketTitle
-            bind:basketNotes
+            bind:basketTitle={basketState.basketTitle}
+            bind:basketNotes={basketState.basketNotes}
             {updateBasket}
             {updateBasketLine}
             {removeBasketLine}
@@ -1458,8 +1284,8 @@
           />
         {/if}
 
-        {#if currentUser && activeTab !== 'dashboard' && activeTab !== 'account' && activeTab !== 'basket'}
-          {#if activeTab === 'admin' && currentUser.role === 'admin'}
+        {#if auth.currentUser && activeTab !== 'dashboard' && activeTab !== 'account' && activeTab !== 'basket'}
+          {#if activeTab === 'admin' && auth.currentUser.role === 'admin'}
             <AdminPanel
               {categories}
               {users}
@@ -1533,10 +1359,10 @@
               {locations}
               {bookings}
               {stockAvailabilityVersion}
-              {availability}
+              availability={bookingState.availability}
               {busy}
-              bind:bookingDraft
-              bind:bookingDraftLineForm
+              bind:bookingDraft={bookingState.bookingDraft}
+              bind:bookingDraftLineForm={bookingState.bookingDraftLineForm}
               {selectedBookingDraftAsset}
               {assetName}
               {createBookingDraft}
@@ -1576,21 +1402,21 @@
               {locations}
               {persons}
               {users}
-              {currentUser}
+              currentUser={auth.currentUser}
               {stockLevels}
               {bookings}
               {checkouts}
               {returns}
               {filteredAssets}
-              {selectedAssetEvents}
-              {selectedAssetId}
+              selectedAssetEvents={inventoryState.selectedAssetEvents}
+              selectedAssetId={inventoryState.selectedAssetId}
               {qrCodes}
               {busy}
-              bind:assetForm
-              bind:assetEditForm
-              bind:assetSearch
-              bind:bookingForm
-              bind:bookingDraft
+              bind:assetForm={inventoryState.assetForm}
+              bind:assetEditForm={inventoryState.assetEditForm}
+              bind:assetSearch={inventoryState.assetSearch}
+              bind:bookingForm={bookingState.bookingForm}
+              bind:bookingDraft={bookingState.bookingDraft}
               createAsset={() => void createAsset()}
               updateSelectedAsset={() => void updateSelectedAsset()}
               {deleteSelectedAsset}
@@ -1605,9 +1431,7 @@
               generateSelectedAssetQr={() => void generateSelectedAssetQr()}
               selectAssetDetail={(assetId) => void selectAssetDetail(assetId)}
               closeAssetDetail={() => {
-                selectedAssetId = '';
-                selectedAssetEvents = [];
-                resetAssetEditForm();
+                inventoryState.clearSelection();
               }}
               {selectedAsset}
               {categoryName}

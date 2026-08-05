@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: inventory_booking
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory -d inventory_booking"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      APP_NAME: Inventory Booking API
+      APP_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
+      SESSION_COOKIE_NAME: inventory_booking_session
+      CSRF_COOKIE_NAME: inventory_booking_csrf
+      SESSION_COOKIE_SECURE: "true"
+      SESSION_MAX_AGE_SECONDS: 1209600
+      ASSET_UPLOAD_DIR: /app/data/uploads/assets
+      LOCATION_UPLOAD_DIR: /app/data/uploads/locations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - asset-uploads:/app/data/uploads
+    command: ["uv", "run", "uvicorn", "inventory_booking_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:?Set PUBLIC_API_BASE_URL}
+        PUBLIC_APP_BASE_URL: ${PUBLIC_APP_BASE_URL:?Set PUBLIC_APP_BASE_URL}
+    environment:
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:?Set PUBLIC_API_BASE_URL}
+      PUBLIC_APP_BASE_URL: ${PUBLIC_APP_BASE_URL:?Set PUBLIC_APP_BASE_URL}
+      PORT: "3000"
+    depends_on:
+      - backend
+    command: ["node", "build"]
+
+volumes:
+  postgres-data:
+  asset-uploads:

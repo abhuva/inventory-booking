@@ -12,6 +12,7 @@ from inventory_booking_api.bookings.router import router as booking_router
 from inventory_booking_api.checkouts.router import router as checkout_router
 from inventory_booking_api.core.csrf import CsrfProtectionMiddleware
 from inventory_booking_api.core.database import get_session
+from inventory_booking_api.core.security_headers import SecurityHeadersMiddleware
 from inventory_booking_api.inventory.asset_router import asset_router, stock_router
 from inventory_booking_api.inventory.category_router import router as category_router
 from inventory_booking_api.locations.router import router as location_router
@@ -26,6 +27,7 @@ settings = get_settings()
 
 app = FastAPI(title=settings.app_name)
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CsrfProtectionMiddleware)
 app.add_middleware(
     CORSMiddleware,

@@ -1,4 +1,4 @@
-﻿# Inventory Booking
+# Inventory Booking
 
 Internal inventory and equipment booking system for small teams managing physical items, QR labels, locations, reservations, checkouts, returns, and item history.
 
@@ -15,7 +15,8 @@ Internal inventory and equipment booking system for small teams managing physica
 - `frontend/src/lib/components/workspace/`: desktop workspace tab components.
 - `docs/`: project notes, workflow docs, and task tracking.
 - `docs/server-deployment-notes.md`: first-pass notes for discussing server hosting with IT.
-- `docker-compose.yml`: local service topology for PostgreSQL, API, and web app.
+- `docs/production-runbook.md`: production deployment, backup, restore, and rollback baseline.
+- `docker-compose.yml`: base service topology for PostgreSQL, API, and web app. `docker-compose.override.yml` keeps local development ports, source mounts, and reload/dev-server commands.
 - upload Docker volumes: processed asset/location photos stored outside Postgres.
 - `inventory-booking-tool-proposal.md`: original product and architecture proposal.
 
@@ -67,6 +68,8 @@ Use `127.0.0.1` consistently instead of mixing it with `localhost`; the browser-
 docker compose up --build
 ```
 
+The checked-in `docker-compose.override.yml` is applied automatically for local development. It exposes PostgreSQL, runs the backend with reload, and runs the frontend Vite dev server.
+
 Apply database migrations after the containers are running:
 
 ```powershell
@@ -99,11 +102,26 @@ uv run --directory .\backend ruff check .
 uv run --directory .\backend pytest
 ```
 
+PostgreSQL-only concurrency tests are skipped by default because they drop and recreate all tables
+in the configured test database. Run them only against a disposable database:
+
+```powershell
+$env:POSTGRES_TEST_DATABASE_URL="postgresql+asyncpg://inventory:inventory@127.0.0.1:5432/inventory_booking_test"
+uv run --directory .\backend pytest .\tests\test_postgres_concurrency.py
+```
+
 Frontend:
 
 ```powershell
 npm.cmd --prefix .\frontend run check
 npm.cmd --prefix .\frontend run lint
+```
+
+Regenerate frontend API schema types after backend schema changes:
+
+```powershell
+uv run --directory .\backend python .\scripts\generate_openapi.py | Out-File -FilePath .\frontend\src\lib\api\openapi.json -Encoding utf8
+npm.cmd --prefix .\frontend run generate:api-types
 ```
 
 ## Current Status
@@ -126,7 +144,7 @@ For initial server hosting discussion, see `docs/server-deployment-notes.md`.
 
 ## API
 
-Read endpoints are open during early local development. Mutating endpoints require an authenticated session cookie from `POST /auth/login`.
+Domain read and write endpoints require an authenticated session cookie from `POST /auth/login`.
 
 Browser/session mutations also require CSRF protection:
 

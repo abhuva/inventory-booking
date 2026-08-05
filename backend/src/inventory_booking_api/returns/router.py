@@ -28,6 +28,7 @@ router = APIRouter(prefix="/returns", tags=["returns"])
 @router.get("", response_model=list[ReturnSummaryRead])
 async def list_return_endpoint(
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[ReturnSummaryRead]:
     return await list_returns(session)
 
@@ -46,6 +47,7 @@ async def create_return_endpoint(
 async def get_return_endpoint(
     return_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> ReturnRead:
     return_record = await get_return(session, return_id)
     if return_record is None:

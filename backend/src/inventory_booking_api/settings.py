@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     csrf_cookie_name: str = "inventory_booking_csrf"
     session_cookie_secure: bool = False
     session_max_age_seconds: int = 60 * 60 * 24 * 14
+    login_rate_limit_attempts: int = 5
+    login_rate_limit_window_seconds: int = 60
     basket_hold_minutes: int = 60
     asset_upload_dir: str = "data/uploads/assets"
     location_upload_dir: str = "data/uploads/locations"
@@ -37,6 +39,29 @@ class Settings(BaseSettings):
         return [
             origin.strip().rstrip("/") for origin in self.cors_origins.split(",") if origin.strip()
         ]
+
+    @model_validator(mode="after")
+    def validate_production_safety(self) -> "Settings":
+        """Refuse startup with local-development defaults in production."""
+
+        if self.app_env.lower() != "production":
+            return self
+
+        problems: list[str] = []
+        if not self.session_cookie_secure:
+            problems.append("SESSION_COOKIE_SECURE must be true")
+        if self.internal_api_token == "local-dev-token":  # nosec B105 - rejected in production.
+            problems.append("INTERNAL_API_TOKEN must not use the local development default")
+        if "inventory:inventory@" in self.database_url:
+            problems.append("DATABASE_URL must not use the local development database password")
+        if any("localhost" in origin or "127.0.0.1" in origin for origin in self.cors_origin_list):
+            problems.append("CORS_ORIGINS must not include localhost origins")
+
+        if problems:
+            joined = "; ".join(problems)
+            raise ValueError(f"Unsafe production settings: {joined}.")
+
+        return self
 
 
 @lru_cache

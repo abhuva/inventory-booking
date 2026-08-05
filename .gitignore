@@ -1,4 +1,6 @@
-﻿# OS/editor
+﻿pw.env.txt
+
+# OS/editor
 .DS_Store
 Thumbs.db
 .vscode/

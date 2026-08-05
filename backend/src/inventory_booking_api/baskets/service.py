@@ -15,9 +15,11 @@ from inventory_booking_api.baskets.schemas import (
     BasketLineUpdate,
     BasketUpdate,
 )
+from inventory_booking_api.bookings.availability import preview_availability
+from inventory_booking_api.bookings.commands import create_booking_without_commit
 from inventory_booking_api.bookings.models import Booking, BookingLine
 from inventory_booking_api.bookings.schemas import BookingCreate, BookingLineCreate
-from inventory_booking_api.bookings.service import create_booking, preview_availability
+from inventory_booking_api.core.locks import acquire_advisory_locks, asset_lock_key
 from inventory_booking_api.persons.models import Person
 from inventory_booking_api.settings import get_settings
 from inventory_booking_api.users.models import User
@@ -133,6 +135,7 @@ async def add_or_update_basket_line(
 
     ensure_basket_owner(basket, actor)
     ensure_active_basket(basket)
+    await acquire_advisory_locks(session, [asset_lock_key(payload.asset_id)])
     line_starts_at = payload.starts_at if payload.starts_at is not None else basket.starts_at
     line_ends_at = payload.ends_at if payload.ends_at is not None else basket.ends_at
     existing = await find_basket_line(
@@ -199,6 +202,7 @@ async def update_basket_line(
     line = await session.get(BasketLine, line_id)
     if line is None or line.basket_id != basket.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Basket line not found.")
+    await acquire_advisory_locks(session, [asset_lock_key(line.asset_id)])
     next_starts_at = payload.starts_at if payload.starts_at is not None else line.starts_at
     next_ends_at = payload.ends_at if payload.ends_at is not None else line.ends_at
     next_quantity = payload.quantity if payload.quantity is not None else line.quantity
@@ -263,6 +267,7 @@ async def confirm_basket(
     ensure_basket_owner(basket, actor)
     ensure_active_basket(basket)
     lines = await list_basket_lines(session, basket.id)
+    await acquire_advisory_locks(session, [asset_lock_key(line.asset_id) for line in lines])
     if not lines:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -275,12 +280,11 @@ async def confirm_basket(
         )
 
     booking_payload = basket_to_booking_payload(basket, lines)
-    booking, booking_lines = await create_booking(
+    booking, booking_lines = await create_booking_without_commit(
         session,
         booking_payload,
         actor,
         excluded_basket_id=basket.id,
-        commit=False,
     )
     basket.status = BasketStatus.CONFIRMED
     await write_audit_log(
