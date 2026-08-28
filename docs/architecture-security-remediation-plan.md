@@ -312,4 +312,4 @@ Operational truth remains in PostgreSQL. This document is planning and implement
 - [x] Deployed the application at `https://inventory.nica.network` behind Apache
   TLS using a Git-backed, manually triggered Docker Compose release flow.
 - [x] Reconciled server access, deployment, recovery, and AI-agent documentation
-  with the live configuration on 2026-08-29.
+  with the live configuration on 2026-08-28 UTC.

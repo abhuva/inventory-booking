@@ -17,6 +17,7 @@ Internal inventory and equipment booking system for small teams managing physica
 - `docs/server-operations.md`: live server access, SSH identities, ownership, and AI-agent rules.
 - `docs/development-and-deployment-workflow.md`: local, GitHub, and manual release workflow.
 - `docs/production-runbook.md`: production deployment, health, backup, restore, and rollback.
+- `docs/qr-scan-feature-plan.md`: next feature plan for authenticated phone QR routing.
 - `docker-compose.yml`: base service topology for PostgreSQL, API, and web app. `docker-compose.override.yml` keeps local development ports, source mounts, and reload/dev-server commands.
 - upload Docker volumes: processed asset/location photos stored outside Postgres.
 - `inventory-booking-tool-proposal.md`: original product and architecture proposal.
@@ -259,7 +260,7 @@ Current endpoints:
 
 1. Confirm automated daily database/upload backups, off-server retention, and
    restore-test ownership with Trebor.
-2. Collect production usage feedback and prioritize workflow corrections.
-3. Add multi-line booking editing if real usage demonstrates the need.
-4. Design the dedicated phone-first QR workflow after the desktop production
-   workflow is stable.
+2. Implement the authenticated phone QR workflow in
+   `docs/qr-scan-feature-plan.md`.
+3. Collect production usage feedback and prioritize workflow corrections.
+4. Add multi-line booking editing if real usage demonstrates the need.

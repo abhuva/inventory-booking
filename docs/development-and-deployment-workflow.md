@@ -131,9 +131,20 @@ docker compose -f docker-compose.prod.yml logs --tail=100 frontend
 From Windows:
 
 ```powershell
-curl.exe -I https://inventory.nica.network/
-curl.exe https://inventory.nica.network/health
-curl.exe https://inventory.nica.network/health/database
+$healthUrls = @(
+  'https://inventory.nica.network/'
+  'https://inventory.nica.network/health'
+  'https://inventory.nica.network/health/database'
+)
+
+foreach ($url in $healthUrls) {
+  $status = curl.exe --silent --show-error --max-time 15 `
+    --output NUL --write-out '%{http_code}' $url
+  if ($LASTEXITCODE -ne 0 -or $status -ne '200') {
+    throw "Health check failed for $url (HTTP $status)"
+  }
+  Write-Host "$url HTTP $status"
+}
 ```
 
 Also log in through the browser and smoke-test the workflow affected by the

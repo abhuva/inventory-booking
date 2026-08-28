@@ -9,6 +9,10 @@ now deployed at `https://inventory.nica.network`. Current priorities are
 production feedback, confirmed automated backups, and targeted workflow
 improvements rather than another broad structural refactor.
 
+The next planned feature branch is `feature/qr-scan-route`. Its implementation
+contract, security boundary, mobile states, tests, and acceptance criteria are
+documented in `docs/qr-scan-feature-plan.md`.
+
 Target model:
 
 ```text

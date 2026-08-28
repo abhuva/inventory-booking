@@ -174,7 +174,7 @@ AND existing.ends_at > requested.starts_at
 
 Two roles are currently implemented:
 
-- `admin`: user management, categories, conflict overrides, destructive/retirement actions, audit review.
+- `admin`: user management, categories, destructive/retirement actions, and audit review.
 - `user`: inventory view, booking, checkout, return, transfer, QR scan, damage/missing reports.
 
 Even for a small trusted team, all state-changing actions must record actor and timestamp.
@@ -242,8 +242,8 @@ health. Application secrets and the live Compose file remain server-local.
 
 PostgreSQL data and uploaded photos use persistent Docker volumes. The required
 backup baseline remains daily database and upload backups, an off-server copy,
-and periodic restore tests. As of 2026-08-29, documentation and manual commands
-exist, but the server-wide automated backup coverage still needs confirmation
-from IT.
+and periodic restore tests. During the production audit on 2026-08-28 UTC,
+documentation and manual commands existed, but server-wide automated backup
+coverage still required confirmation from IT.
 
 See `docs/server-operations.md` and `docs/production-runbook.md`.

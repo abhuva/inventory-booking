@@ -48,9 +48,20 @@ Do not run the example Compose file in production. Trebor's live
 Public checks:
 
 ```powershell
-curl.exe -I https://inventory.nica.network/
-curl.exe https://inventory.nica.network/health
-curl.exe https://inventory.nica.network/health/database
+$healthUrls = @(
+  'https://inventory.nica.network/'
+  'https://inventory.nica.network/health'
+  'https://inventory.nica.network/health/database'
+)
+
+foreach ($url in $healthUrls) {
+  $status = curl.exe --silent --show-error --max-time 15 `
+    --output NUL --write-out '%{http_code}' $url
+  if ($LASTEXITCODE -ne 0 -or $status -ne '200') {
+    throw "Health check failed for $url (HTTP $status)"
+  }
+  Write-Host "$url HTTP $status"
+}
 ```
 
 Server checks:
@@ -82,39 +93,52 @@ Required baseline:
 - monthly restore test in a non-production environment;
 - a recorded owner for monitoring backup failures.
 
-Current status as of 2026-08-29: no app-level backup directory or user cron job
-is visible to Marc. Confirm whether Trebor's server-wide backup system covers
+During the 2026-08-28 UTC audit, no app-level backup directory or user cron job
+was visible to Marc. Confirm whether Trebor's server-wide backup system covers
 both Docker volumes before treating this requirement as complete.
 
-### Create A Manual Database Backup
+### Create A Complete Manual Backup
 
-On the server:
+Run this entire block in one server shell. It creates both files with the same
+non-empty UTC timestamp and fails if either file is empty or not mode `600`:
 
 ```bash
+set -euo pipefail
+umask 077
+
 cd /opt/docker/inventory
-mkdir -p backups
-backup_stamp="$(date +%Y%m%d_%H%M%S)"
+install -d -m 0700 backups
+
+backup_stamp="$(date -u +%Y%m%d_%H%M%S)"
+database_backup="backups/inventory_booking_${backup_stamp}.dump"
+upload_backup="backups/asset_uploads_${backup_stamp}.tgz"
+
 docker compose -f docker-compose.prod.yml exec -T postgres \
   pg_dump -U inventory -d inventory_booking --format=custom \
-  > "backups/inventory_booking_${backup_stamp}.dump"
-```
+  > "$database_backup"
 
-### Create A Manual Upload Backup
-
-Using the same `backup_stamp`:
-
-```bash
 docker run --rm \
   -v inventory_asset-uploads:/data:ro \
-  -v /opt/docker/inventory/backups:/backup \
-  alpine tar czf "/backup/asset_uploads_${backup_stamp}.tgz" -C /data .
-```
+  alpine sh -c 'umask 077; tar czf - -C /data .' \
+  > "$upload_backup"
 
-Check that both files exist and are non-empty:
+if [[ "$(stat -c '%a' backups)" != "700" ]]; then
+  echo "Backup directory must be mode 700." >&2
+  exit 1
+fi
 
-```bash
-ls -lh "backups/inventory_booking_${backup_stamp}.dump" \
-  "backups/asset_uploads_${backup_stamp}.tgz"
+for backup_file in "$database_backup" "$upload_backup"; do
+  if [[ ! -s "$backup_file" ]]; then
+    echo "Backup is missing or empty: $backup_file" >&2
+    exit 1
+  fi
+  if [[ "$(stat -c '%a' "$backup_file")" != "600" ]]; then
+    echo "Backup must be mode 600: $backup_file" >&2
+    exit 1
+  fi
+done
+
+stat -c '%a %n' backups "$database_backup" "$upload_backup"
 ```
 
 A copy under `/opt/docker/inventory/backups` protects against some application

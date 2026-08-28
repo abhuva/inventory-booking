@@ -1,7 +1,7 @@
 # Production Server Operations
 
 This is the source of truth for accessing and operating the live inventory
-booking server. It was verified against the running system on 2026-08-29.
+booking server. It was verified against the running system on 2026-08-28 UTC.
 
 ## Current Production State
 
@@ -151,7 +151,8 @@ bindings and would disconnect Apache from the app.
 ## Known Operational Gap
 
 No app-level backup directory or user cron job was visible under Marc's account
-on 2026-08-29. Trebor may have server-wide backups that Marc cannot inspect.
+during the 2026-08-28 UTC audit. Trebor may have server-wide backups that Marc
+cannot inspect.
 Confirm the database/upload backup schedule, retention, off-server destination,
 and restore-test ownership before relying on the app for irreplaceable data.
 
