@@ -1,33 +1,23 @@
-## App Summary
+# IT Server Request Outcome
 
-- Internally used inventory management.
-- Stack:
-  - SvelteKit frontend
-  - FastAPI backend
-  - PostgreSQL database
-  - Docker Compose runtime
+This note was the original short handoff to Trebor. Hosting is now active.
 
-## Stuff thats most likely needed
-- Subdomain, likely `inventory.nica.network`.
-- HTTPS for that subdomain.
-- Docker and Docker Compose available.
-- Reverse proxy routing to the app containers.
-- Persistent storage for:
-  - PostgreSQL data
-  - uploaded asset photos
-  - uploaded location photos
-- Backups for database and uploads.
-- PostgreSQL not exposed publicly.
-- Public access only via HTTPS.
+## Completed
 
-## Suggested Hosting Shape
+- [x] `https://inventory.nica.network` subdomain.
+- [x] Valid HTTPS certificate and HTTP-to-HTTPS redirect.
+- [x] Docker and Docker Compose runtime.
+- [x] Apache reverse proxy to frontend and backend loopback ports.
+- [x] Persistent PostgreSQL and upload volumes.
+- [x] PostgreSQL not exposed publicly.
+- [x] SSH access for Marc with Docker group membership.
 
-```text
-https://inventory.nica.network
-  -> reverse proxy
-  -> frontend container
-  -> backend container
-  -> PostgreSQL container/private service
-```
+## Still To Confirm With IT
 
+- [ ] Automated PostgreSQL and upload-volume backup schedule.
+- [ ] Off-server backup destination and retention period.
+- [ ] Backup-failure monitoring.
+- [ ] Periodic restore-test owner and schedule.
 
+See `docs/server-deployment-notes.md` for the responsibility split and
+`docs/server-operations.md` for the active configuration.

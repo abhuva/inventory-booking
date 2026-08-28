@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/docker/inventory}"
-COMPOSE_FILE="${COMPOSE_FILE:-inventory-compose.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 BRANCH="${BRANCH:-main}"
 
 cd "$APP_DIR"

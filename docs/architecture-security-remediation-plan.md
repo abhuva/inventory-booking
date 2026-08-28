@@ -2,17 +2,21 @@
 
 ## Purpose
 
-This document is the working remediation plan for moving the current prototype toward a production-ready internal inventory booking system. It records findings, implementation tasks, dependencies, and current status.
+This document records the architecture and security remediation that moved the
+prototype to the current production deployment. Completed checklist items are
+historical implementation evidence; ongoing operations are documented in the
+production runbooks.
 
 Operational truth remains in PostgreSQL. This document is planning and implementation state only.
 
 ## Current State
 
-- Current branch: `chore/docker-local-startup`.
 - Baseline commit before this plan: `e1e1535 Add line-level basket booking dates`.
-- The app is a working FastAPI + SvelteKit + PostgreSQL prototype.
+- The app is a deployed FastAPI + SvelteKit + PostgreSQL internal service at
+  `https://inventory.nica.network`.
 - The recent line-level basket/booking date migration is implemented and tested.
-- Backend and frontend quality gates passed before `e1e1535`.
+- Deployment-blocking findings in this plan are implemented.
+- Automated backup coverage remains an operational confirmation item with IT.
 
 ## Review Findings
 
@@ -259,11 +263,16 @@ Operational truth remains in PostgreSQL. This document is planning and implement
   - [x] Reverse proxy/TLS assumptions documented.
   - Depends on: production settings enforcement.
 
-- [x] Add backup/restore runbook.
-  - [x] Daily dump.
-  - [x] Off-server copy.
-  - [x] Restore test procedure.
+- [x] Add backup/restore runbook and manual commands.
+  - [x] Document daily dump requirement.
+  - [x] Document off-server copy requirement.
+  - [x] Document restore test procedure.
   - Depends on: deployment target.
+
+- [ ] Confirm production backup operation with IT.
+  - [ ] Automated daily database and upload backup.
+  - [ ] Off-server retention.
+  - [ ] Failure monitoring and periodic restore-test ownership.
 
 - [x] Add dependency/static security checks.
   - [x] Python dependency audit.
@@ -300,3 +309,7 @@ Operational truth remains in PostgreSQL. This document is planning and implement
 - [x] Extracted basket workspace state into `lib/workspace/basket-state.svelte.ts`; frontend check and lint pass.
 - [x] Extracted booking form, booking bundle, and availability state into `lib/workspace/booking-state.svelte.ts`; frontend check and lint pass.
 - [x] Extracted inventory selection, form, stock, transfer, and state-change state into `lib/workspace/inventory-state.svelte.ts`; frontend check and lint pass.
+- [x] Deployed the application at `https://inventory.nica.network` behind Apache
+  TLS using a Git-backed, manually triggered Docker Compose release flow.
+- [x] Reconciled server access, deployment, recovery, and AI-agent documentation
+  with the live configuration on 2026-08-29.

@@ -1,75 +1,65 @@
-# Linux Server Access Basics
+# Linux Server Access From Windows
 
-You do not need to install Linux on your laptop.
+This is a short SSH primer for Marc. The complete live-server reference is
+`docs/server-operations.md`.
 
-The server runs Linux. You connect to it remotely from Windows with SSH:
-
-```powershell
-ssh username@server-address
-```
-
-After login, the terminal is running commands on the server, not on your laptop.
-
-## What To Ask IT For
-
-- Server hostname or IP address.
-- Username.
-- Login method: password or SSH key.
-- Whether VPN is required.
-- Whether the user has `sudo` rights.
-- Where project files should live, for example `/srv/inventory-booking`.
-
-## First Safe Test
+## Connect
 
 From Windows PowerShell:
 
 ```powershell
-ssh username@server-address
+ssh -i "$env:USERPROFILE\.ssh\inventory_nica_ed25519" Marc@nica.network
 ```
 
-Then on the server:
+SSH password typing shows no dots or cursor movement. Key-based login should not
+ask for the server password unless the private key is unavailable or rejected.
+
+After login, the prompt changes to something like:
+
+```text
+Marc@nica:~$
+```
+
+Commands now run on the server, not the Windows computer. Enter `exit` to close
+the connection.
+
+## Application Directory
 
 ```bash
-whoami
+cd /opt/docker/inventory
 pwd
-ls
-docker --version
-docker compose version
+git status --short --branch
+docker compose -f docker-compose.prod.yml ps
 ```
 
-These commands only inspect the environment.
+The live checkout follows `origin/main`. Do not edit source files there; make
+changes locally, commit them, and use the manual deployment flow.
 
-## Minimal Linux Commands
+## Useful Read-Only Commands
 
 ```bash
-pwd          # show current directory
-ls           # list files
-ls -la       # list files including hidden files
-cd folder    # enter folder
-cd ..        # go one folder up
-mkdir name   # create folder
-cat file     # print file contents
-less file    # read file, press q to quit
-nano file    # simple terminal editor
+pwd                                      # current directory
+ls -la                                   # files, including hidden names
+git log -5 --oneline                     # recent deployed history
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs --tail=100 backend
 ```
 
-Be careful with delete commands:
+Use `less filename` to read a non-secret text file; press `q` to quit.
 
-```bash
-rm file
+Do not display `.env`, private keys, or credential files. Do not use recursive
+delete commands, `docker compose down -v`, database restore commands, or direct
+database writes while exploring.
+
+## Run One Remote Command
+
+You do not need an interactive shell for a single check:
+
+```powershell
+$serverKey = "$env:USERPROFILE\.ssh\inventory_nica_ed25519"
+$statusCommand = "cd /opt/docker/inventory && git status --short --branch"
+ssh -i $serverKey Marc@nica.network $statusCommand
 ```
 
-Do not use recursive delete commands unless you are certain what they do.
-
-## Likely App Commands Later
-
-These are examples only. We will document the final production commands separately.
-
-```bash
-cd /srv/inventory-booking
-git pull
-docker compose ps
-docker compose logs -f
-docker compose up -d --build
-```
-
+PowerShell environment variables have no space after the colon. The correct
+form is `$env:USERPROFILE`, not `$env: USERPROFILE`.

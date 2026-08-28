@@ -172,7 +172,7 @@ AND existing.ends_at > requested.starts_at
 
 ## Users And Roles
 
-Only two roles are planned initially:
+Two roles are currently implemented:
 
 - `admin`: user management, categories, conflict overrides, destructive/retirement actions, audit review.
 - `user`: inventory view, booking, checkout, return, transfer, QR scan, damage/missing reports.
@@ -224,14 +224,26 @@ Rules:
 - Add audit/events without implementing full event sourcing.
 - Start with online-first workflows; offline/PWA queueing can come later if QR workflows prove unreliable without it.
 
-## Deployment Direction
+## Production Deployment
 
-Initial deployment should use Docker Compose or equivalent services:
+Production is live at `https://inventory.nica.network` with this topology:
 
-- PostgreSQL
-- FastAPI backend
-- SvelteKit frontend
-- reverse proxy with HTTPS
-- backup job
+```text
+Apache reverse proxy and TLS
+  -> SvelteKit frontend on 127.0.0.1:3000
+  -> FastAPI backend on 127.0.0.1:8000
+  -> PostgreSQL on the private Docker network
+```
 
-Backups are mandatory before production use: daily dump, off-server copy, and periodic restore test.
+The application runs from a Git checkout of `main` under
+`/opt/docker/inventory`. Releases are manual: the server pulls a reviewed commit,
+rebuilds the Compose project, applies Alembic migrations, and checks service
+health. Application secrets and the live Compose file remain server-local.
+
+PostgreSQL data and uploaded photos use persistent Docker volumes. The required
+backup baseline remains daily database and upload backups, an off-server copy,
+and periodic restore tests. As of 2026-08-29, documentation and manual commands
+exist, but the server-wide automated backup coverage still needs confirmation
+from IT.
+
+See `docs/server-operations.md` and `docs/production-runbook.md`.

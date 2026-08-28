@@ -1,19 +1,21 @@
 # ADR 008: Booking Concurrency For Local MVP
 
-## Status
-
-Accepted
+**Status**: Superseded by ADR 009 | **Date**: 2026-06-23 |
+**Participants**: Marc Bielert, implementation contributors
 
 ## Context
 
-Booking conflicts are currently enforced in the service layer by checking overlapping active bookings before creation.
-This is correct for normal request flow, but it is not a database-level guarantee against two concurrent requests racing each other.
+Booking conflicts were enforced in the service layer by checking overlapping
+active bookings before creation. This was correct for normal request flow, but
+it was not a database-level guarantee against two concurrent requests racing
+each other.
 
 The expected deployment is a small local team with low write concurrency.
 
 ## Decision
 
-For the local MVP, keep service-level booking conflict checks and defer database-level concurrency hardening.
+For the local MVP, we decided to keep service-level booking conflict checks and
+defer database-level concurrency hardening.
 
 Before larger deployment or external network exposure, revisit one of these options:
 
@@ -25,4 +27,7 @@ Before larger deployment or external network exposure, revisit one of these opti
 
 - Checkout and return workflows can proceed without adding premature database complexity.
 - The residual risk is documented and acceptable for current usage.
-- Future hardening has clear implementation candidates.
+- Future hardening had clear implementation candidates.
+
+ADR 009 records the advisory-lock design implemented before production
+deployment.
