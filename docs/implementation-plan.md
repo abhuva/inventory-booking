@@ -1,8 +1,17 @@
 # Implementation Plan
 
-## Current Focus: Option C Inventory Refactor
+## Completed Focus: Option C Inventory Refactor
 
 Goal: split catalog descriptions from physical inventory state.
+
+This refactor and the related workspace work are complete. The application is
+now deployed at `https://inventory.nica.network`. Current priorities are
+production feedback, confirmed automated backups, and targeted workflow
+improvements rather than another broad structural refactor.
+
+The next planned feature branch is `feature/qr-scan-route`. Its implementation
+contract, security boundary, mobile states, tests, and acceptance criteria are
+documented in `docs/qr-scan-feature-plan.md`.
 
 Target model:
 
@@ -111,3 +120,16 @@ StockBatch
 - [x] Add daily/weekly bucket toggle and client-side date-range zoom.
 - [x] Avoid recalculation when only visual color thresholds change.
 - [x] Include tracked unique items as binary 100%/0% availability rows.
+
+### 12. Production Deployment
+
+- [x] Create the private GitHub repository under `abhuva/inventory-booking`.
+- [x] Convert `/opt/docker/inventory` to a Git checkout of `main`.
+- [x] Add a read-only GitHub deploy key on the server.
+- [x] Add a conscious manual deployment script.
+- [x] Run PostgreSQL, FastAPI, and SvelteKit as persistent Docker services.
+- [x] Configure Apache reverse proxy routing and HTTPS for
+  `inventory.nica.network`.
+- [x] Verify public application and database health endpoints.
+- [ ] Confirm automated database/upload backups, off-server retention, and
+  restore-test ownership with IT.

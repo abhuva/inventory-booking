@@ -46,11 +46,10 @@ npm.cmd --prefix .\frontend run lint
 npm.cmd --prefix .\frontend audit --audit-level=moderate
 ```
 
-Planned additions:
-
-- Python dependency audit
-- Semgrep or Bandit for security-oriented static checks
-- API abuse tests for auth, permissions, booking conflicts, stock underflow, and admin overrides
+Additional checks used during security hardening include `pip-audit`, Bandit,
+`npm audit`, permission tests, booking conflict tests, and stock-underflow tests.
+They are not all part of `scripts/check.ps1`, so run the relevant security tools
+explicitly before dependency-heavy or security-sensitive releases.
 
 ## Booking Endpoint Review (2026-06-22)
 
@@ -69,9 +68,14 @@ Controls in place:
 - Booking create/cancel writes audit records; booking create writes item events.
 - Admin conflict overrides are intentionally not implemented; ADR 007 requires explicit audited override design before adding them.
 
-Residual risk:
+Concurrency follow-up:
 
-- Concurrent booking creation is still enforced at service level, not by a database exclusion constraint or serializable transaction. This is acceptable for the local MVP but should be revisited before any larger multi-user deployment or external network exposure.
+- PostgreSQL transaction-scoped advisory locks now serialize booking, basket,
+  checkout, return, stock, and transfer commands by logical domain keys.
+- Opt-in PostgreSQL concurrency tests cover double booking, stock overbooking,
+  checkout versus stock mutation, and return versus transfer.
+- The residual risk is inconsistent lock use in future command paths. New
+  high-risk mutations must follow ADR 009 and add PostgreSQL concurrency tests.
 
 ## Workspace Mutation Review (2026-06-24)
 

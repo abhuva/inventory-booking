@@ -9,6 +9,8 @@ This file is the mandatory starting point for agent work in this repository.
 3. Read `ARCHITECTURE.md` before changing backend, frontend, database, or deployment structure.
 4. Check `docs/implementation-plan.md` for current phase context before larger changes.
 5. Create or update task-specific docs when decisions affect future implementation.
+6. Before any production-server work, read `docs/server-operations.md` and
+   `docs/production-runbook.md`.
 
 ## Project Direction
 
@@ -61,3 +63,7 @@ If a tool is unavailable locally, state that clearly in the final response and s
 - Use PowerShell-compatible commands in examples.
 - Prefer `rg` for searching and plain text or JSON output for automated inspection.
 - Set explicit timeouts for long-running commands.
+- Treat server access as read-only unless the user explicitly requests a
+  production change.
+- Never print, download, replace, or commit the production `.env` or private SSH
+  keys.

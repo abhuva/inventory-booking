@@ -1,108 +1,191 @@
-# Production Deployment And Backup Runbook
+# Production Runbook
 
-This runbook is the operational baseline for deploying the inventory booking app beyond local development.
+This runbook covers deployment, health checks, backup, restore, and rollback for
+the live service at `https://inventory.nica.network`.
 
-## Deployment Shape
+For SSH identities, ownership boundaries, and AI-agent rules, read
+`docs/server-operations.md` first.
+
+## Live Deployment Shape
 
 ```text
-HTTPS reverse proxy
-  -> frontend container, Node/SvelteKit on port 3000
-  -> backend container, FastAPI on port 8000
-  -> postgres container, private Docker network only
+Apache HTTPS reverse proxy
+  -> 127.0.0.1:3000 -> frontend container
+  -> 127.0.0.1:8000 -> backend container
+  -> Docker network -> postgres container
 ```
 
-Do not expose PostgreSQL directly to the network in production.
+The production project uses:
 
-## Required Environment
+```text
+Application directory: /opt/docker/inventory
+Compose file:          docker-compose.prod.yml
+Environment file:      .env
+Git branch:            main
+```
 
-Set these values before using `docker-compose.prod.example.yml` as a production template:
+PostgreSQL has no public host port. The production `.env` is server-only and
+must remain mode `600`.
+
+## Deploy
+
+Deploy only a validated commit already present on `origin/main`:
+
+```bash
+cd /opt/docker/inventory
+bash scripts/deploy-production.sh
+```
+
+The script uses fast-forward-only Git updates, rebuilds the stack, runs Alembic
+migrations, prints service status, and checks backend/database health. A push to
+GitHub alone never triggers it.
+
+Do not run the example Compose file in production. Trebor's live
+`docker-compose.prod.yml` contains the loopback bindings required by Apache.
+
+## Health And Logs
+
+Public checks:
 
 ```powershell
-$env:POSTGRES_PASSWORD = "<strong-password>"
-$env:DATABASE_URL = "postgresql+asyncpg://inventory:<strong-password>@postgres:5432/inventory_booking"
-$env:CORS_ORIGINS = "https://inventory.example.org"
-$env:PUBLIC_API_BASE_URL = "https://inventory.example.org"
-$env:PUBLIC_APP_BASE_URL = "https://inventory.example.org"
-$env:INTERNAL_API_TOKEN = "<random-long-token>"
+$healthUrls = @(
+  'https://inventory.nica.network/'
+  'https://inventory.nica.network/health'
+  'https://inventory.nica.network/health/database'
+)
+
+foreach ($url in $healthUrls) {
+  $status = curl.exe --silent --show-error --max-time 15 `
+    --output NUL --write-out '%{http_code}' $url
+  if ($LASTEXITCODE -ne 0 -or $status -ne '200') {
+    throw "Health check failed for $url (HTTP $status)"
+  }
+  Write-Host "$url HTTP $status"
+}
 ```
 
-Production startup now fails if local defaults are used with `APP_ENV=production`.
+Server checks:
 
-## First Deploy
+```bash
+cd /opt/docker/inventory
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs --tail=100 backend
+docker compose -f docker-compose.prod.yml logs --tail=100 frontend
+docker compose -f docker-compose.prod.yml logs --tail=100 postgres
+```
 
-1. Copy `docker-compose.prod.example.yml` to the server as the deployment compose file.
-2. Set all required environment values through the server secret mechanism or an `.env` file with restricted permissions.
-3. Start the stack.
-4. Run Alembic migrations against the production database.
-5. Seed the first admin account if needed.
-6. Configure the reverse proxy for HTTPS and secure headers.
-7. Confirm `SESSION_COOKIE_SECURE=true` and the public URL is HTTPS.
+Healthy production currently means:
 
-## Reverse Proxy Requirements
-
-- Terminate TLS.
-- Forward `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
-- Route frontend traffic to port `3000`.
-- Route API traffic to port `8000` if frontend and API share one hostname.
-- Add HSTS after HTTPS is confirmed stable.
-- Keep request body limits compatible with configured image upload limits.
+- the public page returns HTTP `200` over HTTPS;
+- plain HTTP redirects to HTTPS;
+- `/health` reports `environment: production`;
+- `/health/database` reports `database: reachable`;
+- all three containers are running and PostgreSQL is healthy.
 
 ## Backup Policy
 
-Minimum baseline:
+Required baseline:
 
-- [ ] Daily PostgreSQL dump.
-- [ ] Off-server copy of each dump.
-- [ ] Backup retention of at least 14 daily snapshots.
-- [ ] Monthly restore test.
-- [ ] Include upload volume backup with the database backup window.
+- daily PostgreSQL custom-format dump;
+- upload-volume archive in the same backup window;
+- off-server copy;
+- at least 14 daily restore points;
+- monthly restore test in a non-production environment;
+- a recorded owner for monitoring backup failures.
 
-Example logical dump from the server:
+During the 2026-08-28 UTC audit, no app-level backup directory or user cron job
+was visible to Marc. Confirm whether Trebor's server-wide backup system covers
+both Docker volumes before treating this requirement as complete.
 
-```powershell
-docker compose exec -T postgres pg_dump -U inventory -d inventory_booking --format=custom > .\backups\inventory_booking_$(Get-Date -Format yyyyMMdd_HHmmss).dump
+### Create A Complete Manual Backup
+
+Run this entire block in one server shell. It creates both files with the same
+non-empty UTC timestamp and fails if either file is empty or not mode `600`:
+
+```bash
+set -euo pipefail
+umask 077
+
+cd /opt/docker/inventory
+install -d -m 0700 backups
+
+backup_stamp="$(date -u +%Y%m%d_%H%M%S)"
+database_backup="backups/inventory_booking_${backup_stamp}.dump"
+upload_backup="backups/asset_uploads_${backup_stamp}.tgz"
+
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  pg_dump -U inventory -d inventory_booking --format=custom \
+  > "$database_backup"
+
+docker run --rm \
+  -v inventory_asset-uploads:/data:ro \
+  alpine sh -c 'umask 077; tar czf - -C /data .' \
+  > "$upload_backup"
+
+if [[ "$(stat -c '%a' backups)" != "700" ]]; then
+  echo "Backup directory must be mode 700." >&2
+  exit 1
+fi
+
+for backup_file in "$database_backup" "$upload_backup"; do
+  if [[ ! -s "$backup_file" ]]; then
+    echo "Backup is missing or empty: $backup_file" >&2
+    exit 1
+  fi
+  if [[ "$(stat -c '%a' "$backup_file")" != "600" ]]; then
+    echo "Backup must be mode 600: $backup_file" >&2
+    exit 1
+  fi
+done
+
+stat -c '%a %n' backups "$database_backup" "$upload_backup"
 ```
 
-Example upload volume backup:
-
-```powershell
-docker run --rm -v inventory-booking_asset-uploads:/data -v ${PWD}\backups:/backup alpine tar czf /backup/asset_uploads_$(Get-Date -Format yyyyMMdd_HHmmss).tgz -C /data .
-```
+A copy under `/opt/docker/inventory/backups` protects against some application
+mistakes but not server loss. Move or synchronize it to the agreed off-server
+backup target.
 
 ## Restore Test
 
-Use a non-production environment.
+Never test restoration against the live production database or volumes.
+
+In an isolated non-production Compose project:
 
 1. Start a clean PostgreSQL container.
-2. Restore the database dump.
-3. Restore the upload archive into the upload volume.
-4. Run migrations to confirm schema compatibility.
-5. Start backend and frontend.
-6. Verify login, inventory list, image retrieval, booking list, checkout list, and return list.
+2. Restore the selected dump with `pg_restore`.
+3. Restore the matching upload archive into a clean upload volume.
+4. Run all Alembic migrations.
+5. Start frontend and backend.
+6. Verify login, inventory, photos, bookings, checkouts, returns, and audit
+   history.
+7. Record the date, backup filenames, result, and operator.
 
-Example restore command:
+Example database input form for the isolated project:
 
-```powershell
-docker compose exec -T postgres pg_restore -U inventory -d inventory_booking --clean --if-exists .\backups\inventory_booking_latest.dump
+```bash
+docker compose -f docker-compose.restore.yml exec -T postgres \
+  pg_restore -U inventory -d inventory_booking --clean --if-exists \
+  < backups/inventory_booking_TIMESTAMP.dump
 ```
 
-## Deployment Checks
-
-Run before promoting a build:
-
-```powershell
-uv run --directory .\backend ruff check .
-uv run --directory .\backend pytest
-npm.cmd --prefix .\frontend run check
-npm.cmd --prefix .\frontend run lint
-npm.cmd --prefix .\frontend run build
-docker compose -f .\docker-compose.prod.example.yml config
-```
+The exact restore Compose file and destination volumes must be reviewed before
+running the command. A production restore is a destructive incident operation
+and requires explicit approval plus a fresh snapshot of the current state.
 
 ## Rollback
 
-- Keep the previous image tag available.
-- Keep the latest pre-deploy database dump.
-- If a migration is not safely reversible, restore the pre-deploy dump rather than attempting manual repair.
-- Document every production restore with timestamp, operator, and reason.
+Application rollback and database rollback are different:
 
+- If no incompatible migration ran, deploy the previous known-good commit.
+- If a migration changed data incompatibly, restoring code alone is not enough.
+- Preserve a pre-deploy database dump for risky releases.
+- Never run `alembic downgrade` in production without reviewing that specific
+  migration's downgrade behavior.
+- Record every production restore with timestamp, operator, reason, source
+  backup, and verification result.
+
+## Infrastructure Escalation
+
+Contact Trebor for changes to Apache routing, TLS certificates, DNS, firewall,
+root-owned Compose configuration, or server-wide backups. Marc and AI agents
+should not attempt to work around those ownership boundaries.

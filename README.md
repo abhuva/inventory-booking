@@ -10,12 +10,14 @@ Internal inventory and equipment booking system for small teams managing physica
 
 ## Repository Layout
 
-- `backend/`: FastAPI application, tests, migrations later.
+- `backend/`: FastAPI application, tests, and Alembic migrations.
 - `frontend/`: SvelteKit application.
 - `frontend/src/lib/components/workspace/`: desktop workspace tab components.
 - `docs/`: project notes, workflow docs, and task tracking.
-- `docs/server-deployment-notes.md`: first-pass notes for discussing server hosting with IT.
-- `docs/production-runbook.md`: production deployment, backup, restore, and rollback baseline.
+- `docs/server-operations.md`: live server access, SSH identities, ownership, and AI-agent rules.
+- `docs/development-and-deployment-workflow.md`: local, GitHub, and manual release workflow.
+- `docs/production-runbook.md`: production deployment, health, backup, restore, and rollback.
+- `docs/qr-scan-feature-plan.md`: next feature plan for authenticated phone QR routing.
 - `docker-compose.yml`: base service topology for PostgreSQL, API, and web app. `docker-compose.override.yml` keeps local development ports, source mounts, and reload/dev-server commands.
 - upload Docker volumes: processed asset/location photos stored outside Postgres.
 - `inventory-booking-tool-proposal.md`: original product and architecture proposal.
@@ -93,6 +95,20 @@ Services:
 - Frontend: `http://127.0.0.1:5173`
 - PostgreSQL: `127.0.0.1:5432`
 
+## Production
+
+The application is live at `https://inventory.nica.network`. Production runs
+the `main` branch from `/opt/docker/inventory` as a Docker Compose project behind
+an Apache HTTPS reverse proxy.
+
+Deployments are conscious manual actions; pushing to GitHub does not update the
+server automatically. Start with:
+
+- `docs/server-operations.md` for SSH access and server boundaries.
+- `docs/development-and-deployment-workflow.md` for the release flow.
+- `docs/production-runbook.md` for deployment, health checks, backups, and
+  recovery.
+
 ## Quality Checks
 
 Backend:
@@ -126,7 +142,12 @@ npm.cmd --prefix .\frontend run generate:api-types
 
 ## Current Status
 
-This repo has a working Docker-backed local stack. Backend health endpoints are `GET /health` and `GET /health/database`. PostgreSQL migrations create users, sessions, persons, locations, categories, tracked/stock asset definitions, tracked units, stock batches, baskets, bookings, checkouts, returns, item events, and audit logs.
+This repo has working local and production Docker stacks. The production service
+is live at `https://inventory.nica.network`. Backend health endpoints are
+`GET /health` and `GET /health/database`. PostgreSQL migrations create users,
+sessions, persons, locations, categories, tracked/stock asset definitions,
+tracked units, stock batches, baskets, bookings, checkouts, returns, item
+events, and audit logs.
 
 The frontend is currently a desktop-first tabbed workspace:
 
@@ -140,7 +161,8 @@ The frontend is currently a desktop-first tabbed workspace:
 - `Account`: login, logout, and editable current account name/email/password.
 - `Admin`: users and categories.
 
-For initial server hosting discussion, see `docs/server-deployment-notes.md`.
+Production operations are documented in `docs/server-operations.md` and
+`docs/production-runbook.md`.
 
 ## API
 
@@ -236,6 +258,9 @@ Current endpoints:
 
 ## Next Implementation Steps
 
-1. Add multi-line booking editing if real usage needs it.
-2. Turn `docs/server-deployment-notes.md` into a production deployment runbook after IT confirms the server setup.
-3. Add backup and restore documentation.
+1. Confirm automated daily database/upload backups, off-server retention, and
+   restore-test ownership with Trebor.
+2. Implement the authenticated phone QR workflow in
+   `docs/qr-scan-feature-plan.md`.
+3. Collect production usage feedback and prioritize workflow corrections.
+4. Add multi-line booking editing if real usage demonstrates the need.

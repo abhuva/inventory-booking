@@ -1,238 +1,164 @@
 # Development And Deployment Workflow
 
-This document explains how to keep local development, GitHub, server
-deployment, and production data separated.
+Local development, GitHub, and production have separate responsibilities and
+data. Production deployment is manual by design.
 
-## Recommended Shape
-
-Use this workflow for normal changes:
+## Normal Change Flow
 
 ```text
-local development
+feature branch on Marc's computer
   -> local checks
-  -> git commit
-  -> push to GitHub
-  -> server pulls latest code
-  -> server rebuilds containers
-  -> server runs database migrations
-  -> app restarts
+  -> commit and push to GitHub
+  -> review and integrate into main
+  -> conscious manual deployment
+  -> server pulls origin/main
+  -> containers rebuild and restart
+  -> Alembic migrations run
+  -> health checks run
 ```
 
-The server should run a known committed version of the app. Avoid long-term
-deployments by copying arbitrary local working directories to the server.
-Copying can be useful for an early prototype, but Git-based deployment is
-safer and easier to reason about.
+Pushing to GitHub does not update production. The server has no webhook, polling
+job, or automatic deployment. This keeps the decision to release separate from
+the decision to publish source code.
 
-## Why GitHub Helps
+## Repository Roles
 
-GitHub is useful even if the server can technically run without it:
+- Local checkout: development, tests, and feature branches.
+- GitHub: shared source of truth and history.
+- Production checkout: a clean checkout of `main`, used only to run the app.
+- PostgreSQL: source of truth for operational inventory and booking data.
+- Docker upload volume: persistent asset and location photos.
 
-- It provides a clean source of truth for the code.
-- It records what changed and when.
-- It makes rollback to an older version possible.
-- It avoids missing files during deployment.
-- It makes server updates repeatable with `git pull`.
-- It helps separate committed app code from local experiments.
-
-Secrets and production environment files must not be committed to GitHub.
+Secrets, private keys, production `.env` files, and server-local Compose files
+must never be committed to GitHub.
 
 ## Local Development
 
-Develop against a local database and local containers. The local database is
-disposable and can be reset, seeded with fake data, and used for migration
-testing.
-
-Typical local workflow:
+Start the local stack and apply migrations:
 
 ```powershell
 docker compose up --build
 .\scripts\migrate.ps1
 ```
 
-Backend checks:
+Run the standard checks:
 
 ```powershell
-uv run --directory .\backend ruff check .
-uv run --directory .\backend pytest
-```
-
-Frontend checks:
-
-```powershell
-npm.cmd --prefix .\frontend run check
-npm.cmd --prefix .\frontend run lint
-```
-
-Environment/deployment config check:
-
-```powershell
+.\scripts\check.ps1
 docker compose config
 ```
 
-## Production Server
+The local database is disposable. Use fake data, migration experiments, and
+automated tests locally. Do not connect development tools to the production
+database by default.
 
-The production server should have a stable checkout under:
+## Git Workflow
+
+Create a branch for each scoped change:
+
+```powershell
+git switch main
+git pull --ff-only origin main
+git switch -c feature/short-description
+```
+
+After validation, commit and push the feature branch. Integrate reviewed work
+into `main` before deployment. Do not deploy an uncommitted local directory or
+copy source files manually to the server.
+
+## Production Layout
+
+The current server layout is:
 
 ```text
-/opt/docker/inventory
+/opt/docker/inventory/                     Git checkout of origin/main
+/opt/docker/inventory/.env                 server-only secrets, mode 600
+/opt/docker/inventory/docker-compose.prod.yml
+                                            root-owned live Compose file
 ```
 
-The production `.env` file lives only on the server:
+The server pulls GitHub through a read-only deploy key. It cannot push changes
+back to GitHub.
 
-```text
-/opt/docker/inventory/.env
-```
+See `docs/server-operations.md` for SSH access and the full production map.
 
-It contains production database credentials, public URLs, and internal tokens.
-Keep it out of Git and restrict permissions.
+## Manual Deployment
 
-Recommended permissions:
+Before deploying:
 
-```bash
-chmod 600 /opt/docker/inventory/.env
-```
+1. Run the local quality checks appropriate to the change.
+2. Confirm the intended commit is present on `origin/main`.
+3. Check that production is healthy.
+4. Create or confirm a recent backup before risky schema or data changes.
 
-The server-local Compose file is:
-
-```text
-/opt/docker/inventory/inventory-compose.yml
-```
-
-It is copied from `docker-compose.prod.example.yml` and intentionally not
-tracked in Git. This allows the server to keep small local deployment details
-without committing secrets or server-only configuration.
-
-## Convert Prototype Copy To Git Checkout
-
-The first prototype deployment was copied from a local working directory. To
-turn that directory into a Git-backed checkout while keeping the server `.env`:
-
-```bash
-cd /opt/docker/inventory
-git init
-git remote add origin https://github.com/abhuva/inventory-booking.git
-git fetch origin main
-git checkout -B main origin/main
-cp docker-compose.prod.example.yml inventory-compose.yml
-chmod 600 .env
-```
-
-After conversion, confirm the checkout and ignored server files:
-
-```bash
-git status --short --branch
-git check-ignore -v .env inventory-compose.yml
-```
-
-## Server Update Flow
-
-After GitHub is set up and the server directory is a Git checkout, a typical
-server update is:
-
-```bash
-cd /opt/docker/inventory
-git pull
-docker compose -f inventory-compose.yml up -d --build
-docker compose -f inventory-compose.yml exec -T backend \
-  uv run alembic upgrade head
-```
-
-The same flow is available as a manual deployment script:
+Connect to the server and run:
 
 ```bash
 cd /opt/docker/inventory
 bash scripts/deploy-production.sh
 ```
 
-The script intentionally does not run automatically. Production updates should
-be a conscious manual action.
+Or invoke it directly from Windows PowerShell:
 
-Then check the running services:
-
-```bash
-docker compose -f inventory-compose.yml ps
-docker compose -f inventory-compose.yml logs --tail=100 backend
-docker compose -f inventory-compose.yml logs --tail=100 frontend
+```powershell
+$serverKey = "$env:USERPROFILE\.ssh\inventory_nica_ed25519"
+$deployCommand = "cd /opt/docker/inventory && bash scripts/deploy-production.sh"
+ssh -i $serverKey Marc@nica.network $deployCommand
 ```
 
-Check backend health from inside the server:
+The script:
 
-```bash
-docker compose -f inventory-compose.yml exec -T backend \
-  curl http://127.0.0.1:8000/health
-docker compose -f inventory-compose.yml exec -T backend \
-  curl http://127.0.0.1:8000/health/database
-```
+1. fetches and fast-forwards to `origin/main`;
+2. validates the server `.env` and `docker-compose.prod.yml`;
+3. rebuilds and starts the containers;
+4. applies Alembic migrations;
+5. prints container status;
+6. checks the API and database health endpoints from inside Docker.
 
-## Local Database Vs Production Database
+It intentionally does not run automatically.
 
-Keep local and production data separate.
+## Post-Deploy Checks
 
-The local database is for development:
-
-- disposable data
-- fake test data
-- resettable schema
-- migration experiments
-- automated tests
-
-The production database is real operational data:
-
-- do not reset casually
-- do not manually edit unless necessary
-- change schema only through Alembic migrations
-- change business data through the app UI, API, or reviewed admin scripts
-- back up before risky changes
-
-## Backups
-
-Production backups must include:
-
-- PostgreSQL database data
-- uploaded asset and location photos
-
-The database is the source of truth for operational state. Uploaded photos live
-in the Docker upload volume.
-
-Create a database backup:
+On the server:
 
 ```bash
 cd /opt/docker/inventory
-mkdir -p backups
-
-docker compose -f inventory-compose.yml exec -T postgres \
-  pg_dump -U inventory -d inventory_booking --format=custom \
-  > backups/inventory_booking_$(date +%Y%m%d_%H%M%S).dump
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs --tail=100 backend
+docker compose -f docker-compose.prod.yml logs --tail=100 frontend
 ```
 
-Create an upload volume backup:
+From Windows:
 
-```bash
-docker run --rm \
-  -v inventory_asset-uploads:/data \
-  -v /opt/docker/inventory/backups:/backup \
-  alpine tar czf /backup/asset_uploads_$(date +%Y%m%d_%H%M%S).tgz \
-  -C /data .
+```powershell
+$healthUrls = @(
+  'https://inventory.nica.network/'
+  'https://inventory.nica.network/health'
+  'https://inventory.nica.network/health/database'
+)
+
+foreach ($url in $healthUrls) {
+  $status = curl.exe --silent --show-error --max-time 15 `
+    --output NUL --write-out '%{http_code}' $url
+  if ($LASTEXITCODE -ne 0 -or $status -ne '200') {
+    throw "Health check failed for $url (HTTP $status)"
+  }
+  Write-Host "$url HTTP $status"
+}
 ```
 
-Backups stored only on the same server are not enough. Arrange an off-server
-copy with IT or another backup target.
+Also log in through the browser and smoke-test the workflow affected by the
+release.
 
-## Restore Principle
+## Production Data Rules
 
-A backup plan is only reliable after a restore has been tested.
+Production data is real operational data:
 
-Restore tests should happen in a non-production environment:
+- do not reset it for testing;
+- apply schema changes only through Alembic migrations;
+- prefer the app UI or reviewed scripts over manual SQL writes;
+- take a backup before risky migrations or bulk corrections;
+- test restores outside production.
 
-1. Start a clean database.
-2. Restore the latest database dump.
-3. Restore the upload archive.
-4. Run migrations.
-5. Start backend and frontend.
-6. Verify login, inventory, bookings, checkout/return history, and image loading.
-
-## Current Prototype Note
-
-The first server deployment was copied from the local working directory to get
-the prototype running quickly. That is acceptable for the first deployment, but
-future updates should move to a GitHub-backed deployment flow.
+For backup, restore, rollback, and incident commands, use
+`docs/production-runbook.md`.
