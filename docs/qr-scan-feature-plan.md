@@ -251,7 +251,7 @@ resolution public as a shortcut.
 8. [x] Add the optional workspace asset deep link.
 9. [x] Add missing backend contract tests and frontend checks.
 10. [x] Complete interactive desktop and narrow-phone browser verification.
-11. [ ] Open a focused pull request after user approval.
+11. [x] Open focused pull request #2 after user approval.
 12. [ ] Deploy manually after review and merge.
 13. [ ] Test an existing production QR with a physical phone camera.
 
