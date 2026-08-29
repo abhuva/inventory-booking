@@ -2,9 +2,9 @@
 
 ## Status
 
-- State: planned next feature
+- State: implemented locally; pending review, merge, deployment, and production phone verification
 - Target branch: `feature/qr-scan-route`
-- Base branch: updated `main` after PR 1 is merged
+- Base branch: `main` after PR 1
 - Public route: `/qr/[token]`
 - Database migration: not expected
 - Infrastructure change: not expected
@@ -198,17 +198,16 @@ location, category, image, and stock requests stay in their existing clients.
 
 ### Components
 
-Add focused components under a QR domain folder:
+Add focused components under a QR domain folder and share the login form with
+the account workspace:
 
 ```text
-frontend/src/lib/components/qr/QrLoginForm.svelte
+frontend/src/lib/components/auth/LoginForm.svelte
 frontend/src/lib/components/qr/QrAssetView.svelte
 frontend/src/lib/components/qr/QrRouteNotice.svelte
 ```
 
-If practical, extract the current Account login form into a shared component so
-login validation and error behavior are not duplicated. Do not couple the QR
-route to the full workspace auth state.
+The QR route remains independent of the full workspace auth state.
 
 ### Workspace Deep Link
 
@@ -242,19 +241,24 @@ resolution public as a shortcut.
 
 ## Implementation Sequence
 
-1. Create `feature/qr-scan-route` from updated `main`.
-2. Record baseline backend and frontend quality-gate results.
-3. Add the typed QR frontend API client.
-4. Add the route state model and authenticated session check.
-5. Add the in-place login flow and automatic post-login retry.
-6. Resolve the token and load the full asset record.
-7. Build the responsive read-only asset view and controlled error states.
-8. Add the optional workspace asset deep link.
-9. Add missing backend contract tests and frontend checks.
-10. Verify locally at desktop and narrow phone viewports.
-11. Open a focused pull request; do not mix unrelated inventory work into it.
-12. Deploy manually after review and merge.
-13. Test an existing production QR with a physical phone camera.
+1. [x] Create `feature/qr-scan-route` from updated `main`.
+2. [x] Record baseline backend and frontend quality-gate results.
+3. [x] Add the typed QR frontend API client.
+4. [x] Add the route state model and authenticated session check.
+5. [x] Add the in-place login flow and automatic post-login retry.
+6. [x] Resolve the token and load the full asset record.
+7. [x] Build the responsive read-only asset view and controlled error states.
+8. [x] Add the optional workspace asset deep link.
+9. [x] Add missing backend contract tests and frontend checks.
+10. [x] Complete interactive desktop and narrow-phone browser verification.
+11. [ ] Open a focused pull request after user approval.
+12. [ ] Deploy manually after review and merge.
+13. [ ] Test an existing production QR with a physical phone camera.
+
+The standard automated checks and production frontend build pass on the feature
+branch. Direct local HTTP checks confirm that QR and workspace deep-link routes
+return `200`. Interactive route verification was completed successfully by the
+user on 2026-08-29.
 
 ## Validation
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { User } from '$lib/api';
+  import LoginForm from '$lib/components/auth/LoginForm.svelte';
 
   let {
     currentUser,
@@ -73,23 +74,7 @@
         </div>
       </form>
     {:else}
-      <form
-        class="asset-edit-form"
-        onsubmit={(event) => {
-          event.preventDefault();
-          login();
-        }}
-      >
-        <label>
-          Email
-          <input bind:value={email} type="email" autocomplete="username" />
-        </label>
-        <label>
-          Password
-          <input bind:value={password} type="password" autocomplete="current-password" />
-        </label>
-        <button type="submit" disabled={busy}>Login</button>
-      </form>
+      <LoginForm bind:email bind:password {busy} onLogin={login} />
     {/if}
   </section>
 </section>

@@ -9,7 +9,8 @@ now deployed at `https://inventory.nica.network`. Current priorities are
 production feedback, confirmed automated backups, and targeted workflow
 improvements rather than another broad structural refactor.
 
-The next planned feature branch is `feature/qr-scan-route`. Its implementation
+The authenticated QR scan route is implemented on `feature/qr-scan-route` and
+awaits review, deployment, and production phone verification. Its implementation
 contract, security boundary, mobile states, tests, and acceptance criteria are
 documented in `docs/qr-scan-feature-plan.md`.
 
@@ -133,3 +134,14 @@ StockBatch
 - [x] Verify public application and database health endpoints.
 - [ ] Confirm automated database/upload backups, off-server retention, and
   restore-test ownership with IT.
+
+### 13. Authenticated Phone QR Lookup
+
+- [x] Add the `/qr/[token]` SvelteKit route without changing existing labels.
+- [x] Keep QR resolution authenticated and preserve in-place login return state.
+- [x] Add tracked and stock mobile detail views with deliberate error states.
+- [x] Add `/?tab=inventory&asset=<asset-id>` workspace deep linking.
+- [x] Cover authenticated, unknown, unassigned, stock, tracked, and deleted QR
+  resolver contracts in backend tests.
+- [ ] Complete interactive browser verification, review, deployment, and a
+  physical production phone scan.

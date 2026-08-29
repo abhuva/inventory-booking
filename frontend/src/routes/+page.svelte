@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { browser } from '$app/environment';
   import { PUBLIC_APP_BASE_URL } from '$env/static/public';
   import {
     ApiError,
@@ -192,6 +193,7 @@
     try {
       await loadCurrentUser();
       await loadInventory();
+      await applyWorkspaceDeepLink();
     } catch (caught) {
       if (caught instanceof ApiError && caught.status !== 401) {
         error = caught.message;
@@ -269,6 +271,7 @@
       auth.currentUser = await authApi.login({ email: auth.email, password: auth.password });
       resetAccountForm();
       await loadInventory();
+      await applyWorkspaceDeepLink();
       message = `Logged in as ${auth.currentUser.email}`;
     });
   }
@@ -922,6 +925,24 @@
         : [];
       message = 'Asset detail loaded';
     });
+  }
+
+  async function applyWorkspaceDeepLink(): Promise<void> {
+    if (!browser || !auth.currentUser) {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const assetId = params.get('asset');
+    if (params.get('tab') !== 'inventory' || !assetId) {
+      return;
+    }
+    if (!assets.some((asset) => asset.id === assetId)) {
+      return;
+    }
+
+    activeTab = 'inventory';
+    await selectAssetDetail(assetId);
   }
 
   function resetAssetEditForm() {
