@@ -349,7 +349,7 @@ body.qr-route-body {
   }
 
   .qr-asset-media {
-    grid-row: span 2;
+    grid-row: 1 / span 2;
     aspect-ratio: auto;
     min-height: 20rem;
   }
@@ -357,6 +357,11 @@ body.qr-route-body {
   .qr-asset-description,
   .qr-detail-section {
     grid-column: 1 / -1;
+  }
+
+  .qr-asset-heading + :is(.qr-asset-description, .qr-detail-section) {
+    grid-row: 2;
+    grid-column: 2;
   }
 }
 
