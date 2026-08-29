@@ -1902,9 +1902,43 @@ def test_qr_assignment_accepts_stock_asset(client: TestClient) -> None:
         json={"asset_id": stock_asset["id"]},
         headers=headers,
     )
+    resolve_response = client.get(f"/qr-codes/{token}/resolve", headers=headers)
 
     assert response.status_code == 200
     assert response.json()["asset_id"] == stock_asset["id"]
+    assert resolve_response.status_code == 200
+    assert resolve_response.json()["assigned"] is True
+    assert resolve_response.json()["asset"]["id"] == stock_asset["id"]
+
+
+def test_unassigned_qr_resolves_without_asset(client: TestClient) -> None:
+    headers = login(client)
+    token = client.post("/qr-codes", json={}, headers=headers).json()["token"]
+
+    response = client.get(f"/qr-codes/{token}/resolve", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["token"] == token
+    assert response.json()["assigned"] is False
+    assert response.json()["asset"] is None
+
+
+def test_deleted_qr_target_resolves_as_unassigned(client: TestClient) -> None:
+    headers = login(client)
+    asset = client.post(
+        "/assets",
+        json={"name": "Deleted QR Asset", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+    token = client.post(f"/assets/{asset['id']}/qr", headers=headers).json()["token"]
+
+    delete_response = client.delete(f"/assets/{asset['id']}", headers=headers)
+    resolve_response = client.get(f"/qr-codes/{token}/resolve", headers=headers)
+
+    assert delete_response.status_code == 204
+    assert resolve_response.status_code == 200
+    assert resolve_response.json()["assigned"] is False
+    assert resolve_response.json()["asset"] is None
 
 
 def test_asset_qr_endpoint_creates_and_returns_existing_qr(client: TestClient) -> None:
@@ -1961,10 +1995,12 @@ def test_qr_assignment_rejects_lost_asset(client: TestClient) -> None:
 
 def test_qr_endpoints_require_session_and_do_not_enumerate(client: TestClient) -> None:
     unauthenticated_response = client.post("/qr-codes", json={})
+    unauthenticated_resolve_response = client.get("/qr-codes/not-a-real-token/resolve")
     headers = login(client)
     missing_response = client.get("/qr-codes/not-a-real-token/resolve", headers=headers)
 
     assert unauthenticated_response.status_code == 401
+    assert unauthenticated_resolve_response.status_code == 401
     assert missing_response.status_code == 404
     assert missing_response.json()["detail"] == "QR label not found."
 

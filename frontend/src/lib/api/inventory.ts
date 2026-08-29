@@ -26,6 +26,7 @@ export const inventoryApi = {
   updateAsset: (assetId: string, payload: AssetUpdate) =>
     apiPatch<Asset>(`/assets/${assetId}`, payload),
   deleteAsset: (assetId: string) => apiDelete<void>(`/assets/${assetId}`),
+  getAssetImage: (assetId: string) => apiGet<AssetImage>(`/assets/${assetId}/image`),
   listAssetImages: () => apiGet<AssetImage[]>('/assets/images'),
   uploadAssetImage: (assetId: string, payload: FormData) =>
     apiUpload<AssetImage>(`/assets/${assetId}/image`, payload),

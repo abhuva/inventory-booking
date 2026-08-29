@@ -22,6 +22,8 @@ Operational state belongs in PostgreSQL. Markdown is documentation only, not sou
 
 - Do not make direct code changes on `main` for feature work once the initial setup is complete.
 - Create a feature branch for every scoped change.
+- Do not commit or push changes unless the user explicitly asks for that action.
+- Leave completed work uncommitted on its feature branch while implementation or review work may still continue.
 - Do not open pull requests automatically.
 - Ask the user before creating a pull request.
 - Never rewrite history or amend commits unless explicitly requested.
