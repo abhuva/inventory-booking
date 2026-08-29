@@ -2,7 +2,7 @@ from collections import OrderedDict
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import func, select, text
+from sqlalchemy import case, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.baskets.enums import BasketStatus
@@ -18,7 +18,7 @@ from inventory_booking_api.bookings.schemas import (
 from inventory_booking_api.inventory.enums import AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
 
-ACTIVE_BOOKING_STATUSES = (BookingStatus.RESERVED, BookingStatus.CHECKED_OUT)
+RESERVING_BOOKING_STATUSES = (BookingStatus.RESERVED,)
 HEATMAP_CACHE_MAX_ITEMS = 24
 HeatmapCacheKey = tuple[str, str, str, UUID | None, tuple[object, ...]]
 heatmap_cache: OrderedDict[HeatmapCacheKey, AvailabilityHeatmapRead] = OrderedDict()
@@ -45,7 +45,10 @@ async def build_stock_availability_heatmap(
         return cached_heatmap
 
     stock_assets = await list_heatmap_stock_totals(session, location_id)
-    stock_asset_ids = [asset_id for asset_id, _name, _unit_name, _total_quantity in stock_assets]
+    stock_asset_ids = [
+        asset_id
+        for asset_id, _name, _unit_name, _total_quantity, _physical_available in stock_assets
+    ]
     tracked_assets = await list_heatmap_tracked_totals(session, location_id)
     tracked_asset_ids = [
         asset_id
@@ -108,7 +111,7 @@ async def build_stock_availability_heatmap(
     apply_heatmap_impacts(tracked_held_quantities, buckets, tracked_basket_impacts)
     items: list[HeatmapItemRead] = []
 
-    for asset_id, name, unit_name, total_quantity in stock_assets:
+    for asset_id, name, unit_name, total_quantity, physical_available in stock_assets:
         cells: list[HeatmapCellRead] = []
         for bucket_index, (bucket_start, bucket_end) in enumerate(buckets):
             reserved_quantity = reserved_quantities[asset_id][bucket_index]
@@ -120,7 +123,10 @@ async def build_stock_availability_heatmap(
                     total_quantity=total_quantity,
                     reserved_quantity=reserved_quantity,
                     held_quantity=held_quantity,
-                    available_quantity=max(0, total_quantity - reserved_quantity - held_quantity),
+                    available_quantity=max(
+                        0,
+                        physical_available - reserved_quantity - held_quantity,
+                    ),
                 )
             )
 
@@ -188,11 +194,10 @@ async def list_heatmap_stock_assets(session: AsyncSession) -> list[Asset]:
 async def list_heatmap_stock_totals(
     session: AsyncSession,
     location_id: UUID | None,
-) -> list[tuple[UUID, str, str | None, int]]:
+) -> list[tuple[UUID, str, str | None, int, int]]:
     filters = [
         Asset.asset_type == AssetType.STOCK,
-        StockBatch.holder_user_id.is_(None),
-        StockBatch.status == AssetStatus.AVAILABLE,
+        StockBatch.status.in_((AssetStatus.AVAILABLE, AssetStatus.CHECKED_OUT)),
     ]
     if location_id is not None:
         filters.append(StockBatch.location_id == location_id)
@@ -203,6 +208,15 @@ async def list_heatmap_stock_totals(
             Asset.name,
             Asset.unit_name,
             func.coalesce(func.sum(StockBatch.quantity), 0).label("total_quantity"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (StockBatch.status == AssetStatus.AVAILABLE, StockBatch.quantity),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label("physical_available"),
         )
         .join(StockBatch, StockBatch.asset_id == Asset.id)
         .where(*filters)
@@ -211,8 +225,8 @@ async def list_heatmap_stock_totals(
         .order_by(Asset.name)
     )
     return [
-        (asset_id, name, unit_name, int(total_quantity))
-        for asset_id, name, unit_name, total_quantity in result.all()
+        (asset_id, name, unit_name, int(total_quantity), int(physical_available))
+        for asset_id, name, unit_name, total_quantity, physical_available in result.all()
     ]
 
 
@@ -260,7 +274,7 @@ async def list_heatmap_booking_impacts(
     filters = [
         BookingLine.asset_id.in_(asset_ids),
         BookingLine.quantity.is_not(None),
-        Booking.status.in_(ACTIVE_BOOKING_STATUSES),
+        Booking.status.in_(RESERVING_BOOKING_STATUSES),
         BookingLine.starts_at < ends_at,
         BookingLine.ends_at > starts_at,
     ]
@@ -341,7 +355,7 @@ async def list_heatmap_tracked_booking_impacts(
         .where(
             BookingLine.asset_id.in_(asset_ids),
             BookingLine.quantity.is_(None),
-            Booking.status.in_(ACTIVE_BOOKING_STATUSES),
+            Booking.status.in_(RESERVING_BOOKING_STATUSES),
             BookingLine.starts_at < ends_at,
             BookingLine.ends_at > starts_at,
         )
@@ -434,7 +448,7 @@ async def aggregate_heatmap_booking_quantities_postgresql(
             JOIN assets a ON a.id = bl.asset_id
             WHERE bl.quantity IS NOT NULL
                 AND a.asset_type = 'stock'
-                AND bk.status IN ('reserved', 'checked_out')
+                AND bk.status = 'reserved'
                 AND bl.starts_at < :ends_at
                 AND bl.ends_at > :starts_at
                 AND (

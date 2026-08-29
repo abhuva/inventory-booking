@@ -595,6 +595,45 @@ def test_asset_description_is_separate_from_notes(client: TestClient) -> None:
     assert update_response.json()["notes"] == "Updated private note."
 
 
+def test_stock_asset_extra_fields_persist_on_create_and_update(client: TestClient) -> None:
+    headers = login(client)
+    create_response = client.post(
+        "/assets",
+        json={
+            "name": "Valued Stock Props",
+            "asset_type": "stock",
+            "unit_name": "piece",
+            "manufacturer": "Prop Maker",
+            "model": "Standard",
+            "replacement_value": "12.50",
+            "notes": "Initial stock notes.",
+        },
+        headers=headers,
+    )
+    created = create_response.json()
+
+    update_response = client.patch(
+        f"/assets/{created['id']}",
+        json={
+            "manufacturer": "New Prop Maker",
+            "model": "Deluxe",
+            "replacement_value": "18.75",
+            "notes": "Updated stock notes.",
+        },
+        headers=headers,
+    )
+    get_response = client.get(f"/assets/{created['id']}", headers=headers)
+
+    assert create_response.status_code == 200
+    assert created["replacement_value"] == "12.50"
+    assert update_response.status_code == 200
+    assert update_response.json()["manufacturer"] == "New Prop Maker"
+    assert update_response.json()["model"] == "Deluxe"
+    assert update_response.json()["replacement_value"] == "18.75"
+    assert update_response.json()["notes"] == "Updated stock notes."
+    assert get_response.json()["replacement_value"] == "18.75"
+
+
 def test_stock_level_requires_stock_asset(client: TestClient) -> None:
     headers = login(client)
 
@@ -2523,6 +2562,69 @@ def test_stock_availability_heatmap_reports_bookings_and_basket_holds(client: Te
         cell["available_quantity"]
         for cell in multi_day_items[booked_tracked_asset["id"]]["cells"]
     ] == [0, 0, 0]
+
+
+def test_stock_availability_heatmap_reflects_early_checkout(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Early Checkout Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Early Checkout Stock", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 10,
+        },
+        headers=headers,
+    )
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Early stock checkout",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 4,
+                }
+            ],
+        },
+        headers=headers,
+    ).json()
+
+    checkout_response = client.post(
+        "/checkouts",
+        json={"booking_id": booking["id"]},
+        headers=headers,
+    )
+    response = client.get(
+        "/bookings/availability/heatmap",
+        params={
+            "starts_at": (BOOKING_START - timedelta(days=1)).isoformat(),
+            "ends_at": (BOOKING_START + timedelta(days=1)).isoformat(),
+            "bucket": "day",
+            "location_id": location["id"],
+        },
+        headers=headers,
+    )
+
+    assert checkout_response.status_code == 200
+    assert response.status_code == 200
+    item = next(item for item in response.json()["items"] if item["asset_id"] == stock_asset["id"])
+    assert item["total_quantity"] == 10
+    assert [cell["total_quantity"] for cell in item["cells"]] == [10, 10]
+    assert [cell["reserved_quantity"] for cell in item["cells"]] == [0, 0]
+    assert [cell["available_quantity"] for cell in item["cells"]] == [6, 6]
 
 
 def test_availability_days_reports_stock_conflicts(client: TestClient) -> None:

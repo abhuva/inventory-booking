@@ -1,4 +1,14 @@
-DEFINITION_FIELDS = {"name", "asset_type", "category_id", "unit_name", "description"}
+DEFINITION_FIELDS = {
+    "name",
+    "asset_type",
+    "category_id",
+    "unit_name",
+    "description",
+    "manufacturer",
+    "model",
+    "replacement_value",
+    "notes",
+}
 TRACKED_UNIT_FIELDS = {
     "status",
     "condition",
