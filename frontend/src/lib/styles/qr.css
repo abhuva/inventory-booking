@@ -349,7 +349,6 @@ body.qr-route-body {
   }
 
   .qr-asset-media {
-    grid-row: span 2;
     aspect-ratio: auto;
     min-height: 20rem;
   }
