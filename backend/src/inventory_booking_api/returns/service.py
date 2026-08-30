@@ -248,12 +248,16 @@ async def apply_stock_return(
             status_code=status.HTTP_409_CONFLICT,
             detail="Return quantity exceeds checked-out batch quantity.",
         )
-    checked_out_batch.quantity -= quantity
+    batch_condition = checked_out_batch.condition
+    if checked_out_batch.quantity == quantity:
+        await session.delete(checked_out_batch)
+    else:
+        checked_out_batch.quantity -= quantity
     available_batch = await get_available_stock_batch(
         session,
         checkout_line.asset_id,
         checkout_line.location_id,
-        checked_out_batch.condition,
+        batch_condition,
     )
     if available_batch is None:
         available_batch = StockBatch(
@@ -262,14 +266,12 @@ async def apply_stock_return(
             holder_user_id=None,
             checkout_line_id=None,
             status=AssetStatus.AVAILABLE,
-            condition=checked_out_batch.condition,
+            condition=batch_condition,
             quantity=quantity,
         )
         session.add(available_batch)
     else:
         available_batch.quantity += quantity
-    if checked_out_batch.quantity == 0:
-        await session.delete(checked_out_batch)
     checkout_line.quantity_returned += quantity
 
 
