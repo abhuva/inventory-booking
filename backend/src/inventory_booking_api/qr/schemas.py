@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -45,3 +46,21 @@ class QrResolveRead(BaseModel):
     token: str
     assigned: bool
     asset: QrResolvedAsset | None
+
+
+class QrScanEventCreate(BaseModel):
+    client_event_id: UUID
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class QrScanEventRead(BaseModel):
+    id: UUID
+    asset_id: UUID
+    asset_name: str
+    created_at: datetime
+
+
+class QrScanEventListRead(BaseModel):
+    events: list[QrScanEventRead]
+    cursor: datetime

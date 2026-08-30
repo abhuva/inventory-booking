@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator, Generator
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -2006,6 +2007,87 @@ def test_qr_create_assign_and_resolve_tracked_asset(client: TestClient) -> None:
     assert resolve_response.json()["assigned"] is True
     assert resolve_response.json()["asset"]["id"] == tracked_asset["id"]
     assert event_response.json()[0]["event_type"] == "qr_assigned"
+
+
+def test_qr_scan_events_are_idempotent_and_scoped_to_the_current_user(
+    client: TestClient,
+) -> None:
+    admin_headers = login(client)
+    asset = client.post(
+        "/assets",
+        json={"name": "Scanned Aerial Stand", "asset_type": "tracked"},
+        headers=admin_headers,
+    ).json()
+    token = client.post(f"/assets/{asset['id']}/qr", headers=admin_headers).json()["token"]
+    initial_feed = client.get("/qr-codes/scan-events", headers=admin_headers)
+    client_event_id = str(uuid4())
+
+    first_scan = client.post(
+        f"/qr-codes/{token}/scan-events",
+        json={"client_event_id": client_event_id},
+        headers=admin_headers,
+    )
+    retried_scan = client.post(
+        f"/qr-codes/{token}/scan-events",
+        json={"client_event_id": client_event_id},
+        headers=admin_headers,
+    )
+    admin_feed = client.get(
+        "/qr-codes/scan-events",
+        params={"after": initial_feed.json()["cursor"]},
+        headers=admin_headers,
+    )
+
+    assert initial_feed.status_code == 200
+    assert initial_feed.json()["events"] == []
+    assert first_scan.status_code == 200
+    assert retried_scan.status_code == 200
+    assert retried_scan.json()["id"] == first_scan.json()["id"]
+    assert admin_feed.status_code == 200
+    assert admin_feed.json()["events"] == [
+        {
+            "id": first_scan.json()["id"],
+            "asset_id": asset["id"],
+            "asset_name": "Scanned Aerial Stand",
+            "created_at": first_scan.json()["created_at"],
+        }
+    ]
+
+    assert client.post("/auth/logout", headers=admin_headers).status_code == 204
+    user_headers = login(client, USER_EMAIL, USER_PASSWORD)
+    user_feed = client.get(
+        "/qr-codes/scan-events",
+        params={"after": initial_feed.json()["cursor"]},
+        headers=user_headers,
+    )
+
+    assert user_feed.status_code == 200
+    assert user_feed.json()["events"] == []
+
+
+def test_qr_scan_event_rejects_unassigned_label(client: TestClient) -> None:
+    headers = login(client)
+    token = client.post("/qr-codes", json={}, headers=headers).json()["token"]
+
+    response = client.post(
+        f"/qr-codes/{token}/scan-events",
+        json={"client_event_id": str(uuid4())},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "QR label is not assigned to an asset."
+
+
+def test_qr_scan_event_endpoints_require_session(client: TestClient) -> None:
+    list_response = client.get("/qr-codes/scan-events")
+    create_response = client.post(
+        "/qr-codes/not-a-real-token/scan-events",
+        json={"client_event_id": str(uuid4())},
+    )
+
+    assert list_response.status_code == 401
+    assert create_response.status_code == 401
 
 
 def test_qr_assignment_accepts_stock_asset(client: TestClient) -> None:
