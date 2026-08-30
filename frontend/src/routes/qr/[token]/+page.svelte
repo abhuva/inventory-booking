@@ -32,6 +32,8 @@
     | 'not-found'
     | 'error';
 
+  const scanReportRetryDelays = [1000, 3000, 7000] as const;
+
   let { data }: { data: PageData } = $props();
 
   let routeState = $state<RouteState>('checking-session');
@@ -46,6 +48,11 @@
   let stockLevels = $state<StockLevel[]>([]);
   let events = $state<ItemEvent[]>([]);
   let clientScanEventId = '';
+  let routeActive = false;
+  let scanReportComplete = false;
+  let scanReportInFlight = false;
+  let scanReportRetryIndex = 0;
+  let scanReportRetryTimer: number | undefined;
 
   const imageUrl = $derived(
     asset && assetImage
@@ -65,10 +72,17 @@
   );
 
   onMount(() => {
+    routeActive = true;
     document.body.classList.add('qr-route-body');
     clientScanEventId = createClientEventId();
     void checkSession();
-    return () => document.body.classList.remove('qr-route-body');
+    return () => {
+      routeActive = false;
+      if (scanReportRetryTimer !== undefined) {
+        window.clearTimeout(scanReportRetryTimer);
+      }
+      document.body.classList.remove('qr-route-body');
+    };
   });
 
   async function checkSession(): Promise<void> {
@@ -146,7 +160,7 @@
       stockLevels = loadedStock.filter((level) => level.asset_id === loadedAsset.id);
       events = loadedEvents;
       routeState = 'ready';
-      void reportScan();
+      startScanReport();
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         currentUser = null;
@@ -161,15 +175,48 @@
     }
   }
 
-  async function reportScan(): Promise<void> {
-    if (!clientScanEventId || !data.token) {
+  function startScanReport(): void {
+    if (
+      !routeActive ||
+      scanReportComplete ||
+      scanReportInFlight ||
+      scanReportRetryTimer !== undefined
+    ) {
       return;
     }
+    scanReportRetryIndex = 0;
+    void reportScan();
+  }
+
+  async function reportScan(): Promise<void> {
+    if (!routeActive || !clientScanEventId || !data.token || scanReportInFlight) {
+      return;
+    }
+    scanReportInFlight = true;
     try {
       await qrApi.reportScan(data.token, { client_event_id: clientScanEventId });
-    } catch {
-      // The asset view remains usable if the optional cross-device notification fails.
+      scanReportComplete = true;
+    } catch (caught) {
+      if (
+        routeActive &&
+        shouldRetryScanReport(caught) &&
+        scanReportRetryIndex < scanReportRetryDelays.length
+      ) {
+        const delay = scanReportRetryDelays[scanReportRetryIndex];
+        scanReportRetryIndex += 1;
+        scanReportRetryTimer = window.setTimeout(() => {
+          scanReportRetryTimer = undefined;
+          void reportScan();
+        }, delay);
+      }
+      // The asset view remains usable if every notification attempt fails.
+    } finally {
+      scanReportInFlight = false;
     }
+  }
+
+  function shouldRetryScanReport(caught: unknown): boolean {
+    return !(caught instanceof ApiError) || caught.status === 429 || caught.status >= 500;
   }
 
   function createClientEventId(): string {
