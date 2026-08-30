@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "echarts": "^6.1.0",
+    "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4"
   }
 }

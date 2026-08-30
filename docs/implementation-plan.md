@@ -155,3 +155,14 @@ StockBatch
 - [x] Cover authentication, user isolation, idempotency, and unassigned labels in
   backend tests.
 - [ ] Complete local two-device browser verification before review and deployment.
+
+### 15. Printable QR Label Sheets
+
+- [x] Add an authenticated workspace for assigned QR-code selection and copy counts.
+- [x] Support configurable A4 column and row grids with a first-page preview.
+- [x] Generate multi-page PDFs with vector QR modules and asset names in the browser.
+- [x] Add the monochrome NICA logo with high QR error correction.
+- [x] Provide a constrained logo-radius control with a scan-tested default.
+- [x] Allow the logo artwork size to be adjusted independently from its white circle.
+- [x] Validate branded 4x6 and 8x8 layouts through rendered and decoded sample PDFs.
+- [ ] Complete interactive local testing before review and deployment.

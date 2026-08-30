@@ -153,6 +153,7 @@ The frontend is currently a desktop-first tabbed workspace:
 
 - `Dashboard`: high-level counts.
 - `Inventory`: assets, asset search, asset detail/history, basket entry, deletion, and asset state changes.
+- `QR labels`: selected, repeated QR labels arranged as downloadable A4 PDF sheets.
 - `Locations`: spaces, stock by location, and movement workflows.
 - `Persons`: team, user, and external contact records used for bookings and location responsibility.
 - `Bookings`: filtered/sortable reservation list, editable booking details, check-out, and check-in workflows.

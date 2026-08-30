@@ -72,6 +72,7 @@
   import InventoryPanel from '$lib/components/workspace/InventoryPanel.svelte';
   import LocationsPanel from '$lib/components/workspace/LocationsPanel.svelte';
   import PersonsPanel from '$lib/components/workspace/PersonsPanel.svelte';
+  import QrLabelsPanel from '$lib/components/workspace/QrLabelsPanel.svelte';
   import QrScanNotification from '$lib/components/workspace/QrScanNotification.svelte';
   import { prepareAssetImage, prepareInventoryImage } from '$lib/image';
   import { createAuthState } from '$lib/workspace/auth-state.svelte';
@@ -95,6 +96,7 @@
   const workspaceTabs: WorkspaceTabDefinition[] = [
     { id: 'dashboard', label: 'Dashboard', description: 'Counts and workspace overview' },
     { id: 'inventory', label: 'Inventory', description: 'Assets, state, and history' },
+    { id: 'labels', label: 'QR labels', description: 'Build printable A4 label sheets' },
     { id: 'locations', label: 'Locations', description: 'Spaces, stock, and movement' },
     { id: 'persons', label: 'Persons', description: 'Contacts, team, and borrowers' },
     { id: 'bookings', label: 'Bookings', description: 'Reservation list and details' },
@@ -1077,6 +1079,9 @@
       if (tab.id === 'admin') {
         return auth.currentUser?.role === 'admin';
       }
+      if (tab.id === 'labels') {
+        return Boolean(auth.currentUser);
+      }
       return true;
     });
   }
@@ -1552,6 +1557,10 @@
               {qrScanUrl}
               {formatDateTime}
             />
+          {/if}
+
+          {#if activeTab === 'labels'}
+            <QrLabelsPanel {assets} {qrCodes} {qrScanUrl} />
           {/if}
         {/if}
       </section>
