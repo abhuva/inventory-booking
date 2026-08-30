@@ -1,11 +1,15 @@
 import QRCode from 'qrcode';
 
-export async function renderQrSvg(value: string): Promise<string> {
+export async function renderQrSvg(
+  value: string,
+  errorCorrectionLevel: 'L' | 'M' | 'Q' | 'H' = 'M',
+  margin = 2
+): Promise<string> {
   return await QRCode.toString(value, {
     type: 'svg',
     width: 320,
-    margin: 2,
-    errorCorrectionLevel: 'M'
+    margin,
+    errorCorrectionLevel
   });
 }
 

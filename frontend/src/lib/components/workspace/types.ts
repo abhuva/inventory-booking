@@ -1,6 +1,7 @@
 export type WorkspaceTab =
   | 'dashboard'
   | 'inventory'
+  | 'labels'
   | 'basket'
   | 'locations'
   | 'persons'
