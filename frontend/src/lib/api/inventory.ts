@@ -10,6 +10,7 @@ import {
   type AssetStateChange,
   type AssetUpdate,
   type ItemEvent,
+  type InventoryValueSummary,
   type MaintenanceComplete,
   type MaintenanceStart,
   type QrCode,
@@ -21,6 +22,7 @@ import {
 
 export const inventoryApi = {
   listAssets: () => apiGet<Asset[]>('/assets'),
+  getValueSummary: () => apiGet<InventoryValueSummary>('/assets/value-summary'),
   getAsset: (assetId: string) => apiGet<Asset>(`/assets/${assetId}`),
   createAsset: (payload: AssetCreate) => apiPost<Asset>('/assets', payload),
   updateAsset: (assetId: string, payload: AssetUpdate) =>

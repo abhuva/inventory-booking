@@ -441,7 +441,12 @@ button.danger {
 .dashboard-summary-grid span {
   font-size: 1.35rem;
   font-weight: 900;
-  letter-spacing: -0.06em;
+  letter-spacing: 0;
+}
+
+.dashboard-value-stat span {
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
 }
 
 .dashboard-summary-grid strong {

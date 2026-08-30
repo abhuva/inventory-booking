@@ -2254,6 +2254,18 @@
         "title": "HeatmapItemRead",
         "type": "object"
       },
+      "InventoryValueSummaryRead": {
+        "properties": {
+          "total_value": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Value",
+            "type": "string"
+          }
+        },
+        "required": ["total_value"],
+        "title": "InventoryValueSummaryRead",
+        "type": "object"
+      },
       "ItemEventRead": {
         "properties": {
           "actor_user_id": {
@@ -3847,6 +3859,25 @@
           }
         },
         "summary": "List Asset Images Endpoint",
+        "tags": ["assets"]
+      }
+    },
+    "/assets/value-summary": {
+      "get": {
+        "operationId": "get_inventory_value_summary_endpoint_assets_value_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryValueSummaryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Inventory Value Summary Endpoint",
         "tags": ["assets"]
       }
     },

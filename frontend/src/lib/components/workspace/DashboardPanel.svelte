@@ -1,5 +1,6 @@
 <script lang="ts">
   let {
+    totalInventoryValue,
     trackedAssetCount,
     stockAssetCount,
     locationCount,
@@ -9,6 +10,7 @@
     returnCount,
     qrCodeCount
   }: {
+    totalInventoryValue: string;
     trackedAssetCount: number;
     stockAssetCount: number;
     locationCount: number;
@@ -18,6 +20,13 @@
     returnCount: number;
     qrCodeCount: number;
   } = $props();
+
+  function formatMoney(value: string): string {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(value as Intl.StringNumericLiteral);
+  }
 </script>
 
 <section class="panel dashboard-panel" aria-label="Inventory summary">
@@ -29,6 +38,10 @@
   </div>
 
   <div class="dashboard-summary-grid">
+    <div class="dashboard-value-stat">
+      <span>{formatMoney(totalInventoryValue)}</span>
+      <strong>Total inventory value</strong>
+    </div>
     <div>
       <span>{trackedAssetCount}</span>
       <strong>Tracked assets</strong>
