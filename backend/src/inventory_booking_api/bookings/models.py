@@ -1,7 +1,18 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from inventory_booking_api.bookings.enums import BookingStatus
@@ -48,6 +59,15 @@ class BookingLine(IdMixin, TimestampMixin, Base):
         ),
         CheckConstraint("quantity IS NULL OR quantity > 0", name="booking_line_positive_quantity"),
         CheckConstraint("starts_at < ends_at", name="booking_line_valid_time_range"),
+        CheckConstraint(
+            "rental_unit_price_per_day IS NULL OR rental_unit_price_per_day >= 0",
+            name="rental_unit_price_non_negative",
+        ),
+        CheckConstraint("rental_days IS NULL OR rental_days > 0", name="rental_days_positive"),
+        CheckConstraint(
+            "rental_total IS NULL OR rental_total >= 0",
+            name="rental_total_non_negative",
+        ),
     )
 
     booking_id: Mapped[UUID] = mapped_column(ForeignKey("bookings.id"), nullable=False)
@@ -56,4 +76,9 @@ class BookingLine(IdMixin, TimestampMixin, Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     quantity: Mapped[int | None] = mapped_column(nullable=True)
+    rental_unit_price_per_day: Mapped[Decimal | None] = mapped_column(
+        Numeric(14, 6), nullable=True
+    )
+    rental_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rental_total: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

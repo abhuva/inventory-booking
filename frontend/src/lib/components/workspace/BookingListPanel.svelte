@@ -12,6 +12,7 @@
     User
   } from '$lib/api';
   import { readStoredBoolean, readStoredString, writeStoredValue } from '$lib/persisted';
+  import { formatEuro } from '$lib/rental-pricing';
 
   const bookingStatuses: BookingStatus[] = ['reserved', 'cancelled', 'checked_out', 'completed'];
   const noLocationFilterValue = '__none';
@@ -273,7 +274,14 @@
 
   function compactBookingLine(line: BookingLine): string {
     const quantity = line.quantity === null ? '1' : String(line.quantity);
-    return `${quantity} x ${assetName(line.asset_id)} from ${locationName(line.location_id)} (${lineDateRange(line)})`;
+    return `${quantity} x ${assetName(line.asset_id)} from ${locationName(line.location_id)} (${lineDateRange(line)}) / ${formatEuro(line.rental_total)}`;
+  }
+
+  function bookingPrice(booking: Booking | undefined): string {
+    if (!booking || booking.unpriced_line_count > 0) {
+      return 'Not priced';
+    }
+    return formatEuro(booking.rental_total);
   }
 
   function checkoutLineQuantity(line: NonNullable<Checkout['lines']>[number]): string {
@@ -505,6 +513,7 @@
                 Lines{sortIndicator('lines')}
               </button>
             </th>
+            <th>Price</th>
           </tr>
         </thead>
         <tbody>
@@ -525,10 +534,11 @@
               <td>{formatDateTime(booking.created_at)}</td>
               <td>{formatDateTime(booking.starts_at)}</td>
               <td>{booking.lines?.length ?? 0}</td>
+              <td>{bookingPrice(booking)}</td>
             </tr>
           {:else}
             <tr>
-              <td colspan="5" class="empty">
+              <td colspan="6" class="empty">
                 {bookings.length ? 'No bookings match these filters.' : 'No bookings yet.'}
               </td>
             </tr>
@@ -622,6 +632,11 @@
           </div>
         </form>
 
+        <div class="readonly-field booking-price-total">
+          <span>Rental price</span>
+          <strong>{bookingPrice(selectedBooking())}</strong>
+        </div>
+
         <article class="mini-list">
           <div class="mini-list-heading">
             <h3>Booked items</h3>
@@ -650,6 +665,17 @@
                   {bookingLineQuantity(line)}
                 </span>
                 <span>{lineDateRange(line)}</span>
+                {#if line.rental_total !== null}
+                  <span>
+                    {line.rental_days}
+                    {line.rental_days === 1 ? 'day' : 'days'} at
+                    {formatEuro(line.rental_unit_price_per_day, 6)} / {formatEuro(
+                      line.rental_total
+                    )}
+                  </span>
+                {:else}
+                  <span>Not priced</span>
+                {/if}
                 {#if line.notes}
                   <small>{line.notes}</small>
                 {/if}

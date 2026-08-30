@@ -36,6 +36,19 @@ class Asset(IdMixin, TimestampMixin, Base):
             "(asset_type = 'stock' AND unit_name IS NOT NULL)",
             name="asset_type_unit_name_consistency",
         ),
+        CheckConstraint(
+            "rental_recoup_days IS NULL OR rental_recoup_days > 0",
+            name="rental_recoup_days_positive",
+        ),
+        CheckConstraint(
+            "rental_maintenance_cost_per_day IS NULL "
+            "OR rental_maintenance_cost_per_day >= 0",
+            name="rental_maintenance_cost_non_negative",
+        ),
+        CheckConstraint(
+            "rental_profit_margin_percent IS NULL OR rental_profit_margin_percent >= 0",
+            name="rental_profit_margin_non_negative",
+        ),
     )
 
     name: Mapped[str] = mapped_column(String(180), index=True, nullable=False)
@@ -77,6 +90,13 @@ class Asset(IdMixin, TimestampMixin, Base):
     serial_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
     asset_tag: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
     replacement_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    rental_recoup_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rental_maintenance_cost_per_day: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    rental_profit_margin_percent: Mapped[Decimal | None] = mapped_column(
+        Numeric(7, 2), nullable=True
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 

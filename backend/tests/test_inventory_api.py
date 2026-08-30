@@ -1,18 +1,22 @@
+import asyncio
 from collections.abc import AsyncGenerator, Generator
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from inventory_booking_api.core.database import get_session
 from inventory_booking_api.core.security import hash_password
+from inventory_booking_api.inventory.models import StockBatch
 from inventory_booking_api.main import app
 from inventory_booking_api.models import Base
 from inventory_booking_api.settings import Settings, get_settings
@@ -74,8 +78,6 @@ def client(tmp_path: Path) -> Generator[TestClient]:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.drop_all)
         await engine.dispose()
-
-    import asyncio
 
     _failed_login_attempts.clear()
     asyncio.run(create_schema())
@@ -1040,6 +1042,119 @@ def test_booking_exposes_created_at_and_requester(client: TestClient) -> None:
     assert detail_response.json()["created_at"] == created["created_at"]
 
 
+def test_booking_snapshots_asset_pricing_and_charges_each_started_day(
+    client: TestClient,
+) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Priced Stock Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    asset_response = client.post(
+        "/assets",
+        json={
+            "name": "Priced Hula Hoop",
+            "asset_type": "stock",
+            "unit_name": "piece",
+            "replacement_value": "32.95",
+            "rental_recoup_days": 70,
+            "rental_maintenance_cost_per_day": "0.10",
+            "rental_profit_margin_percent": "75",
+        },
+        headers=headers,
+    )
+    asset = asset_response.json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 20,
+        },
+        headers=headers,
+    )
+    booking_end = BOOKING_START + timedelta(days=4, hours=1)
+
+    booking_response = client.post(
+        "/bookings",
+        json={
+            "title": "Five charged rental days",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": booking_end.isoformat(),
+            "lines": [
+                {
+                    "asset_id": asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 10,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert asset_response.status_code == 200
+    assert Decimal(asset["rental_daily_rate"]) == Decimal("0.998750")
+    assert booking_response.status_code == 200
+    booking = booking_response.json()
+    assert booking["unpriced_line_count"] == 0
+    assert Decimal(booking["rental_total"]) == Decimal("49.94")
+    assert booking["lines"][0]["rental_days"] == 5
+    assert Decimal(booking["lines"][0]["rental_unit_price_per_day"]) == Decimal(
+        "0.998750"
+    )
+    assert Decimal(booking["lines"][0]["rental_total"]) == Decimal("49.94")
+
+    client.patch(
+        f"/assets/{asset['id']}",
+        json={"rental_profit_margin_percent": "100"},
+        headers=headers,
+    )
+    one_day_end = BOOKING_START + timedelta(hours=3)
+    updated_response = client.patch(
+        f"/bookings/{booking['id']}",
+        json={
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": one_day_end.isoformat(),
+        },
+        headers=headers,
+    )
+
+    assert updated_response.status_code == 200
+    updated = updated_response.json()
+    assert updated["lines"][0]["rental_days"] == 1
+    assert Decimal(updated["lines"][0]["rental_unit_price_per_day"]) == Decimal(
+        "0.998750"
+    )
+    assert Decimal(updated["rental_total"]) == Decimal("9.99")
+
+
+def test_booking_marks_total_incomplete_when_an_asset_has_no_pricing(client: TestClient) -> None:
+    headers = login(client)
+    tracked_asset = client.post(
+        "/assets",
+        json={"name": "Unpriced Booking Rig", "asset_type": "tracked"},
+        headers=headers,
+    ).json()
+
+    response = client.post(
+        "/bookings",
+        json={
+            "title": "Unpriced booking",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [{"asset_id": tracked_asset["id"]}],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["rental_total"] is None
+    assert response.json()["unpriced_line_count"] == 1
+    assert response.json()["lines"][0]["rental_days"] is None
+    assert response.json()["lines"][0]["rental_total"] is None
+
+
 def test_delete_booking_removes_booking_and_lines(client: TestClient) -> None:
     headers = login(client)
     tracked_asset = client.post(
@@ -1636,6 +1751,220 @@ def test_stock_partial_then_final_return_updates_checkout_and_stock(client: Test
     assert final_checkout_response.json()["lines"][0]["quantity_returned"] == 6
     assert final_stock_response.json()["quantity_total"] == 10
     assert final_stock_response.json()["quantity_checked_out"] == 0
+
+
+def test_split_condition_stock_remains_one_operational_location_stack(
+    client: TestClient,
+) -> None:
+    headers = login(client)
+    source_location = client.post(
+        "/locations",
+        json={"name": "Split Condition Source", "type": "storage"},
+        headers=headers,
+    ).json()
+    destination_location = client.post(
+        "/locations",
+        json={"name": "Split Condition Destination", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={"name": "Split Condition Balls", "asset_type": "stock", "unit_name": "piece"},
+        headers=headers,
+    ).json()
+    original_level = client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": source_location["id"],
+            "quantity_total": 10,
+        },
+        headers=headers,
+    ).json()
+    first_booking = client.post(
+        "/bookings",
+        json={
+            "title": "Create condition split",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": source_location["id"],
+                    "quantity": 6,
+                }
+            ],
+        },
+        headers=headers,
+    ).json()
+    first_checkout = client.post(
+        "/checkouts",
+        json={"booking_id": first_booking["id"], "condition_out": "unknown"},
+        headers=headers,
+    ).json()
+    return_response = client.post(
+        "/returns",
+        json={
+            "checkout_id": first_checkout["id"],
+            "lines": [
+                {
+                    "checkout_line_id": first_checkout["lines"][0]["id"],
+                    "quantity": 6,
+                    "condition_in": "good",
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    levels_after_return = [
+        level
+        for level in client.get("/stock-levels", headers=headers).json()
+        if level["asset_id"] == stock_asset["id"]
+    ]
+
+    async def load_batch_conditions() -> list[tuple[str, int]]:
+        session_dependency = app.dependency_overrides[get_session]
+        async for session in session_dependency():
+            result = await session.execute(
+                select(StockBatch.condition, StockBatch.quantity)
+                    .where(StockBatch.asset_id == UUID(stock_asset["id"]))
+                .order_by(StockBatch.condition)
+            )
+            return [(condition.value, quantity) for condition, quantity in result.all()]
+        raise RuntimeError("Test database session was unavailable.")
+
+    batch_conditions = asyncio.run(load_batch_conditions())
+    transfer_response = client.post(
+        "/stock-levels/transfer",
+        json={
+            "asset_id": stock_asset["id"],
+            "from_location_id": source_location["id"],
+            "to_location_id": destination_location["id"],
+            "quantity": 9,
+        },
+        headers=headers,
+    )
+    assert return_response.status_code == 200
+    assert levels_after_return == [
+        {
+            "id": original_level["id"],
+            "asset_id": stock_asset["id"],
+            "location_id": source_location["id"],
+            "quantity_total": 10,
+            "quantity_reserved": 0,
+            "quantity_checked_out": 0,
+        }
+    ]
+    assert batch_conditions == [("good", 6), ("unknown", 4)]
+    assert transfer_response.status_code == 200
+    transfer_levels = {level["location_id"]: level for level in transfer_response.json()}
+    assert transfer_levels[source_location["id"]]["quantity_total"] == 1
+    assert transfer_levels[destination_location["id"]]["quantity_total"] == 9
+
+    second_booking = client.post(
+        "/bookings",
+        json={
+            "title": "Checkout transferred condition split",
+            "starts_at": (BOOKING_END + timedelta(days=1)).isoformat(),
+            "ends_at": (BOOKING_END + timedelta(days=2)).isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": destination_location["id"],
+                    "quantity": 9,
+                }
+            ],
+        },
+        headers=headers,
+    ).json()
+    second_checkout_response = client.post(
+        "/checkouts",
+        json={"booking_id": second_booking["id"]},
+        headers=headers,
+    )
+
+    assert second_checkout_response.status_code == 200
+
+
+def test_stock_quantity_adjustment_consumes_all_condition_batches(client: TestClient) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": "Adjusted Condition Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={
+            "name": "Adjusted Condition Balls",
+            "asset_type": "stock",
+            "unit_name": "piece",
+            "replacement_value": "1.00",
+        },
+        headers=headers,
+    ).json()
+    original_level = client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 10,
+        },
+        headers=headers,
+    ).json()
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Adjust condition split",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 6,
+                }
+            ],
+        },
+        headers=headers,
+    ).json()
+    checkout = client.post(
+        "/checkouts",
+        json={"booking_id": booking["id"], "condition_out": "good"},
+        headers=headers,
+    ).json()
+    client.post(
+        "/returns",
+        json={
+            "checkout_id": checkout["id"],
+            "lines": [
+                {
+                    "checkout_line_id": checkout["lines"][0]["id"],
+                    "quantity": 6,
+                    "condition_in": "good",
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    response = client.patch(
+        f"/stock-levels/{original_level['id']}",
+        json={"quantity_total": 2},
+        headers=headers,
+    )
+    listed_level = next(
+        level
+        for level in client.get("/stock-levels", headers=headers).json()
+        if level["asset_id"] == stock_asset["id"]
+    )
+    value_summary = client.get("/assets/value-summary", headers=headers).json()
+
+    assert response.status_code == 200
+    assert response.json()["quantity_total"] == 2
+    assert listed_level["quantity_total"] == 2
+    assert value_summary["total_value"] == "2.00"
 
 
 def test_stock_return_rejects_over_return(client: TestClient) -> None:

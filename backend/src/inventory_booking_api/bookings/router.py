@@ -159,6 +159,12 @@ async def delete_booking_endpoint(
 
 
 def build_booking_read(booking: Booking, lines: list[BookingLine]) -> BookingRead:
+    unpriced_line_count = sum(line.rental_total is None for line in lines)
+    rental_total = (
+        sum((line.rental_total for line in lines if line.rental_total is not None), start=0)
+        if not unpriced_line_count
+        else None
+    )
     return BookingRead(
         id=booking.id,
         requested_by_user_id=booking.requested_by_user_id,
@@ -170,4 +176,6 @@ def build_booking_read(booking: Booking, lines: list[BookingLine]) -> BookingRea
         created_at=booking.created_at,
         notes=booking.notes,
         lines=[BookingLineRead.model_validate(line) for line in lines],
+        rental_total=rental_total,
+        unpriced_line_count=unpriced_line_count,
     )

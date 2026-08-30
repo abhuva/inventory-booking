@@ -13,6 +13,10 @@ from inventory_booking_api.bookings.availability import (
 )
 from inventory_booking_api.bookings.enums import BookingStatus
 from inventory_booking_api.bookings.models import Booking, BookingLine
+from inventory_booking_api.bookings.pricing import (
+    calculate_rental_days,
+    calculate_rental_total,
+)
 from inventory_booking_api.bookings.queries import booking_reference_counts, list_booking_lines
 from inventory_booking_api.bookings.schemas import (
     BookingCreate,
@@ -25,7 +29,8 @@ from inventory_booking_api.core.locks import (
     asset_lock_key,
     booking_lock_key,
 )
-from inventory_booking_api.inventory.models import StockBatch
+from inventory_booking_api.inventory.models import Asset, StockBatch
+from inventory_booking_api.inventory.pricing import calculate_daily_rental_rate
 from inventory_booking_api.persons.models import Person
 from inventory_booking_api.returns.models import Return, ReturnLine
 from inventory_booking_api.users.models import User
@@ -67,6 +72,7 @@ async def create_booking_without_commit(
     await validate_booking_lines(session, payload, excluded_basket_id=excluded_basket_id)
     aggregate_starts_at = min(booking_line_starts_at(payload, line) for line in payload.lines)
     aggregate_ends_at = max(booking_line_ends_at(payload, line) for line in payload.lines)
+    assets = await get_booking_assets(session, payload)
 
     booking = Booking(
         requested_by_user_id=actor.id,
@@ -83,7 +89,7 @@ async def create_booking_without_commit(
     booking_lines = [
         BookingLine(
             booking_id=booking.id,
-            **booking_line_values(payload, line),
+            **booking_line_values(payload, line, assets[line.asset_id]),
         )
         for line in payload.lines
     ]
@@ -100,6 +106,13 @@ async def create_booking_without_commit(
                 "booking_id": str(booking.id),
                 "location_id": str(line.location_id) if line.location_id else None,
                 "quantity": line.quantity,
+                "rental_unit_price_per_day": (
+                    str(line.rental_unit_price_per_day)
+                    if line.rental_unit_price_per_day is not None
+                    else None
+                ),
+                "rental_days": line.rental_days,
+                "rental_total": str(line.rental_total) if line.rental_total is not None else None,
             },
         )
     await write_audit_log(
@@ -172,6 +185,12 @@ async def update_booking(
         for line in lines:
             line.starts_at = next_starts_at
             line.ends_at = next_ends_at
+            line.rental_days = calculate_rental_days(next_starts_at, next_ends_at)
+            line.rental_total = calculate_rental_total(
+                line.rental_unit_price_per_day,
+                line.rental_days,
+                line.quantity,
+            )
     await write_audit_log(
         session,
         actor=actor,
@@ -250,13 +269,35 @@ async def validate_booking_person(session: AsyncSession, person_id: UUID | None)
         )
 
 
-def booking_line_values(payload: BookingCreate, line: BookingLineCreate) -> dict[str, object]:
+async def get_booking_assets(session: AsyncSession, payload: BookingCreate) -> dict[UUID, Asset]:
+    asset_ids = {line.asset_id for line in payload.lines}
+    result = await session.execute(select(Asset).where(Asset.id.in_(asset_ids)))
+    return {asset.id: asset for asset in result.scalars().all()}
+
+
+def booking_line_values(
+    payload: BookingCreate,
+    line: BookingLineCreate,
+    asset: Asset,
+) -> dict[str, object]:
+    starts_at = booking_line_starts_at(payload, line)
+    ends_at = booking_line_ends_at(payload, line)
+    rental_days = calculate_rental_days(starts_at, ends_at)
+    daily_rate = calculate_daily_rental_rate(
+        asset.replacement_value,
+        asset.rental_recoup_days,
+        asset.rental_maintenance_cost_per_day,
+        asset.rental_profit_margin_percent,
+    )
     return {
         "asset_id": line.asset_id,
         "location_id": line.location_id,
-        "starts_at": booking_line_starts_at(payload, line),
-        "ends_at": booking_line_ends_at(payload, line),
+        "starts_at": starts_at,
+        "ends_at": ends_at,
         "quantity": line.quantity,
+        "rental_unit_price_per_day": daily_rate,
+        "rental_days": rental_days if daily_rate is not None else None,
+        "rental_total": calculate_rental_total(daily_rate, rental_days, line.quantity),
         "notes": line.notes,
     }
 

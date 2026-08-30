@@ -1002,6 +1002,12 @@ export interface components {
       name: string;
       /** Notes */
       notes?: string | null;
+      /** Rental Maintenance Cost Per Day */
+      rental_maintenance_cost_per_day?: number | string | null;
+      /** Rental Profit Margin Percent */
+      rental_profit_margin_percent?: number | string | null;
+      /** Rental Recoup Days */
+      rental_recoup_days?: number | null;
       /** Replacement Value */
       replacement_value?: number | string | null;
       /** Serial Number */
@@ -1068,6 +1074,14 @@ export interface components {
       name: string;
       /** Notes */
       notes: string | null;
+      /** Rental Daily Rate */
+      rental_daily_rate?: string | null;
+      /** Rental Maintenance Cost Per Day */
+      rental_maintenance_cost_per_day: string | null;
+      /** Rental Profit Margin Percent */
+      rental_profit_margin_percent: string | null;
+      /** Rental Recoup Days */
+      rental_recoup_days: number | null;
       /** Replacement Value */
       replacement_value: string | null;
       /** Serial Number */
@@ -1124,6 +1138,12 @@ export interface components {
       name?: string | null;
       /** Notes */
       notes?: string | null;
+      /** Rental Maintenance Cost Per Day */
+      rental_maintenance_cost_per_day?: number | string | null;
+      /** Rental Profit Margin Percent */
+      rental_profit_margin_percent?: number | string | null;
+      /** Rental Recoup Days */
+      rental_recoup_days?: number | null;
       /** Replacement Value */
       replacement_value?: number | string | null;
       /** Serial Number */
@@ -1477,6 +1497,12 @@ export interface components {
       notes: string | null;
       /** Quantity */
       quantity: number | null;
+      /** Rental Days */
+      rental_days: number | null;
+      /** Rental Total */
+      rental_total: string | null;
+      /** Rental Unit Price Per Day */
+      rental_unit_price_per_day: string | null;
       /**
        * Starts At
        * Format: date-time
@@ -1509,6 +1535,8 @@ export interface components {
       notes: string | null;
       /** Person Id */
       person_id: string | null;
+      /** Rental Total */
+      rental_total?: string | null;
       /**
        * Requested By User Id
        * Format: uuid
@@ -1522,6 +1550,11 @@ export interface components {
       status: components['schemas']['BookingStatus'];
       /** Title */
       title: string;
+      /**
+       * Unpriced Line Count
+       * @default 0
+       */
+      unpriced_line_count: number;
     };
     /**
      * BookingStatus

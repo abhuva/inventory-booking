@@ -166,3 +166,14 @@ StockBatch
 - [x] Allow the logo artwork size to be adjusted independently from its white circle.
 - [x] Validate branded 4x6 and 8x8 layouts through rendered and decoded sample PDFs.
 - [ ] Complete interactive local testing before review and deployment.
+
+### 16. Rental Pricing
+
+- [x] Reuse replacement value as the simplified per-item base value.
+- [x] Add recoup rental days, maintenance cost, and profit margin to asset definitions.
+- [x] Calculate and display a tuneable daily unit price in a dedicated asset tab.
+- [x] Snapshot daily rates, charged started days, and totals on booking lines.
+- [x] Multiply stock prices by quantity and tracked prices by one exact item.
+- [x] Show estimated totals in booking drafts and baskets and persisted totals on bookings.
+- [x] Leave existing and incompletely configured booking lines explicitly unpriced.
+- [ ] Complete full automated and interactive local verification.

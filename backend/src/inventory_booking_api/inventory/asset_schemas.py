@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from inventory_booking_api.inventory.enums import AssetCondition, AssetStatus, AssetType
+from inventory_booking_api.inventory.pricing import calculate_daily_rental_rate
 
 
 class AssetCreate(BaseModel):
@@ -21,7 +22,10 @@ class AssetCreate(BaseModel):
     model: str | None = Field(default=None, max_length=120)
     serial_number: str | None = Field(default=None, max_length=120)
     asset_tag: str | None = Field(default=None, max_length=80)
-    replacement_value: Decimal | None = None
+    replacement_value: Decimal | None = Field(default=None, ge=0)
+    rental_recoup_days: int | None = Field(default=None, gt=0)
+    rental_maintenance_cost_per_day: Decimal | None = Field(default=None, ge=0)
+    rental_profit_margin_percent: Decimal | None = Field(default=None, ge=0)
     description: str | None = None
     notes: str | None = None
 
@@ -46,7 +50,10 @@ class AssetUpdate(BaseModel):
     model: str | None = Field(default=None, max_length=120)
     serial_number: str | None = Field(default=None, max_length=120)
     asset_tag: str | None = Field(default=None, max_length=80)
-    replacement_value: Decimal | None = None
+    replacement_value: Decimal | None = Field(default=None, ge=0)
+    rental_recoup_days: int | None = Field(default=None, gt=0)
+    rental_maintenance_cost_per_day: Decimal | None = Field(default=None, ge=0)
+    rental_profit_margin_percent: Decimal | None = Field(default=None, ge=0)
     description: str | None = None
     notes: str | None = None
 
@@ -67,10 +74,24 @@ class AssetRead(BaseModel):
     serial_number: str | None
     asset_tag: str | None
     replacement_value: Decimal | None
+    rental_recoup_days: int | None
+    rental_maintenance_cost_per_day: Decimal | None
+    rental_profit_margin_percent: Decimal | None
+    rental_daily_rate: Decimal | None = None
     description: str | None
     notes: str | None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def calculate_rental_daily_rate(self) -> "AssetRead":
+        self.rental_daily_rate = calculate_daily_rental_rate(
+            self.replacement_value,
+            self.rental_recoup_days,
+            self.rental_maintenance_cost_per_day,
+            self.rental_profit_margin_percent,
+        )
+        return self
 
 
 class InventoryValueSummaryRead(BaseModel):

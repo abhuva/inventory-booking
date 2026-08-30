@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -64,6 +65,9 @@ class BookingLineRead(BaseModel):
     starts_at: datetime
     ends_at: datetime
     quantity: int | None
+    rental_unit_price_per_day: Decimal | None
+    rental_days: int | None
+    rental_total: Decimal | None
     notes: str | None
 
     model_config = ConfigDict(from_attributes=True)
@@ -80,6 +84,8 @@ class BookingRead(BaseModel):
     created_at: datetime
     notes: str | None
     lines: list[BookingLineRead] = []
+    rental_total: Decimal | None = None
+    unpriced_line_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

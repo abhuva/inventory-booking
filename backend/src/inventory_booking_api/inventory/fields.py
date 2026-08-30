@@ -7,6 +7,9 @@ DEFINITION_FIELDS = {
     "manufacturer",
     "model",
     "replacement_value",
+    "rental_recoup_days",
+    "rental_maintenance_cost_per_day",
+    "rental_profit_margin_percent",
     "notes",
 }
 TRACKED_UNIT_FIELDS = {

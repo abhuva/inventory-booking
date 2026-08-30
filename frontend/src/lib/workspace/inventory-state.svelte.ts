@@ -125,6 +125,9 @@ export function createInventoryState() {
         serial_number: asset.serial_number ?? '',
         asset_tag: asset.asset_tag ?? '',
         replacement_value: asset.replacement_value,
+        rental_recoup_days: asset.rental_recoup_days,
+        rental_maintenance_cost_per_day: asset.rental_maintenance_cost_per_day,
+        rental_profit_margin_percent: asset.rental_profit_margin_percent,
         description: asset.description ?? '',
         notes: asset.notes ?? ''
       };
@@ -197,6 +200,9 @@ function emptyAssetEditForm(): AssetUpdate {
     serial_number: '',
     asset_tag: '',
     replacement_value: null,
+    rental_recoup_days: null,
+    rental_maintenance_cost_per_day: null,
+    rental_profit_margin_percent: null,
     description: '',
     notes: ''
   };
