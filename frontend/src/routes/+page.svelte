@@ -241,7 +241,7 @@
       locationsApi.listLocations(),
       auth.currentUser ? locationsApi.listLocationImages() : Promise.resolve([]),
       inventoryApi.listAssets(),
-      inventoryApi.getValueSummary(),
+      auth.currentUser ? inventoryApi.getValueSummary() : Promise.resolve({ total_value: '0.00' }),
       auth.currentUser ? inventoryApi.listAssetImages() : Promise.resolve([]),
       inventoryApi.listStockLevels(),
       auth.currentUser ? basketApi.activeBasket() : Promise.resolve(null),
@@ -285,6 +285,7 @@
     await runAction(async () => {
       await authApi.logout();
       auth.currentUser = null;
+      inventoryValueSummary = { total_value: '0.00' };
       assetImages = [];
       locationImages = [];
       basketState.clear();

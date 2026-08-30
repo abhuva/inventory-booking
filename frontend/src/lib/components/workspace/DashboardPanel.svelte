@@ -25,7 +25,7 @@
     return new Intl.NumberFormat(undefined, {
       style: 'currency',
       currency: 'EUR'
-    }).format(Number(value));
+    }).format(value as Intl.StringNumericLiteral);
   }
 </script>
 
