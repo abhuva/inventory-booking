@@ -1564,7 +1564,7 @@ def test_tracked_return_damaged_updates_asset_and_audit(client: TestClient) -> N
     assert any(entry["entity_type"] == "return" for entry in audit_response.json())
 
 
-def test_stock_partial_return_updates_checkout_and_stock(client: TestClient) -> None:
+def test_stock_partial_then_final_return_updates_checkout_and_stock(client: TestClient) -> None:
     headers = login(client)
     location = client.post(
         "/locations",
@@ -1619,6 +1619,23 @@ def test_stock_partial_return_updates_checkout_and_stock(client: TestClient) -> 
     assert checkout_response.json()["status"] == "partially_returned"
     assert checkout_response.json()["lines"][0]["quantity_returned"] == 2
     assert stock_response.json()["quantity_checked_out"] == 4
+
+    final_return_response = client.post(
+        "/returns",
+        json={
+            "checkout_id": checkout["id"],
+            "lines": [{"checkout_line_id": checkout_line_id, "quantity": 4}],
+        },
+        headers=headers,
+    )
+    final_checkout_response = client.get(f"/checkouts/{checkout['id']}")
+    final_stock_response = client.get(f"/stock-levels/{stock_level['id']}")
+
+    assert final_return_response.status_code == 200
+    assert final_checkout_response.json()["status"] == "returned"
+    assert final_checkout_response.json()["lines"][0]["quantity_returned"] == 6
+    assert final_stock_response.json()["quantity_total"] == 10
+    assert final_stock_response.json()["quantity_checked_out"] == 0
 
 
 def test_stock_return_rejects_over_return(client: TestClient) -> None:
