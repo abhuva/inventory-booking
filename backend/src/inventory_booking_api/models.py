@@ -13,7 +13,7 @@ from inventory_booking_api.inventory.models import (
 )
 from inventory_booking_api.locations.models import Location, LocationImage
 from inventory_booking_api.persons.models import Person
-from inventory_booking_api.qr.models import QrCode
+from inventory_booking_api.qr.models import QrCode, QrScanEvent
 from inventory_booking_api.returns.models import Return, ReturnLine
 from inventory_booking_api.users.models import User
 from inventory_booking_api.users.session_models import UserSession
@@ -35,6 +35,7 @@ __all__ = [
     "LocationImage",
     "Person",
     "QrCode",
+    "QrScanEvent",
     "Return",
     "ReturnLine",
     "StockLevel",

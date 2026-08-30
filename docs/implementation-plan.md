@@ -145,3 +145,13 @@ StockBatch
   resolver contracts in backend tests.
 - [ ] Complete interactive browser verification, review, deployment, and a
   physical production phone scan.
+
+### 14. Cross-Device QR Scan Notifications
+
+- [x] Persist successful assigned-label scans for the authenticated user.
+- [x] Deduplicate phone retries and retain notification events for 24 hours.
+- [x] Poll from the open workspace without requiring proxy or deployment changes.
+- [x] Show a dismissible notification that links directly to the scanned asset.
+- [x] Cover authentication, user isolation, idempotency, and unassigned labels in
+  backend tests.
+- [ ] Complete local two-device browser verification before review and deployment.

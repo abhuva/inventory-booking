@@ -776,6 +776,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/qr-codes/scan-events': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Scan Events Endpoint */
+    get: operations['list_scan_events_endpoint_qr_codes_scan_events_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/qr-codes/{token}/assign': {
     parameters: {
       query?: never;
@@ -804,6 +821,23 @@ export interface paths {
     get: operations['resolve_qr_code_endpoint_qr_codes__token__resolve_get'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/qr-codes/{token}/scan-events': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Create Scan Event Endpoint */
+    post: operations['create_scan_event_endpoint_qr_codes__token__scan_events_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2006,6 +2040,44 @@ export interface components {
       /** Name */
       name: string;
       status: components['schemas']['AssetStatus'];
+    };
+    /** QrScanEventCreate */
+    QrScanEventCreate: {
+      /**
+       * Client Event Id
+       * Format: uuid
+       */
+      client_event_id: string;
+    };
+    /** QrScanEventListRead */
+    QrScanEventListRead: {
+      /**
+       * Cursor
+       * Format: date-time
+       */
+      cursor: string;
+      /** Events */
+      events: components['schemas']['QrScanEventRead'][];
+    };
+    /** QrScanEventRead */
+    QrScanEventRead: {
+      /**
+       * Asset Id
+       * Format: uuid
+       */
+      asset_id: string;
+      /** Asset Name */
+      asset_name: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
     };
     /** ReturnCreate */
     ReturnCreate: {
@@ -4227,6 +4299,37 @@ export interface operations {
       };
     };
   };
+  list_scan_events_endpoint_qr_codes_scan_events_get: {
+    parameters: {
+      query?: {
+        after?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QrScanEventListRead'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
   assign_qr_code_endpoint_qr_codes__token__assign_post: {
     parameters: {
       query?: never;
@@ -4280,6 +4383,41 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['QrResolveRead'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  create_scan_event_endpoint_qr_codes__token__scan_events_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        token: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['QrScanEventCreate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QrScanEventRead'];
         };
       };
       /** @description Validation Error */

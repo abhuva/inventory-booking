@@ -45,6 +45,7 @@
   let locations = $state<Location[]>([]);
   let stockLevels = $state<StockLevel[]>([]);
   let events = $state<ItemEvent[]>([]);
+  let clientScanEventId = '';
 
   const imageUrl = $derived(
     asset && assetImage
@@ -65,6 +66,7 @@
 
   onMount(() => {
     document.body.classList.add('qr-route-body');
+    clientScanEventId = createClientEventId();
     void checkSession();
     return () => document.body.classList.remove('qr-route-body');
   });
@@ -144,6 +146,7 @@
       stockLevels = loadedStock.filter((level) => level.asset_id === loadedAsset.id);
       events = loadedEvents;
       routeState = 'ready';
+      void reportScan();
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) {
         currentUser = null;
@@ -156,6 +159,28 @@
       }
       setError(caught);
     }
+  }
+
+  async function reportScan(): Promise<void> {
+    if (!clientScanEventId || !data.token) {
+      return;
+    }
+    try {
+      await qrApi.reportScan(data.token, { client_event_id: clientScanEventId });
+    } catch {
+      // The asset view remains usable if the optional cross-device notification fails.
+    }
+  }
+
+  function createClientEventId(): string {
+    if (typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
 
   async function getOptionalAssetImage(assetId: string): Promise<AssetImage | null> {

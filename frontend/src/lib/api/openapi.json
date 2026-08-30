@@ -3180,6 +3180,64 @@
         "title": "QrResolvedAsset",
         "type": "object"
       },
+      "QrScanEventCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "client_event_id": {
+            "format": "uuid",
+            "title": "Client Event Id",
+            "type": "string"
+          }
+        },
+        "required": ["client_event_id"],
+        "title": "QrScanEventCreate",
+        "type": "object"
+      },
+      "QrScanEventListRead": {
+        "properties": {
+          "cursor": {
+            "format": "date-time",
+            "title": "Cursor",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/QrScanEventRead"
+            },
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "required": ["events", "cursor"],
+        "title": "QrScanEventListRead",
+        "type": "object"
+      },
+      "QrScanEventRead": {
+        "properties": {
+          "asset_id": {
+            "format": "uuid",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "asset_name": {
+            "title": "Asset Name",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": ["id", "asset_id", "asset_name", "created_at"],
+        "title": "QrScanEventRead",
+        "type": "object"
+      },
       "ReturnCreate": {
         "additionalProperties": false,
         "properties": {
@@ -6360,6 +6418,54 @@
         "tags": ["qr-codes"]
       }
     },
+    "/qr-codes/scan-events": {
+      "get": {
+        "operationId": "list_scan_events_endpoint_qr_codes_scan_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QrScanEventListRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Scan Events Endpoint",
+        "tags": ["qr-codes"]
+      }
+    },
     "/qr-codes/{token}/assign": {
       "post": {
         "operationId": "assign_qr_code_endpoint_qr_codes__token__assign_post",
@@ -6447,6 +6553,56 @@
           }
         },
         "summary": "Resolve Qr Code Endpoint",
+        "tags": ["qr-codes"]
+      }
+    },
+    "/qr-codes/{token}/scan-events": {
+      "post": {
+        "operationId": "create_scan_event_endpoint_qr_codes__token__scan_events_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QrScanEventCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QrScanEventRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Scan Event Endpoint",
         "tags": ["qr-codes"]
       }
     },

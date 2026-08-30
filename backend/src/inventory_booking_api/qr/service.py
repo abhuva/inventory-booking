@@ -1,17 +1,30 @@
+from datetime import UTC, datetime, timedelta
 from secrets import token_urlsafe
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.audit.enums import AuditAction, ItemEventType
 from inventory_booking_api.audit.service import write_audit_log, write_item_event
 from inventory_booking_api.inventory.enums import AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, TrackedUnit
-from inventory_booking_api.qr.models import QrCode
-from inventory_booking_api.qr.schemas import QrAssign, QrCodeCreate, QrResolvedAsset, QrResolveRead
+from inventory_booking_api.qr.models import QrCode, QrScanEvent
+from inventory_booking_api.qr.schemas import (
+    QrAssign,
+    QrCodeCreate,
+    QrResolvedAsset,
+    QrResolveRead,
+    QrScanEventCreate,
+    QrScanEventListRead,
+    QrScanEventRead,
+)
 from inventory_booking_api.users.models import User
+
+SCAN_EVENT_RETENTION = timedelta(hours=24)
+SCAN_EVENT_CURSOR_OVERLAP = timedelta(seconds=30)
 
 
 async def list_qr_codes(session: AsyncSession) -> list[QrCode]:
@@ -138,6 +151,121 @@ async def resolve_qr_code(session: AsyncSession, token: str) -> QrResolveRead:
         token=qr_code.token,
         assigned=True,
         asset=QrResolvedAsset.model_validate(asset),
+    )
+
+
+async def create_scan_event(
+    session: AsyncSession,
+    token: str,
+    payload: QrScanEventCreate,
+    actor: User,
+) -> QrScanEventRead:
+    qr_code = await get_qr_code_by_token(session, token)
+    if qr_code is None:
+        raise_not_found_qr()
+    if qr_code.asset_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="QR label is not assigned to an asset.",
+        )
+
+    asset = await session.get(Asset, qr_code.asset_id)
+    if asset is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="QR label is not assigned to an asset.",
+        )
+
+    await session.execute(
+        delete(QrScanEvent).where(
+            QrScanEvent.created_at < datetime.now(UTC) - SCAN_EVENT_RETENTION
+        )
+    )
+    existing_result = await session.execute(
+        select(QrScanEvent).where(
+            QrScanEvent.user_id == actor.id,
+            QrScanEvent.client_event_id == payload.client_event_id,
+        )
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing is not None:
+        if existing.qr_code_id != qr_code.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Scan event identifier has already been used.",
+            )
+        await session.commit()
+        return scan_event_read(existing, asset.name)
+
+    actor_id = actor.id
+    asset_name = asset.name
+    qr_code_id = qr_code.id
+    scan_event = QrScanEvent(
+        user_id=actor_id,
+        asset_id=asset.id,
+        qr_code_id=qr_code_id,
+        client_event_id=payload.client_event_id,
+    )
+    session.add(scan_event)
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        retry_result = await session.execute(
+            select(QrScanEvent).where(
+                QrScanEvent.user_id == actor_id,
+                QrScanEvent.client_event_id == payload.client_event_id,
+            )
+        )
+        retried_event = retry_result.scalar_one_or_none()
+        if retried_event is not None and retried_event.qr_code_id == qr_code_id:
+            return scan_event_read(retried_event, asset_name)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Scan event could not be recorded.",
+        ) from None
+    await session.commit()
+    await session.refresh(scan_event)
+    return scan_event_read(scan_event, asset_name)
+
+
+async def list_scan_events(
+    session: AsyncSession,
+    actor: User,
+    after: datetime | None,
+) -> QrScanEventListRead:
+    cursor = datetime.now(UTC)
+    if after is not None and after.tzinfo is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Scan event cursor must include a timezone.",
+        )
+
+    requested_start = after if after is not None else cursor
+    lower_bound = max(
+        requested_start - SCAN_EVENT_CURSOR_OVERLAP,
+        cursor - SCAN_EVENT_RETENTION,
+    )
+    result = await session.execute(
+        select(QrScanEvent, Asset.name)
+        .join(Asset, Asset.id == QrScanEvent.asset_id)
+        .where(
+            QrScanEvent.user_id == actor.id,
+            QrScanEvent.created_at > lower_bound,
+            QrScanEvent.created_at <= cursor,
+        )
+        .order_by(QrScanEvent.created_at, QrScanEvent.id)
+    )
+    events = [scan_event_read(event, asset_name) for event, asset_name in result.all()]
+    return QrScanEventListRead(events=events, cursor=cursor)
+
+
+def scan_event_read(event: QrScanEvent, asset_name: str) -> QrScanEventRead:
+    return QrScanEventRead(
+        id=event.id,
+        asset_id=event.asset_id,
+        asset_name=asset_name,
+        created_at=event.created_at,
     )
 
 

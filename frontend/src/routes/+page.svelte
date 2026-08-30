@@ -42,6 +42,7 @@
     type PersonCreate,
     type PersonUpdate,
     type QrCode,
+    type QrScanEvent,
     type ReturnCreate,
     type ReturnRecord,
     type StockLevel,
@@ -61,6 +62,7 @@
   import { locationsApi } from '$lib/api/locations';
   import { operationsApi } from '$lib/api/operations';
   import { personsApi } from '$lib/api/persons';
+  import { qrApi } from '$lib/api/qr';
   import AccountPanel from '$lib/components/workspace/AccountPanel.svelte';
   import AdminPanel from '$lib/components/workspace/AdminPanel.svelte';
   import BasketPanel from '$lib/components/workspace/BasketPanel.svelte';
@@ -70,6 +72,7 @@
   import InventoryPanel from '$lib/components/workspace/InventoryPanel.svelte';
   import LocationsPanel from '$lib/components/workspace/LocationsPanel.svelte';
   import PersonsPanel from '$lib/components/workspace/PersonsPanel.svelte';
+  import QrScanNotification from '$lib/components/workspace/QrScanNotification.svelte';
   import { prepareAssetImage, prepareInventoryImage } from '$lib/image';
   import { createAuthState } from '$lib/workspace/auth-state.svelte';
   import { createBasketState } from '$lib/workspace/basket-state.svelte';
@@ -118,6 +121,7 @@
   let returns = $state<ReturnRecord[]>([]);
   let qrCodes = $state<QrCode[]>([]);
   let users = $state<User[]>([]);
+  let scanNotifications = $state<QrScanEvent[]>([]);
   let selectedLocationId = $state('');
   let selectedPersonId = $state('');
   let loading = $state(true);
@@ -188,6 +192,54 @@
 
   $effect(() => {
     void bootstrap();
+  });
+
+  $effect(() => {
+    const userId = auth.currentUser?.id;
+    if (!browser || !userId) {
+      scanNotifications = [];
+      return;
+    }
+
+    let active = true;
+    let polling = false;
+    let cursor: string | undefined;
+    const seenEventIds = new Set<string>();
+
+    async function pollScanEvents(): Promise<void> {
+      if (polling) {
+        return;
+      }
+      polling = true;
+      try {
+        const initializing = cursor === undefined;
+        const feed = await qrApi.listScanEvents(cursor);
+        if (!active) {
+          return;
+        }
+        cursor = feed.cursor;
+        if (initializing) {
+          feed.events.forEach((event) => seenEventIds.add(event.id));
+          return;
+        }
+        if (feed.events.length) {
+          const unseenEvents = feed.events.filter((event) => !seenEventIds.has(event.id));
+          unseenEvents.forEach((event) => seenEventIds.add(event.id));
+          scanNotifications = [...scanNotifications, ...unseenEvents].slice(-5);
+        }
+      } catch {
+        // Polling retries automatically; workspace actions should remain unaffected.
+      } finally {
+        polling = false;
+      }
+    }
+
+    void pollScanEvents();
+    const interval = window.setInterval(() => void pollScanEvents(), 3000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
   });
 
   async function bootstrap() {
@@ -924,13 +976,17 @@
 
   async function selectAssetDetail(assetId: string) {
     await runAction(async () => {
-      inventoryState.selectedAssetId = assetId;
-      syncAssetEditForm(assets.find((asset) => asset.id === assetId));
-      inventoryState.selectedAssetEvents = auth.currentUser
-        ? await inventoryApi.getAssetEvents(assetId)
-        : [];
+      await loadAssetDetail(assetId);
       message = 'Asset detail loaded';
     });
+  }
+
+  async function loadAssetDetail(assetId: string): Promise<void> {
+    inventoryState.selectedAssetId = assetId;
+    syncAssetEditForm(assets.find((asset) => asset.id === assetId));
+    inventoryState.selectedAssetEvents = auth.currentUser
+      ? await inventoryApi.getAssetEvents(assetId)
+      : [];
   }
 
   async function applyWorkspaceDeepLink(): Promise<void> {
@@ -1216,6 +1272,31 @@
     message = '';
   }
 
+  function dismissNextScanNotification(): void {
+    scanNotifications = scanNotifications.slice(1);
+  }
+
+  async function openScannedAsset(event: QrScanEvent): Promise<void> {
+    await runAction(async () => {
+      if (!assets.some((asset) => asset.id === event.asset_id)) {
+        await loadInventory();
+      }
+      if (!assets.some((asset) => asset.id === event.asset_id)) {
+        throw new Error('The scanned asset is no longer available.');
+      }
+
+      activeTab = 'inventory';
+      await loadAssetDetail(event.asset_id);
+      scanNotifications = scanNotifications.filter((entry) => entry.id !== event.id);
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `/?tab=inventory&asset=${encodeURIComponent(event.asset_id)}`
+      );
+      message = 'Asset detail loaded';
+    });
+  }
+
   function formatDateTime(value: string): string {
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: 'medium',
@@ -1498,3 +1579,12 @@
     </section>
   {/if}
 </main>
+
+{#if scanNotifications[0]}
+  <QrScanNotification
+    event={scanNotifications[0]}
+    pendingCount={scanNotifications.length - 1}
+    onDismiss={dismissNextScanNotification}
+    onOpen={() => void openScannedAsset(scanNotifications[0])}
+  />
+{/if}
