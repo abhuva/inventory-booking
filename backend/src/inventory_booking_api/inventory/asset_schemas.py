@@ -73,6 +73,10 @@ class AssetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class InventoryValueSummaryRead(BaseModel):
+    total_value: Decimal
+
+
 class AssetImageRead(BaseModel):
     id: UUID
     asset_id: UUID

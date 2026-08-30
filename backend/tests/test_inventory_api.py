@@ -119,6 +119,7 @@ def test_domain_read_endpoints_require_session(client: TestClient) -> None:
         "/categories",
         "/locations",
         "/assets",
+        "/assets/value-summary",
         "/stock-levels",
         "/bookings",
         "/checkouts",
@@ -632,6 +633,86 @@ def test_stock_asset_extra_fields_persist_on_create_and_update(client: TestClien
     assert update_response.json()["replacement_value"] == "18.75"
     assert update_response.json()["notes"] == "Updated stock notes."
     assert get_response.json()["replacement_value"] == "18.75"
+
+
+def test_inventory_value_summary_includes_unavailable_tracked_and_stock_items(
+    client: TestClient,
+) -> None:
+    headers = login(client)
+    current_user = client.get("/auth/me").json()
+    location = client.post(
+        "/locations",
+        json={"name": "Value Summary Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    tracked_asset = client.post(
+        "/assets",
+        json={
+            "name": "Valued Maintenance Rig",
+            "asset_type": "tracked",
+            "replacement_value": "1000.25",
+        },
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={
+            "name": "Valued Checked Out Stock",
+            "asset_type": "stock",
+            "unit_name": "piece",
+            "replacement_value": "2.50",
+        },
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 4,
+        },
+        headers=headers,
+    )
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": "Fully checked out valued stock",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 4,
+                }
+            ],
+        },
+        headers=headers,
+    ).json()
+
+    maintenance_response = client.post(
+        f"/assets/{tracked_asset['id']}/maintenance/start",
+        json={"notes": "Still part of total value."},
+        headers=headers,
+    )
+    checkout_response = client.post(
+        "/checkouts",
+        json={
+            "booking_id": booking["id"],
+            "checked_out_to_user_id": current_user["id"],
+        },
+        headers=headers,
+    )
+    stock_levels_response = client.get("/stock-levels", headers=headers)
+    summary_response = client.get("/assets/value-summary", headers=headers)
+
+    assert maintenance_response.status_code == 200
+    assert checkout_response.status_code == 200
+    assert all(
+        level["asset_id"] != stock_asset["id"] for level in stock_levels_response.json()
+    )
+    assert summary_response.status_code == 200
+    assert summary_response.json()["total_value"] == "1010.25"
 
 
 def test_stock_level_requires_stock_asset(client: TestClient) -> None:

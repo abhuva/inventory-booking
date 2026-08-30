@@ -30,6 +30,7 @@
     type Checkout,
     type CheckoutCreate,
     type ItemEvent,
+    type InventoryValueSummary,
     type Location,
     type LocationCreate,
     type LocationImage,
@@ -106,6 +107,7 @@
   let locations = $state<Location[]>([]);
   let locationImages = $state<LocationImage[]>([]);
   let assets = $state<Asset[]>([]);
+  let inventoryValueSummary = $state<InventoryValueSummary>({ total_value: '0.00' });
   let assetImages = $state<AssetImage[]>([]);
   let stockLevels = $state<StockLevel[]>([]);
   const basketState = createBasketState();
@@ -224,6 +226,7 @@
       loadedLocations,
       loadedLocationImages,
       loadedAssets,
+      loadedInventoryValueSummary,
       loadedAssetImages,
       loadedStockLevels,
       loadedActiveBasket,
@@ -238,6 +241,7 @@
       locationsApi.listLocations(),
       auth.currentUser ? locationsApi.listLocationImages() : Promise.resolve([]),
       inventoryApi.listAssets(),
+      inventoryApi.getValueSummary(),
       auth.currentUser ? inventoryApi.listAssetImages() : Promise.resolve([]),
       inventoryApi.listStockLevels(),
       auth.currentUser ? basketApi.activeBasket() : Promise.resolve(null),
@@ -252,6 +256,7 @@
     locations = loadedLocations;
     locationImages = loadedLocationImages;
     assets = loadedAssets;
+    inventoryValueSummary = loadedInventoryValueSummary;
     assetImages = loadedAssetImages;
     stockLevels = loadedStockLevels;
     basketState.activeBasket = loadedActiveBasket;
@@ -1262,6 +1267,7 @@
       <section class="workspace-content">
         {#if activeTab === 'dashboard'}
           <DashboardPanel
+            totalInventoryValue={inventoryValueSummary.total_value}
             trackedAssetCount={trackedAssets.length}
             stockAssetCount={stockAssets.length}
             locationCount={locations.length}

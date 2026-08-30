@@ -30,6 +30,7 @@ export type Asset = Schema['AssetRead'];
 export type AssetCreate = Schema['AssetCreate'];
 export type AssetUpdate = Schema['AssetUpdate'];
 export type AssetImage = Schema['AssetImageRead'];
+export type InventoryValueSummary = Schema['InventoryValueSummaryRead'];
 export type StockLevel = Schema['StockLevelRead'];
 export type StockLevelCreate = Schema['StockLevelCreate'];
 export type BookingLine = Schema['BookingLineRead'];

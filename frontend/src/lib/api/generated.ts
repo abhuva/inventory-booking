@@ -39,6 +39,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/assets/value-summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Inventory Value Summary Endpoint */
+    get: operations['get_inventory_value_summary_endpoint_assets_value_summary_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/assets/{asset_id}': {
     parameters: {
       query?: never;
@@ -1697,6 +1714,11 @@ export interface components {
       /** Unit Name */
       unit_name: string | null;
     };
+    /** InventoryValueSummaryRead */
+    InventoryValueSummaryRead: {
+      /** Total Value */
+      total_value: string;
+    };
     /** ItemEventRead */
     ItemEventRead: {
       /** Actor User Id */
@@ -2317,6 +2339,26 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['AssetImageRead'][];
+        };
+      };
+    };
+  };
+  get_inventory_value_summary_endpoint_assets_value_summary_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InventoryValueSummaryRead'];
         };
       };
     };

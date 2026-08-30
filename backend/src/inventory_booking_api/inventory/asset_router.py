@@ -22,6 +22,7 @@ from inventory_booking_api.inventory.asset_schemas import (
     AssetRead,
     AssetStateChange,
     AssetUpdate,
+    InventoryValueSummaryRead,
     MaintenanceComplete,
     MaintenanceStart,
     StockLevelCreate,
@@ -34,6 +35,7 @@ from inventory_booking_api.inventory.enums import AssetStatus
 from inventory_booking_api.inventory.movement_commands import transfer_stock, transfer_tracked_asset
 from inventory_booking_api.inventory.queries import (
     get_asset,
+    get_inventory_total_value,
     get_stock_level,
     list_assets,
     list_stock_levels,
@@ -76,6 +78,14 @@ async def list_asset_images_endpoint(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[AssetImageRead]:
     return await list_asset_images(session)
+
+
+@asset_router.get("/value-summary", response_model=InventoryValueSummaryRead)
+async def get_inventory_value_summary_endpoint(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> InventoryValueSummaryRead:
+    return InventoryValueSummaryRead(total_value=await get_inventory_total_value(session))
 
 
 @asset_router.get("/{asset_id}", response_model=AssetRead)

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -8,6 +9,7 @@ from inventory_booking_api.baskets.models import BasketLine
 from inventory_booking_api.bookings.models import BookingLine
 from inventory_booking_api.checkouts.models import CheckoutLine
 from inventory_booking_api.inventory.asset_schemas import StockLevelRead
+from inventory_booking_api.inventory.enums import AssetType
 from inventory_booking_api.inventory.models import Asset, AssetImage, StockBatch, TrackedUnit
 from inventory_booking_api.inventory.state import (
     apply_primary_unit_state,
@@ -32,6 +34,23 @@ async def get_asset(session: AsyncSession, asset_id: UUID) -> Asset | None:
     if asset is not None:
         await apply_primary_unit_state(session, asset)
     return asset
+
+
+async def get_inventory_total_value(session: AsyncSession) -> Decimal:
+    tracked_result = await session.execute(
+        select(func.coalesce(func.sum(TrackedUnit.replacement_value), Decimal("0.00")))
+    )
+    stock_result = await session.execute(
+        select(
+            func.coalesce(
+                func.sum(Asset.replacement_value * StockBatch.quantity),
+                Decimal("0.00"),
+            )
+        )
+        .join(StockBatch, StockBatch.asset_id == Asset.id)
+        .where(Asset.asset_type == AssetType.STOCK)
+    )
+    return Decimal(tracked_result.scalar_one()) + Decimal(stock_result.scalar_one())
 
 
 async def asset_reference_counts(session: AsyncSession, asset_id: UUID) -> dict[str, int]:
