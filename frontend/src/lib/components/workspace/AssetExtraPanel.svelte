@@ -25,13 +25,7 @@
     <label>Manufacturer <input bind:value={assetEditForm.manufacturer} /></label>
     <label>Model <input bind:value={assetEditForm.model} /></label>
   </div>
-  <div class="split-fields">
-    <label>
-      {asset.asset_type === 'stock' ? 'Replacement value per unit' : 'Replacement value'}
-      <input bind:value={assetEditForm.replacement_value} inputmode="decimal" />
-    </label>
-    <label>Definition type <input value={asset.asset_type} disabled /></label>
-  </div>
+  <label>Definition type <input value={asset.asset_type} disabled /></label>
   <label>
     Internal notes
     <textarea

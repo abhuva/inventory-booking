@@ -17,6 +17,10 @@ from inventory_booking_api.core.locks import (
 )
 from inventory_booking_api.inventory.enums import AssetCondition, AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
+from inventory_booking_api.inventory.stock_batch_operations import (
+    consume_stock_batches,
+    merge_stock_batch,
+)
 from inventory_booking_api.returns.models import Return, ReturnLine
 from inventory_booking_api.returns.schemas import ReturnCreate, ReturnLineCreate
 from inventory_booking_api.users.models import User
@@ -154,7 +158,7 @@ async def return_checkout_line(
         await apply_tracked_unit_return(session, asset, line_payload.condition_in)
         checkout_line.quantity_returned = 1
     else:
-        await apply_stock_return(session, checkout_line, quantity)
+        await apply_stock_return(session, checkout_line, quantity, line_payload.condition_in)
 
     return_line = ReturnLine(
         return_id=return_record.id,
@@ -236,42 +240,33 @@ async def apply_stock_return(
     session: AsyncSession,
     checkout_line: CheckoutLine,
     quantity: int,
+    condition_in: AssetCondition,
 ) -> None:
-    checked_out_batch = await get_checked_out_stock_batch(session, checkout_line.id)
-    if checked_out_batch is None:
+    checked_out_batches = await list_checked_out_stock_batches(session, checkout_line.id)
+    if not checked_out_batches:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No checked-out stock batch exists for this checkout line.",
         )
-    if checked_out_batch.quantity < quantity:
+    if sum(batch.quantity for batch in checked_out_batches) < quantity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Return quantity exceeds checked-out batch quantity.",
         )
-    batch_condition = checked_out_batch.condition
-    if checked_out_batch.quantity == quantity:
-        await session.delete(checked_out_batch)
-    else:
-        checked_out_batch.quantity -= quantity
-    available_batch = await get_available_stock_batch(
+    await consume_stock_batches(session, checked_out_batches, quantity)
+    returned_status = (
+        AssetStatus.DAMAGED
+        if condition_in in (AssetCondition.DAMAGED, AssetCondition.NEEDS_REPAIR)
+        else AssetStatus.AVAILABLE
+    )
+    await merge_stock_batch(
         session,
         checkout_line.asset_id,
         checkout_line.location_id,
-        batch_condition,
+        condition_in,
+        returned_status,
+        quantity,
     )
-    if available_batch is None:
-        available_batch = StockBatch(
-            asset_id=checkout_line.asset_id,
-            location_id=checkout_line.location_id,
-            holder_user_id=None,
-            checkout_line_id=None,
-            status=AssetStatus.AVAILABLE,
-            condition=batch_condition,
-            quantity=quantity,
-        )
-        session.add(available_batch)
-    else:
-        available_batch.quantity += quantity
     checkout_line.quantity_returned += quantity
 
 
@@ -295,35 +290,19 @@ async def resolve_checkout_status(session: AsyncSession, checkout_id: UUID) -> C
     return CheckoutStatus.CHECKED_OUT
 
 
-async def get_checked_out_stock_batch(
+async def list_checked_out_stock_batches(
     session: AsyncSession,
     checkout_line_id: UUID,
-) -> StockBatch | None:
+) -> list[StockBatch]:
     result = await session.execute(
-        select(StockBatch).where(
+        select(StockBatch)
+        .where(
             StockBatch.checkout_line_id == checkout_line_id,
             StockBatch.status == AssetStatus.CHECKED_OUT,
         )
+        .order_by(StockBatch.created_at)
     )
-    return result.scalar_one_or_none()
-
-
-async def get_available_stock_batch(
-    session: AsyncSession,
-    asset_id: UUID,
-    location_id: UUID | None,
-    condition: AssetCondition,
-) -> StockBatch | None:
-    result = await session.execute(
-        select(StockBatch).where(
-            StockBatch.asset_id == asset_id,
-            StockBatch.location_id == location_id,
-            StockBatch.holder_user_id.is_(None),
-            StockBatch.status == AssetStatus.AVAILABLE,
-            StockBatch.condition == condition,
-        )
-    )
-    return result.scalar_one_or_none()
+    return list(result.scalars().all())
 
 
 async def get_primary_tracked_unit(session: AsyncSession, asset_id: UUID) -> TrackedUnit | None:

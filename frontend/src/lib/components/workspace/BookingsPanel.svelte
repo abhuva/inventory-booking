@@ -4,6 +4,7 @@
   import { readCachedHeatmap, writeCachedHeatmap } from '$lib/heatmap-cache';
   import { readStoredBoolean, readStoredString, writeStoredValue } from '$lib/persisted';
   import type { Asset, Availability, Booking, BookingLineCreate, Location, Person } from '$lib/api';
+  import { chargedRentalDays, estimatedRentalLineTotal, formatEuro } from '$lib/rental-pricing';
   import type { ECharts } from 'echarts';
 
   let heatmapElement = $state<HTMLElement>();
@@ -462,6 +463,40 @@
       : (locations.find((location) => location.id === id)?.name ?? 'Unknown location');
   }
 
+  function draftLineDates(line: BookingLineCreate): { startsAt: string; endsAt: string } {
+    return {
+      startsAt: line.starts_at ?? bookingDraft.starts_at,
+      endsAt: line.ends_at ?? bookingDraft.ends_at
+    };
+  }
+
+  function draftLinePrice(line: BookingLineCreate): number | null {
+    const dates = draftLineDates(line);
+    return estimatedRentalLineTotal(
+      assets.find((asset) => asset.id === line.asset_id),
+      dates.startsAt,
+      dates.endsAt,
+      line.quantity
+    );
+  }
+
+  function draftLineDays(line: BookingLineCreate): number | null {
+    const dates = draftLineDates(line);
+    return chargedRentalDays(dates.startsAt, dates.endsAt);
+  }
+
+  function draftRentalTotal(): number | null {
+    let total = 0;
+    for (const line of bookingDraft.lines) {
+      const price = draftLinePrice(line);
+      if (price === null) {
+        return null;
+      }
+      total += price;
+    }
+    return total;
+  }
+
   async function submitNewBooking() {
     const created = await createBookingDraft();
     showNewBooking = !created;
@@ -684,8 +719,14 @@
         </article>
 
         <article class="mini-list">
-          <h3>Bundle lines</h3>
+          <div class="mini-list-heading">
+            <h3>Bundle lines</h3>
+            {#if bookingDraft.lines.length}
+              <strong>{formatEuro(draftRentalTotal())}</strong>
+            {/if}
+          </div>
           {#each bookingDraft.lines as line}
+            {@const chargedDays = draftLineDays(line)}
             <div class="row-card">
               <strong>{assetName(line.asset_id)}</strong>
               <span>
@@ -695,6 +736,11 @@
                 {:else}
                   / exact item
                 {/if}
+              </span>
+              <span>
+                {chargedDays === null
+                  ? 'Invalid dates'
+                  : `${chargedDays} ${chargedDays === 1 ? 'day' : 'days'} / ${formatEuro(draftLinePrice(line))}`}
               </span>
               <button
                 type="button"

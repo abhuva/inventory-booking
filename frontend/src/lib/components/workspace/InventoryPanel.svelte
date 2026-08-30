@@ -3,6 +3,7 @@
   import AssetExtraPanel from './AssetExtraPanel.svelte';
   import AssetHistoryPanel from './AssetHistoryPanel.svelte';
   import AssetInfoPanel from './AssetInfoPanel.svelte';
+  import AssetPricingPanel from './AssetPricingPanel.svelte';
   import AssetQrPanel from './AssetQrPanel.svelte';
   import AssetStockPanel from './AssetStockPanel.svelte';
   import InventoryAssetTable from './InventoryAssetTable.svelte';
@@ -40,7 +41,7 @@
     'retired'
   ];
   const assetConditions: AssetCondition[] = ['unknown', 'good', 'worn', 'damaged', 'needs_repair'];
-  type AssetDetailTab = 'info' | 'unit' | 'stock' | 'extra' | 'qr' | 'history';
+  type AssetDetailTab = 'info' | 'unit' | 'stock' | 'extra' | 'pricing' | 'qr' | 'history';
   type StockAdjustMode = 'add' | 'remove';
 
   let showAddAsset = $state(false);
@@ -693,6 +694,13 @@
         </button>
         <button
           type="button"
+          class:active-detail-tab={activeDetailTab === 'pricing'}
+          onclick={() => (activeDetailTab = 'pricing')}
+        >
+          Pricing
+        </button>
+        <button
+          type="button"
           class:active-detail-tab={activeDetailTab === 'qr'}
           onclick={() => (activeDetailTab = 'qr')}
         >
@@ -763,6 +771,17 @@
         {#if extraAsset}
           <AssetExtraPanel
             asset={extraAsset}
+            bind:assetEditForm
+            {busy}
+            onUpdate={updateSelectedAsset}
+          />
+        {/if}
+      {/if}
+      {#if activeDetailTab === 'pricing'}
+        {@const pricingAsset = selectedAsset()}
+        {#if pricingAsset}
+          <AssetPricingPanel
+            asset={pricingAsset}
             bind:assetEditForm
             {busy}
             onUpdate={updateSelectedAsset}

@@ -10,14 +10,18 @@ from inventory_booking_api.inventory.asset_schemas import (
     TrackedAssetTransfer,
 )
 from inventory_booking_api.inventory.enums import AssetStatus, AssetType
-from inventory_booking_api.inventory.models import Asset, StockBatch
+from inventory_booking_api.inventory.models import Asset
 from inventory_booking_api.inventory.state import (
     apply_primary_unit_state,
     copy_unit_state_to_asset,
-    get_available_stock_batch,
-    get_mergeable_stock_batch,
+    get_display_stock_batch,
+    list_available_stock_batches,
     require_primary_tracked_unit,
     stock_batch_to_read,
+)
+from inventory_booking_api.inventory.stock_batch_operations import (
+    consume_stock_batches,
+    merge_available_portions,
 )
 from inventory_booking_api.users.models import User
 
@@ -91,40 +95,44 @@ async def transfer_stock(
             detail="Only stock item definitions can use stock transfer.",
         )
 
-    source = await get_available_stock_batch(session, payload.asset_id, payload.from_location_id)
-    if source is None or source.quantity < payload.quantity:
+    sources = await list_available_stock_batches(
+        session,
+        payload.asset_id,
+        payload.from_location_id,
+    )
+    if sum(source.quantity for source in sources) < payload.quantity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Not enough available stock to transfer.",
         )
 
-    source.quantity -= payload.quantity
-    destination = await get_mergeable_stock_batch(session, payload.asset_id, payload.to_location_id)
-    if destination is None:
-        destination = StockBatch(
-            asset_id=payload.asset_id,
-            location_id=payload.to_location_id,
-            quantity=payload.quantity,
-            status=AssetStatus.AVAILABLE,
-            condition=source.condition,
-        )
-        session.add(destination)
-        await session.flush()
-    else:
-        destination.quantity += payload.quantity
-
-    if source.quantity == 0:
-        await session.delete(source)
+    portions = await consume_stock_batches(session, sources, payload.quantity)
+    await merge_available_portions(
+        session,
+        payload.asset_id,
+        payload.to_location_id,
+        portions,
+    )
+    await session.flush()
+    source = await get_display_stock_batch(session, payload.asset_id, payload.from_location_id)
+    if source is None:
         source_read = StockLevelRead(
-            id=source.id,
-            asset_id=source.asset_id,
-            location_id=source.location_id,
+            id=sources[0].id,
+            asset_id=payload.asset_id,
+            location_id=payload.from_location_id,
             quantity_total=0,
             quantity_reserved=0,
             quantity_checked_out=0,
         )
     else:
         source_read = await stock_batch_to_read(session, source)
+    destination = await get_display_stock_batch(
+        session,
+        payload.asset_id,
+        payload.to_location_id,
+    )
+    if destination is None:
+        raise RuntimeError("Transferred stock has no destination batch.")
 
     await write_audited_item_event(
         session,

@@ -18,6 +18,8 @@ from inventory_booking_api.core.locks import (
 )
 from inventory_booking_api.inventory.enums import AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
+from inventory_booking_api.inventory.state import list_available_stock_batches
+from inventory_booking_api.inventory.stock_batch_operations import consume_stock_batches
 from inventory_booking_api.users.models import User
 
 
@@ -182,17 +184,17 @@ async def split_stock_checkout(
             detail="Stock checkout lines require a location and quantity.",
         )
 
-    source = await get_available_stock_batch(
+    sources = await list_available_stock_batches(
         session,
         booking_line.asset_id,
         booking_line.location_id,
     )
-    if source is None or source.quantity < booking_line.quantity:
+    if sum(source.quantity for source in sources) < booking_line.quantity:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Not enough stock is available for checkout.",
         )
-    source.quantity -= booking_line.quantity
+    await consume_stock_batches(session, sources, booking_line.quantity)
     checked_out_batch = StockBatch(
         asset_id=booking_line.asset_id,
         location_id=booking_line.location_id,
@@ -204,8 +206,6 @@ async def split_stock_checkout(
         notes=booking_line.notes,
     )
     session.add(checked_out_batch)
-    if source.quantity == 0:
-        await session.delete(source)
 
 
 async def get_checkout_by_booking(session: AsyncSession, booking_id: UUID) -> Checkout | None:
@@ -216,24 +216,6 @@ async def get_checkout_by_booking(session: AsyncSession, booking_id: UUID) -> Ch
 async def get_booking_lines(session: AsyncSession, booking_id: UUID) -> list[BookingLine]:
     result = await session.execute(select(BookingLine).where(BookingLine.booking_id == booking_id))
     return list(result.scalars().all())
-
-
-async def get_available_stock_batch(
-    session: AsyncSession,
-    asset_id: UUID,
-    location_id: UUID,
-) -> StockBatch | None:
-    result = await session.execute(
-        select(StockBatch)
-        .where(
-            StockBatch.asset_id == asset_id,
-            StockBatch.location_id == location_id,
-            StockBatch.holder_user_id.is_(None),
-            StockBatch.status == AssetStatus.AVAILABLE,
-        )
-        .order_by(StockBatch.created_at)
-    )
-    return result.scalars().first()
 
 
 async def get_primary_tracked_unit(session: AsyncSession, asset_id: UUID) -> TrackedUnit | None:

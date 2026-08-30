@@ -1,10 +1,26 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Annotated, Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from inventory_booking_api.inventory.enums import AssetCondition, AssetStatus, AssetType
+from inventory_booking_api.inventory.pricing import calculate_daily_rental_rate
+
+NON_NEGATIVE_DECIMAL_PATTERN = r"^(?!^[+.]*$)\+?0*\d*\.?\d*$"
+
+
+def add_non_negative_decimal_pattern(schema: dict[str, Any]) -> None:
+    for option in schema.get("anyOf", []):
+        if option.get("type") == "string":
+            option["pattern"] = NON_NEGATIVE_DECIMAL_PATTERN
+
+
+NonNegativeDecimal = Annotated[
+    Decimal,
+    Field(ge=0, json_schema_extra=add_non_negative_decimal_pattern),
+]
 
 
 class AssetCreate(BaseModel):
@@ -21,7 +37,10 @@ class AssetCreate(BaseModel):
     model: str | None = Field(default=None, max_length=120)
     serial_number: str | None = Field(default=None, max_length=120)
     asset_tag: str | None = Field(default=None, max_length=80)
-    replacement_value: Decimal | None = None
+    replacement_value: NonNegativeDecimal | None = None
+    rental_recoup_days: int | None = Field(default=None, gt=0)
+    rental_maintenance_cost_per_day: NonNegativeDecimal | None = None
+    rental_profit_margin_percent: NonNegativeDecimal | None = None
     description: str | None = None
     notes: str | None = None
 
@@ -46,7 +65,10 @@ class AssetUpdate(BaseModel):
     model: str | None = Field(default=None, max_length=120)
     serial_number: str | None = Field(default=None, max_length=120)
     asset_tag: str | None = Field(default=None, max_length=80)
-    replacement_value: Decimal | None = None
+    replacement_value: NonNegativeDecimal | None = None
+    rental_recoup_days: int | None = Field(default=None, gt=0)
+    rental_maintenance_cost_per_day: NonNegativeDecimal | None = None
+    rental_profit_margin_percent: NonNegativeDecimal | None = None
     description: str | None = None
     notes: str | None = None
 
@@ -67,10 +89,24 @@ class AssetRead(BaseModel):
     serial_number: str | None
     asset_tag: str | None
     replacement_value: Decimal | None
+    rental_recoup_days: int | None
+    rental_maintenance_cost_per_day: Decimal | None
+    rental_profit_margin_percent: Decimal | None
+    rental_daily_rate: Decimal | None = None
     description: str | None
     notes: str | None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def calculate_rental_daily_rate(self) -> "AssetRead":
+        self.rental_daily_rate = calculate_daily_rental_rate(
+            self.replacement_value,
+            self.rental_recoup_days,
+            self.rental_maintenance_cost_per_day,
+            self.rental_profit_margin_percent,
+        )
+        return self
 
 
 class InventoryValueSummaryRead(BaseModel):

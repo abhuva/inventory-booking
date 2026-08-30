@@ -127,13 +127,58 @@
             ],
             "title": "Notes"
           },
-          "replacement_value": {
+          "rental_maintenance_cost_per_day": {
             "anyOf": [
               {
+                "minimum": 0.0,
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "pattern": "^(?!^[+.]*$)\\+?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Maintenance Cost Per Day"
+          },
+          "rental_profit_margin_percent": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[+.]*$)\\+?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Profit Margin Percent"
+          },
+          "rental_recoup_days": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Recoup Days"
+          },
+          "replacement_value": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[+.]*$)\\+?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -368,6 +413,53 @@
             ],
             "title": "Notes"
           },
+          "rental_daily_rate": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Daily Rate"
+          },
+          "rental_maintenance_cost_per_day": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Maintenance Cost Per Day"
+          },
+          "rental_profit_margin_percent": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Profit Margin Percent"
+          },
+          "rental_recoup_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Recoup Days"
+          },
           "replacement_value": {
             "anyOf": [
               {
@@ -422,6 +514,9 @@
           "serial_number",
           "asset_tag",
           "replacement_value",
+          "rental_recoup_days",
+          "rental_maintenance_cost_per_day",
+          "rental_profit_margin_percent",
           "description",
           "notes"
         ],
@@ -610,13 +705,58 @@
             ],
             "title": "Notes"
           },
-          "replacement_value": {
+          "rental_maintenance_cost_per_day": {
             "anyOf": [
               {
+                "minimum": 0.0,
                 "type": "number"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "pattern": "^(?!^[+.]*$)\\+?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Maintenance Cost Per Day"
+          },
+          "rental_profit_margin_percent": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[+.]*$)\\+?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Profit Margin Percent"
+          },
+          "rental_recoup_days": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Recoup Days"
+          },
+          "replacement_value": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[+.]*$)\\+?0*\\d*\\.?\\d*$",
                 "type": "string"
               },
               {
@@ -1571,6 +1711,41 @@
             ],
             "title": "Quantity"
           },
+          "rental_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Days"
+          },
+          "rental_total": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Total"
+          },
+          "rental_unit_price_per_day": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Unit Price Per Day"
+          },
           "starts_at": {
             "format": "date-time",
             "title": "Starts At",
@@ -1585,6 +1760,9 @@
           "starts_at",
           "ends_at",
           "quantity",
+          "rental_unit_price_per_day",
+          "rental_days",
+          "rental_total",
           "notes"
         ],
         "title": "BookingLineRead",
@@ -1638,6 +1816,18 @@
             ],
             "title": "Person Id"
           },
+          "rental_total": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rental Total"
+          },
           "requested_by_user_id": {
             "format": "uuid",
             "title": "Requested By User Id",
@@ -1654,6 +1844,11 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "unpriced_line_count": {
+            "default": 0,
+            "title": "Unpriced Line Count",
+            "type": "integer"
           }
         },
         "required": [

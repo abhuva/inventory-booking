@@ -151,6 +151,11 @@ Bookings contain lines. A line can reserve either:
 
 Bookings can also be created from an active basket. Basket lines temporarily hold tracked items or stock quantities for a user/person/date range until the basket is confirmed or cancelled.
 
+Asset definitions may carry rental pricing inputs. Booking lines snapshot the
+calculated daily unit price, charged started days, and rounded line total so
+historical bookings are not changed by later asset pricing edits. See
+`docs/rental-pricing.md` for the formula and rounding contract.
+
 Availability differs by mode:
 
 ```text

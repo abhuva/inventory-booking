@@ -1,5 +1,6 @@
 ﻿<script lang="ts">
   import type { Asset, Basket, BasketLine, BasketLineUpdate } from '$lib/api';
+  import { chargedRentalDays, estimatedRentalLineTotal, formatEuro } from '$lib/rental-pricing';
   import AvailabilityDatePicker from './AvailabilityDatePicker.svelte';
 
   let selectedLineId = $state('');
@@ -62,6 +63,30 @@
     return `${line.quantity} ${asset?.unit_name ?? 'units'}`;
   }
 
+  function lineRentalPrice(line: BasketLine): number | null {
+    return estimatedRentalLineTotal(
+      assetForLine(line),
+      line.starts_at,
+      line.ends_at,
+      line.quantity
+    );
+  }
+
+  function basketRentalTotal(): number | null {
+    if (!basket) {
+      return null;
+    }
+    let total = 0;
+    for (const line of basket.lines) {
+      const price = lineRentalPrice(line);
+      if (price === null) {
+        return null;
+      }
+      total += price;
+    }
+    return total;
+  }
+
   function selectedLineQuantity(): number {
     const parsed = Number.parseInt(selectedQuantity, 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
@@ -111,6 +136,7 @@
               <th>Quantity</th>
               <th>Location</th>
               <th>Dates</th>
+              <th>Price</th>
             </tr>
           </thead>
           <tbody>
@@ -126,6 +152,7 @@
                 <td>{lineQuantity(line)}</td>
                 <td>{locationName(line.location_id)}</td>
                 <td>{formatDateTime(line.starts_at)} - {formatDateTime(line.ends_at)}</td>
+                <td>{formatEuro(lineRentalPrice(line))}</td>
               </tr>
             {/each}
           </tbody>
@@ -176,6 +203,10 @@
           <span>Hold expires</span>
           <strong>{formatDateTime(basket.expires_at)}</strong>
         </div>
+        <div class="readonly-field">
+          <span>Estimated booking price</span>
+          <strong>{formatEuro(basketRentalTotal())}</strong>
+        </div>
         <div class="button-row compact-button-row">
           <button type="submit" class="compact" disabled={busy}>Update basket</button>
           <button type="button" class="secondary compact" disabled={busy} onclick={confirmBasket}>
@@ -223,6 +254,14 @@
             <article>
               <span>Reserved until</span>
               <strong>{formatDateTime(selectedLine.ends_at)}</strong>
+            </article>
+            <article>
+              <span>Charged days</span>
+              <strong>{chargedRentalDays(selectedLine.starts_at, selectedLine.ends_at)}</strong>
+            </article>
+            <article>
+              <span>Estimated price</span>
+              <strong>{formatEuro(lineRentalPrice(selectedLine))}</strong>
             </article>
           </div>
           <div class="button-row compact-button-row">

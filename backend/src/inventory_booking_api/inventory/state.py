@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.audit.enums import ItemEventType
 from inventory_booking_api.inventory.asset_schemas import StockLevelRead
-from inventory_booking_api.inventory.enums import AssetStatus, AssetType
+from inventory_booking_api.inventory.enums import AssetCondition, AssetStatus, AssetType
 from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
 
 
@@ -54,7 +54,34 @@ async def get_available_stock_batch(
     session: AsyncSession,
     asset_id: UUID,
     location_id: UUID | None,
+    condition: AssetCondition | None = None,
 ) -> StockBatch | None:
+    statement = select(StockBatch).where(
+        StockBatch.asset_id == asset_id,
+        StockBatch.location_id == location_id,
+        StockBatch.holder_user_id.is_(None),
+        StockBatch.status == AssetStatus.AVAILABLE,
+    )
+    if condition is not None:
+        statement = statement.where(StockBatch.condition == condition)
+    result = await session.execute(statement.order_by(StockBatch.created_at))
+    return result.scalars().first()
+
+
+async def get_mergeable_stock_batch(
+    session: AsyncSession,
+    asset_id: UUID,
+    location_id: UUID | None,
+    condition: AssetCondition,
+) -> StockBatch | None:
+    return await get_available_stock_batch(session, asset_id, location_id, condition)
+
+
+async def list_available_stock_batches(
+    session: AsyncSession,
+    asset_id: UUID,
+    location_id: UUID | None,
+) -> list[StockBatch]:
     result = await session.execute(
         select(StockBatch)
         .where(
@@ -65,15 +92,18 @@ async def get_available_stock_batch(
         )
         .order_by(StockBatch.created_at)
     )
-    return result.scalars().first()
+    return list(result.scalars().all())
 
 
-async def get_mergeable_stock_batch(
+async def get_available_stock_quantity(
     session: AsyncSession,
     asset_id: UUID,
     location_id: UUID | None,
-) -> StockBatch | None:
-    return await get_available_stock_batch(session, asset_id, location_id)
+) -> int:
+    return sum(
+        batch.quantity
+        for batch in await list_available_stock_batches(session, asset_id, location_id)
+    )
 
 
 async def get_display_stock_batch(
@@ -88,12 +118,16 @@ async def get_display_stock_batch(
 
 
 async def stock_batch_to_read(session: AsyncSession, batch: StockBatch) -> StockLevelRead:
+    available_quantity = await get_available_stock_quantity(
+        session,
+        batch.asset_id,
+        batch.location_id,
+    )
     checked_out_quantity = await get_checked_out_stock_quantity(
         session,
         batch.asset_id,
         batch.location_id,
     )
-    available_quantity = batch.quantity if batch.status == AssetStatus.AVAILABLE else 0
     return StockLevelRead(
         id=batch.id,
         asset_id=batch.asset_id,
