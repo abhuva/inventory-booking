@@ -1,4 +1,5 @@
 import asyncio
+import re
 from collections.abc import AsyncGenerator, Generator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -1155,6 +1156,27 @@ def test_booking_marks_total_incomplete_when_an_asset_has_no_pricing(client: Tes
     assert response.json()["lines"][0]["rental_total"] is None
 
 
+def test_openapi_rejects_negative_decimal_strings_for_asset_pricing() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    for schema_name in ("AssetCreate", "AssetUpdate"):
+        properties = schemas[schema_name]["properties"]
+        for field_name in (
+            "replacement_value",
+            "rental_maintenance_cost_per_day",
+            "rental_profit_margin_percent",
+        ):
+            string_schema = next(
+                option
+                for option in properties[field_name]["anyOf"]
+                if option.get("type") == "string"
+            )
+            pattern = string_schema["pattern"]
+            assert re.fullmatch(pattern, "0")
+            assert re.fullmatch(pattern, "+12.50")
+            assert re.fullmatch(pattern, ".75")
+            assert not re.fullmatch(pattern, "-0.01")
+
+
 def test_delete_booking_removes_booking_and_lines(client: TestClient) -> None:
     headers = login(client)
     tracked_asset = client.post(
@@ -1751,6 +1773,93 @@ def test_stock_partial_then_final_return_updates_checkout_and_stock(client: Test
     assert final_checkout_response.json()["lines"][0]["quantity_returned"] == 6
     assert final_stock_response.json()["quantity_total"] == 10
     assert final_stock_response.json()["quantity_checked_out"] == 0
+
+
+@pytest.mark.parametrize("condition_in", ["damaged", "needs_repair"])
+def test_non_rentable_stock_returns_are_excluded_from_availability(
+    client: TestClient,
+    condition_in: str,
+) -> None:
+    headers = login(client)
+    location = client.post(
+        "/locations",
+        json={"name": f"{condition_in} Return Storage", "type": "storage"},
+        headers=headers,
+    ).json()
+    stock_asset = client.post(
+        "/assets",
+        json={
+            "name": f"{condition_in} Return Stock",
+            "asset_type": "stock",
+            "unit_name": "piece",
+        },
+        headers=headers,
+    ).json()
+    client.post(
+        "/stock-levels",
+        json={
+            "asset_id": stock_asset["id"],
+            "location_id": location["id"],
+            "quantity_total": 4,
+        },
+        headers=headers,
+    )
+    booking = client.post(
+        "/bookings",
+        json={
+            "title": f"{condition_in} stock return",
+            "starts_at": BOOKING_START.isoformat(),
+            "ends_at": BOOKING_END.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 4,
+                }
+            ],
+        },
+        headers=headers,
+    ).json()
+    checkout = client.post("/checkouts", json={"booking_id": booking["id"]}, headers=headers).json()
+
+    return_response = client.post(
+        "/returns",
+        json={
+            "checkout_id": checkout["id"],
+            "lines": [
+                {
+                    "checkout_line_id": checkout["lines"][0]["id"],
+                    "quantity": 4,
+                    "condition_in": condition_in,
+                }
+            ],
+        },
+        headers=headers,
+    )
+    next_start = BOOKING_END + timedelta(days=1)
+    next_end = next_start + timedelta(days=1)
+    availability_response = client.post(
+        "/bookings/availability",
+        json={
+            "title": "Non-rentable stock availability",
+            "starts_at": next_start.isoformat(),
+            "ends_at": next_end.isoformat(),
+            "lines": [
+                {
+                    "asset_id": stock_asset["id"],
+                    "location_id": location["id"],
+                    "quantity": 1,
+                }
+            ],
+        },
+        headers=headers,
+    )
+
+    assert return_response.status_code == 200
+    assert return_response.json()["lines"][0]["condition_in"] == condition_in
+    assert availability_response.status_code == 200
+    assert availability_response.json()["available"] is False
+    assert availability_response.json()["lines"][0]["available_quantity"] == 0
 
 
 def test_split_condition_stock_remains_one_operational_location_stack(

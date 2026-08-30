@@ -19,7 +19,7 @@ from inventory_booking_api.inventory.enums import AssetCondition, AssetStatus, A
 from inventory_booking_api.inventory.models import Asset, StockBatch, TrackedUnit
 from inventory_booking_api.inventory.stock_batch_operations import (
     consume_stock_batches,
-    merge_available_stock,
+    merge_stock_batch,
 )
 from inventory_booking_api.returns.models import Return, ReturnLine
 from inventory_booking_api.returns.schemas import ReturnCreate, ReturnLineCreate
@@ -254,11 +254,17 @@ async def apply_stock_return(
             detail="Return quantity exceeds checked-out batch quantity.",
         )
     await consume_stock_batches(session, checked_out_batches, quantity)
-    await merge_available_stock(
+    returned_status = (
+        AssetStatus.DAMAGED
+        if condition_in in (AssetCondition.DAMAGED, AssetCondition.NEEDS_REPAIR)
+        else AssetStatus.AVAILABLE
+    )
+    await merge_stock_batch(
         session,
         checkout_line.asset_id,
         checkout_line.location_id,
         condition_in,
+        returned_status,
         quantity,
     )
     checkout_line.quantity_returned += quantity

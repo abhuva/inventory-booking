@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from inventory_booking_api.inventory.enums import AssetCondition, AssetStatus
@@ -49,14 +50,47 @@ async def merge_available_stock(
     condition: AssetCondition,
     quantity: int,
 ) -> StockBatch:
-    batch = await get_mergeable_stock_batch(session, asset_id, location_id, condition)
+    return await merge_stock_batch(
+        session,
+        asset_id,
+        location_id,
+        condition,
+        AssetStatus.AVAILABLE,
+        quantity,
+    )
+
+
+async def merge_stock_batch(
+    session: AsyncSession,
+    asset_id: UUID,
+    location_id: UUID | None,
+    condition: AssetCondition,
+    status: AssetStatus,
+    quantity: int,
+) -> StockBatch:
+    if status == AssetStatus.AVAILABLE:
+        batch = await get_mergeable_stock_batch(session, asset_id, location_id, condition)
+    else:
+        result = await session.execute(
+            select(StockBatch)
+            .where(
+                StockBatch.asset_id == asset_id,
+                StockBatch.location_id == location_id,
+                StockBatch.holder_user_id.is_(None),
+                StockBatch.checkout_line_id.is_(None),
+                StockBatch.status == status,
+                StockBatch.condition == condition,
+            )
+            .order_by(StockBatch.created_at)
+        )
+        batch = result.scalars().first()
     if batch is None:
         batch = StockBatch(
             asset_id=asset_id,
             location_id=location_id,
             holder_user_id=None,
             checkout_line_id=None,
-            status=AssetStatus.AVAILABLE,
+            status=status,
             condition=condition,
             quantity=quantity,
         )
