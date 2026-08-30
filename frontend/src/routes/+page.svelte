@@ -1079,6 +1079,9 @@
       if (tab.id === 'admin') {
         return auth.currentUser?.role === 'admin';
       }
+      if (tab.id === 'labels') {
+        return Boolean(auth.currentUser);
+      }
       return true;
     });
   }
